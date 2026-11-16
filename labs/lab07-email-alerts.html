@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 07 · Automated email alerts</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="lab07">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Labs / Lab 07</div>
+<h1>Lab 07: Automated email alerts</h1>
+<p class="lead">Make the server tell <em>you</em> when something is wrong. You will read a number from a command (like disk usage), compare it with a limit using <code>if</code>, send an email with <code>mail</code>, and run the script automatically with <code>cron</code>.</p>
+<div class="meta-row">
+  <span class="pill">Commands: df, awk, grep, if, mail, cron</span><span class="pill grey">Difficulty: beginner</span><span class="pill grey">~45 min</span>
+</div>
+
+<h2 id="aim">Aim and objectives</h2>
+<p><strong>Aim:</strong> write a shell script that checks the server and sends an email alert when a limit is crossed, then schedule it with cron.</p>
+<ul>
+  <li>Get a number out of command output (disk Use%, count of failed logins).</li>
+  <li>Compare numbers with <code>if [ … -ge … ]</code>.</li>
+  <li>Send an email from the command line with <code>mail</code>.</li>
+  <li>Run a script every few minutes or every morning with <code>crontab</code>.</li>
+</ul>
+
+<h2 id="prereq">Prerequisites</h2>
+<div class="code"><div class="code-head">bash · install packages (Debian / Ubuntu)</div><pre><code class="language-bash">sudo apt update
+sudo apt install mailutils msmtp msmtp-mta
+# mailutils : gives you the "mail" command
+# msmtp     : small program that sends the mail through Gmail (or another server)
+# msmtp-mta : lets "mail" use msmtp automatically</code></pre></div>
+<p>All the checking parts of this lab work offline with the files in <code>datasets/</code>. Only the actual sending needs a mail account, so those outputs are marked <em>sample output</em>. Run every example from the project folder.</p>
+
+<h2 id="start-here">Start here: simple scripts</h2>
+<p>Five tiny scripts, each adding one idea. Together they make a complete alert script. The first three read <code>datasets/df.txt</code>, a saved copy of <code>df -h</code> from a busy server, so you get the same output as this page.</p>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/df.txt</span></div><pre><code>Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1        50G   41G  6.5G  87% /
+/dev/sda2       200G  120G   70G  64% /var
+/dev/sdb1       500G  478G   22G  96% /backup
+tmpfs           3.9G  1.2M  3.9G   1% /run
+/dev/sdc1       100G   12G   83G  13% /home
+/dev/nvme0n1p1  1.0T  910G   90G  92% /data</code></pre></div>
+
+<h3 id="s1">Step 1: get the disk usage as a number</h3>
+<div class="code"><div class="code-head">bash · disk_percent.sh</div><pre><code class="language-bash">#!/bin/bash
+# disk_percent.sh: get the Use% of the / filesystem as a plain number
+# On a real server use:  df -h /   Here we read a saved copy of df -h.
+line=$(grep ' /$' datasets/df.txt)          # the line that ends with " /"
+echo "Line   : $line"
+usage=$(echo "$line" | awk '{print $5}')     # column 5 is Use%, e.g. 87%
+echo "Use%   : $usage"
+usage=$(echo "$usage" | tr -d '%')           # remove the % sign
+echo "Number : $usage"</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">chmod +x disk_percent.sh      # make it executable (only once)
+./disk_percent.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Line   : /dev/sda1        50G   41G  6.5G  87% /
+Use%   : 87%
+Number : 87</pre></div>
+<ul>
+  <li><code>grep ' /$'</code> picks the line that ends (<code>$</code>) with a space and <code>/</code>, which is the root filesystem.</li>
+  <li><code>awk '{print $5}'</code> prints the 5th column (columns are separated by spaces).</li>
+  <li><code>tr -d '%'</code> deletes the <code>%</code> sign. We need a plain number like <code>87</code> because <code>if</code> cannot compare <code>87%</code>.</li>
+  <li><code>usage=$( … )</code> saves the output of a command in a variable. There must be no spaces around <code>=</code>.</li>
+</ul>
+
+<h3 id="s2">Step 2: compare with a limit</h3>
+<div class="code"><div class="code-head">bash · disk_check.sh</div><pre><code class="language-bash">#!/bin/bash
+# disk_check.sh: compare disk usage with a limit
+limit=80                                      # alert when usage &gt;= 80
+usage=$(grep ' /$' datasets/df.txt | awk '{print $5}' | tr -d '%')
+
+if [ "$usage" -ge "$limit" ]; then            # -ge means "greater or equal"
+  echo "WARNING: / is ${usage}% full (limit ${limit}%)"
+else
+  echo "OK: / is ${usage}% full"
+fi</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">bash disk_check.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>WARNING: / is 87% full (limit 80%)</pre></div>
+<ul>
+  <li><code>[ "$usage" -ge "$limit" ]</code> is true when usage is greater than or equal to the limit. The spaces inside <code>[ ]</code> are required.</li>
+  <li><code>${usage}%</code>: the braces show where the variable name ends, so the <code>%</code> is printed after it.</li>
+  <li>Change <code>limit=80</code> to <code>limit=90</code> and run it again: you get the <code>OK</code> line.</li>
+</ul>
+
+<h3 id="s3">Step 3: check every disk with a loop</h3>
+<div class="code"><div class="code-head">bash · all_disks.sh</div><pre><code class="language-bash">#!/bin/bash
+# all_disks.sh: check every filesystem, not only /
+limit=85
+while read -r fs size used avail pct mount; do   # split each line into 6 words
+  if [ "$fs" = "Filesystem" ]; then              # skip the header line
+    continue
+  fi
+  num=$(echo "$pct" | tr -d '%')                 # 87% -&gt; 87
+  if [ "$num" -ge "$limit" ]; then
+    echo "ALERT: $mount is at $pct, only $avail free"
+  fi
+done &lt; datasets/df.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>ALERT: / is at 87%, only 6.5G free
+ALERT: /backup is at 96%, only 22G free
+ALERT: /data is at 92%, only 90G free</pre></div>
+<ul>
+  <li><code>while read -r fs size used avail pct mount</code> reads one line at a time and splits it into six variables.</li>
+  <li><code>done &lt; datasets/df.txt</code> feeds the file into the loop.</li>
+  <li><code>continue</code> jumps to the next line, so the header is skipped.</li>
+</ul>
+
+<h3 id="s4">Step 4: send the alert by email</h3>
+<p>This one uses the real <code>df</code> and the real <code>mail</code> command, so run it on your Linux machine after setting up mail (see <a href="#mail-setup">Concepts</a>).</p>
+<div class="code"><div class="code-head">bash · disk_mail.sh</div><pre><code class="language-bash">#!/bin/bash
+# disk_mail.sh: send an email when / is too full
+to="admin@example.com"                        # who gets the alert
+limit=80
+usage=$(df -P / | awk 'NR==2 {print $5}' | tr -d '%')   # real df this time
+
+if [ "$usage" -ge "$limit" ]; then
+  echo "Disk / on $(hostname) is ${usage}% full." | mail -s "Disk alert" "$to"
+  echo "Alert mailed to $to"
+else
+  echo "Disk OK (${usage}%), no mail sent"
+fi</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>Alert mailed to admin@example.com</pre></div>
+<ul>
+  <li><code>df -P /</code> prints a header line and one line for <code>/</code>; <code>awk 'NR==2'</code> takes line number 2.</li>
+  <li><code>echo "text" | mail -s "subject" address</code>: the text you pipe in becomes the body of the email.</li>
+  <li>The mail arrives with subject <em>Disk alert</em> and body <em>Disk / on web01 is 87% full.</em></li>
+</ul>
+
+<h3 id="s5">Step 5: the same idea for failed SSH logins</h3>
+<p><code>datasets/auth.log</code> is the SSH login log of the same server. Lines with <code>Failed password</code> are wrong password attempts.</p>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/auth.log</span></div><pre><code>Nov 16 01:21:30 web01 sshd[6030]: Failed password for invalid user ubuntu from 185.220.101.3 port 58173 ssh2
+Nov 16 01:41:47 web01 sshd[6379]: Failed password for invalid user guest from 91.240.118.172 port 61010 ssh2
+Nov 16 01:48:04 web01 sshd[2489]: Failed password for root from 103.21.244.9 port 45392 ssh2
+Nov 16 02:11:31 web01 sshd[6185]: Failed password for invalid user admin from 45.33.32.156 port 46046 ssh2
+Nov 16 02:28:14 web01 sshd[2293]: Failed password for guest from 45.33.32.156 port 62399 ssh2
+Nov 16 02:42:22 web01 sshd[5097]: Failed password for root from 185.220.101.3 port 44341 ssh2
+Nov 16 02:48:52 web01 sshd[9586]: Failed password for root from 45.33.32.156 port 60450 ssh2
+Nov 16 03:12:09 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 03:32:58 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 03:48:34 web01 sshd[9370]: Failed password for admin from 91.240.118.172 port 61108 ssh2
+Nov 16 04:04:25 web01 sshd[5346]: Accepted publickey for sysadmin from 10.0.0.5 port 45679 ssh2
+Nov 16 04:14:17 web01 sshd[8306]: Failed password for invalid user admin from 103.21.244.9 port 50952 ssh2
+Nov 16 04:33:13 web01 sshd[2420]: Failed password for test from 45.33.32.156 port 44021 ssh2
+Nov 16 04:35:54 web01 sshd[7897]: Failed password for invalid user test from 91.240.118.172 port 57534 ssh2
+Nov 16 04:49:41 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 05:09:50 web01 sshd[7332]: Failed password for ubuntu from 103.21.244.9 port 57460 ssh2
+Nov 16 05:28:42 web01 sshd[4713]: Failed password for test from 103.21.244.9 port 55484 ssh2
+Nov 16 05:40:40 web01 sshd[7724]: Accepted publickey for deploy from 10.0.0.5 port 31767 ssh2
+Nov 16 05:54:36 web01 sshd[1544]: Failed password for admin from 91.240.118.172 port 41909 ssh2
+Nov 16 05:56:48 web01 sshd[5362]: Failed password for invalid user test from 45.33.32.156 port 54846 ssh2
+Nov 16 06:06:47 web01 sshd[8006]: Failed password for invalid user test from 185.220.101.3 port 33413 ssh2
+Nov 16 06:19:13 web01 sshd[4773]: Accepted publickey for deploy from 192.168.1.10 port 46205 ssh2
+Nov 16 06:26:31 web01 sshd[1433]: Accepted publickey for deploy from 192.168.1.10 port 61035 ssh2
+Nov 16 06:49:52 web01 sshd[2974]: Failed password for test from 45.33.32.156 port 54175 ssh2
+Nov 16 06:56:05 web01 sshd[2976]: Accepted publickey for sysadmin from 192.168.1.10 port 37084 ssh2
+Nov 16 07:16:20 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 07:36:29 web01 sshd[7249]: Failed password for root from 45.33.32.156 port 45915 ssh2
+Nov 16 07:40:27 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 08:01:26 web01 sshd[3083]: Accepted publickey for sysadmin from 192.168.1.10 port 64913 ssh2
+Nov 16 08:16:33 web01 sshd[7171]: Failed password for root from 103.21.244.9 port 62125 ssh2
+Nov 16 08:20:39 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 08:42:50 web01 sshd[8632]: Accepted publickey for deploy from 10.0.0.5 port 64193 ssh2
+Nov 16 09:05:32 web01 sshd[5525]: Accepted publickey for sysadmin from 10.0.0.5 port 58545 ssh2
+Nov 16 09:26:15 web01 sshd[5497]: Failed password for invalid user root from 45.33.32.156 port 59543 ssh2
+Nov 16 09:35:04 web01 sshd[8713]: Failed password for invalid user ubuntu from 91.240.118.172 port 51300 ssh2
+Nov 16 09:41:46 web01 sshd[9088]: Failed password for invalid user ubuntu from 103.21.244.9 port 48105 ssh2
+Nov 16 10:01:14 web01 sshd[1266]: Failed password for invalid user root from 45.33.32.156 port 56635 ssh2
+Nov 16 10:18:24 web01 sshd[5037]: Accepted publickey for sysadmin from 10.0.0.5 port 31130 ssh2
+Nov 16 10:22:04 web01 sshd[5920]: Failed password for ubuntu from 45.33.32.156 port 54184 ssh2
+Nov 16 10:38:43 web01 sshd[9798]: Failed password for ubuntu from 103.21.244.9 port 47754 ssh2
+Nov 16 10:49:40 web01 sshd[5218]: Failed password for invalid user ubuntu from 45.33.32.156 port 42133 ssh2
+Nov 16 10:56:42 web01 sshd[4645]: Accepted publickey for sysadmin from 10.0.0.5 port 36588 ssh2
+Nov 16 11:03:49 web01 sshd[5953]: Failed password for invalid user ubuntu from 45.33.32.156 port 38295 ssh2
+Nov 16 11:13:40 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 11:33:03 web01 sshd[5886]: Accepted publickey for sysadmin from 192.168.1.10 port 36723 ssh2</code></pre></div>
+<div class="code"><div class="code-head">bash · ssh_count.sh</div><pre><code class="language-bash">#!/bin/bash
+# ssh_count.sh: count failed SSH logins and warn if there are too many
+log="datasets/auth.log"                       # on a server: /var/log/auth.log
+count=$(grep -c 'Failed password' "$log")     # -c prints the number of matching lines
+echo "Failed SSH logins: $count"
+if [ "$count" -gt 10 ]; then
+  echo "Too many failed logins, someone may be guessing passwords!"
+fi</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Failed SSH logins: 27
+Too many failed logins, someone may be guessing passwords!</pre></div>
+<ul>
+  <li><code>grep -c</code> counts matching lines instead of printing them.</li>
+  <li>Every alert script has the same three parts: <strong>measure</strong> (get a number), <strong>compare</strong> (<code>if</code>), <strong>act</strong> (echo or mail).</li>
+</ul>
+
+<h2 id="concepts">Concepts</h2>
+
+<h3 id="mail-setup">How the mail is sent</h3>
+<p><code>mail</code> builds the message (subject, body). It hands it to <code>msmtp</code>, which logs in to Gmail's SMTP server and delivers it.</p>
+<div class="table-wrap"><table>
+<tr><th>Program</th><th>Job</th></tr>
+<tr><td><code>mail</code> (mailutils)</td><td>Builds the email: <code>mail -s "subject" to@example.com</code></td></tr>
+<tr><td><code>msmtp</code></td><td>Sends it to an SMTP server such as <code>smtp.gmail.com</code></td></tr>
+<tr><td><code>~/.msmtprc</code></td><td>msmtp settings: server, username, password</td></tr>
+</table></div>
+<p>For Gmail, turn on 2-Step Verification and create an <strong>app password</strong> (Google Account → Security → App passwords). Your normal password will not work.</p>
+<div class="code"><div class="code-head">bash · ~/.msmtprc</div><pre><code class="language-bash">defaults
+auth           on
+tls            on
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+logfile        ~/.msmtp.log
+
+account        gmail
+host           smtp.gmail.com
+port           587
+from           alerts.example@gmail.com
+user           alerts.example@gmail.com
+password       GMAIL_APP_PASSWORD_HERE
+
+account default : gmail</code></pre></div>
+<div class="code"><div class="code-head">bash · protect the file and send a test mail</div><pre><code class="language-bash">chmod 600 ~/.msmtprc          # only you can read it (it holds a password)
+echo "Hello from my server" | mail -s "Test" you@example.com
+echo "exit status: $?"        # 0 means the mail was handed over successfully</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>exit status: 0</pre></div>
+<div class="callout warn"><span class="ct">Security</span>Never put <code>.msmtprc</code> in git or paste the password into a script. msmtp refuses to run if the file is readable by others, so <code>chmod 600</code> is required.</div>
+
+<h3 id="mail-cmd">The mail command</h3>
+<div class="table-wrap"><table>
+<tr><th>Option</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>-s "text"</code></td><td>Subject</td><td><code>mail -s "Disk full" admin@example.com</code></td></tr>
+<tr><td><code>-c addr</code></td><td>Copy (Cc) to another address</td><td><code>-c ops@example.com</code></td></tr>
+<tr><td><code>-A file</code></td><td>Attach a file (GNU mailutils)</td><td><code>-A report.txt</code></td></tr>
+</table></div>
+<div class="code"><div class="code-head">bash · three ways to give mail the body</div><pre><code class="language-bash">to=admin@example.com
+echo "Backup finished" | mail -s "Backup OK" "$to"     # 1. pipe a short text
+mail -s "Disk report" "$to" &lt; /tmp/report.txt          # 2. body from a file
+mail -s "Summary" "$to" &lt;&lt;EOF                          # 3. several lines (here-document)
+Host : $(hostname)
+Disk : $(df -h / | awk 'NR==2 {print $5}')
+EOF</code></pre></div>
+
+<h3 id="compare">Comparing numbers and text</h3>
+<div class="table-wrap"><table>
+<tr><th>Test</th><th>True when</th></tr>
+<tr><td><code>[ "$a" -eq "$b" ]</code></td><td>numbers are equal</td></tr>
+<tr><td><code>[ "$a" -ne "$b" ]</code></td><td>numbers are not equal</td></tr>
+<tr><td><code>[ "$a" -gt "$b" ]</code> / <code>-ge</code></td><td>a greater than / greater or equal to b</td></tr>
+<tr><td><code>[ "$a" -lt "$b" ]</code> / <code>-le</code></td><td>a less than / less or equal to b</td></tr>
+<tr><td><code>[ "$a" = "$b" ]</code></td><td>text is the same</td></tr>
+<tr><td><code>[ -s file ]</code></td><td>file exists and is not empty</td></tr>
+</table></div>
+<div class="callout exam"><span class="ct">Viva</span><code>-gt</code>, <code>-ge</code> and friends work only with whole numbers. <code>[ 87% -gt 80 ]</code> gives <em>integer expression expected</em>, which is why we remove the <code>%</code> first.</div>
+
+<h3 id="cron">Scheduling with cron</h3>
+<p>Open your schedule with <code>crontab -e</code> and list it with <code>crontab -l</code>. Each line has five time fields, then the command.</p>
+<div class="table-wrap"><table>
+<tr><th>Field</th><th>Values</th></tr>
+<tr><td>minute</td><td>0 to 59</td></tr>
+<tr><td>hour</td><td>0 to 23</td></tr>
+<tr><td>day of month</td><td>1 to 31</td></tr>
+<tr><td>month</td><td>1 to 12</td></tr>
+<tr><td>day of week</td><td>0 to 7 (0 and 7 are Sunday)</td></tr>
+</table></div>
+<div class="table-wrap"><table>
+<tr><th>Line</th><th>Runs</th></tr>
+<tr><td><code>*/10 * * * *</code></td><td>every 10 minutes</td></tr>
+<tr><td><code>0 * * * *</code></td><td>every hour, on the hour</td></tr>
+<tr><td><code>30 7 * * *</code></td><td>every day at 07:30</td></tr>
+<tr><td><code>0 9 * * 1-5</code></td><td>09:00, Monday to Friday</td></tr>
+</table></div>
+<div class="code"><div class="code-head">bash · crontab -e</div><pre><code class="language-bash">MAILTO=admin@example.com      # cron mails any output of the jobs to this address
+*/10 * * * *  /home/student/alerts/disk_alert.sh &gt;&gt; /home/student/alerts/disk.log 2&gt;&amp;1
+30 7 * * *    /home/student/alerts/daily_report.sh</code></pre></div>
+<div class="callout tip"><span class="ct">Use full paths in cron</span>Cron starts your script with a very short <code>PATH</code> and in your home directory. Use full paths for scripts and files, or <code>cd</code> to the right folder at the top of the script.</div>
+
+<h2 id="use-cases">Use cases</h2>
+<p>Each use case is a short, complete script. Mail sending is switched off with <code>send_mail="no"</code> so you can test it safely; change it to <code>"yes"</code> on a server where mail works.</p>
+
+<div class="usecase">
+<h3 id="uc1"><span class="uc-tag">Use case 1</span> Disk usage alert</h3>
+<p><strong>What:</strong> check every filesystem and send <em>one</em> email that lists all disks above 85%. <strong>Why:</strong> a full disk stops databases and logs; you want to know before it happens.</p>
+<div class="code"><div class="code-head">bash · disk_alert.sh</div><pre><code class="language-bash">#!/bin/bash
+# disk_alert.sh: email one report listing every disk above the limit
+limit=85
+to="admin@example.com"
+send_mail="no"                           # change to "yes" on a real server
+report="/tmp/disk_report.txt"
+disks="datasets/df.txt"             # on a server: df -hP &gt; /tmp/df.txt, then use /tmp/df.txt
+
+echo "Disk alert for $(hostname) (limit ${limit}%)" &gt; "$report"   # &gt; starts a new file
+problems=0
+while read -r fs size used avail pct mount; do
+  if [ "$fs" = "Filesystem" ]; then continue; fi                 # skip header
+  num=$(echo "$pct" | tr -d '%')
+  if [ "$num" -ge "$limit" ]; then
+    echo "  $mount is at $pct ($avail free of $size)" &gt;&gt; "$report"   # &gt;&gt; adds a line
+    problems=$((problems + 1))
+  fi
+done &lt; "$disks"
+
+cat "$report"
+if [ "$problems" -eq 0 ]; then
+  echo "All disks OK, nothing to send."
+elif [ "$send_mail" = "yes" ]; then
+  mail -s "Disk alert: $problems disk(s) above ${limit}%" "$to" &lt; "$report"
+  echo "Mail sent to $to"
+else
+  echo "($problems problem(s) found, mail not sent because send_mail=no)"
+fi</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">chmod +x disk_alert.sh
+./disk_alert.sh</code></pre></div>
+<div class="output"><div class="out-head">output (your host name will differ)</div><pre>Disk alert for web01 (limit 85%)
+  / is at 87% (6.5G free of 50G)
+  /backup is at 96% (22G free of 500G)
+  /data is at 92% (90G free of 1.0T)
+(3 problem(s) found, mail not sent because send_mail=no)</pre></div>
+<p><strong>How it works</strong></p>
+<ul>
+  <li>The first <code>echo … &gt; "$report"</code> creates a fresh report file; every <code>&gt;&gt;</code> afterwards adds one line.</li>
+  <li><code>problems=$((problems + 1))</code> counts how many disks are over the limit.</li>
+  <li><code>if / elif / else</code> decides: nothing wrong, send the mail, or only report.</li>
+  <li><code>mail … &lt; "$report"</code> uses the report file as the email body.</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3 id="uc2"><span class="uc-tag">Use case 2</span> SSH brute-force alert</h3>
+<p><strong>What:</strong> find IP addresses that typed a wrong SSH password 5 or more times and email the list with a command to block each one. <strong>Why:</strong> bots try thousands of passwords; one mail per failed login would be useless.</p>
+<div class="code"><div class="code-head">bash · ssh_alert.sh</div><pre><code class="language-bash">#!/bin/bash
+# ssh_alert.sh: list IPs with many failed SSH logins and mail the list
+log="$1"                                 # first argument = log file
+if [ -z "$log" ]; then log="datasets/auth.log"; fi
+limit=5
+to="security@example.com"
+send_mail="no"                           # "yes" on a real server
+
+# count failed logins per IP: the IP is 4th word from the end of the line
+grep 'Failed password' "$log" | awk '{print $(NF-3)}' | sort | uniq -c | sort -rn &gt; /tmp/ssh_counts.txt
+echo "Failed logins per IP:"
+cat /tmp/ssh_counts.txt
+
+&gt; /tmp/ssh_report.txt                    # empty the report file
+while read -r count ip; do
+  if [ "$count" -ge "$limit" ]; then
+    echo "$ip failed $count times, block with: sudo ufw deny from $ip" &gt;&gt; /tmp/ssh_report.txt
+  fi
+done &lt; /tmp/ssh_counts.txt
+
+echo "IPs at or above $limit failures:"
+cat /tmp/ssh_report.txt
+if [ -s /tmp/ssh_report.txt ] &amp;&amp; [ "$send_mail" = "yes" ]; then   # -s = file is not empty
+  mail -s "SSH brute-force report" "$to" &lt; /tmp/ssh_report.txt
+fi</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">./ssh_alert.sh datasets/auth.log</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Failed logins per IP:
+     12 45.33.32.156
+      7 103.21.244.9
+      5 91.240.118.172
+      3 185.220.101.3
+IPs at or above 5 failures:
+45.33.32.156 failed 12 times, block with: sudo ufw deny from 45.33.32.156
+103.21.244.9 failed 7 times, block with: sudo ufw deny from 103.21.244.9
+91.240.118.172 failed 5 times, block with: sudo ufw deny from 91.240.118.172</pre></div>
+<p><strong>How it works</strong></p>
+<ul>
+  <li>A failed line ends with <code>from 45.33.32.156 port 62399 ssh2</code>. <code>$NF</code> is the last word, so <code>$(NF-3)</code> is the IP.</li>
+  <li><code>sort | uniq -c | sort -rn</code> is the classic "count and rank" pipeline.</li>
+  <li><code>while read -r count ip</code> reads each <code>count ip</code> pair back from the saved file.</li>
+  <li><code>&gt; /tmp/ssh_report.txt</code> on its own empties the file; <code>[ -s file ]</code> checks it is not empty before mailing.</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3 id="uc3"><span class="uc-tag">Use case 3</span> Daily server report by email</h3>
+<p><strong>What:</strong> every morning at 07:30, mail a short report: full disks, top web clients and failed SSH logins. <strong>Why:</strong> one quick look tells the admin whether the server is healthy.</p>
+<div class="code"><div class="code-head">bash · daily_report.sh</div><pre><code class="language-bash">#!/bin/bash
+# daily_report.sh: a short plain-text server report, run every morning by cron
+to="admin@example.com"
+send_mail="no"                           # "yes" on a real server
+out="/tmp/daily_report.txt"
+
+echo "Daily report for $(hostname), $(date +%F)" &gt; "$out"
+echo "" &gt;&gt; "$out"
+echo "Disks above 85%:" &gt;&gt; "$out"
+awk 'NR &gt; 1 &amp;&amp; $5+0 &gt;= 85 {print "  " $6, $5}' datasets/df.txt &gt;&gt; "$out"
+echo "Top 3 web clients:" &gt;&gt; "$out"
+awk '{print $1}' datasets/access.log | sort | uniq -c | sort -rn | head -3 &gt;&gt; "$out"
+echo "Failed SSH logins: $(grep -c 'Failed password' datasets/auth.log)" &gt;&gt; "$out"
+
+cat "$out"
+if [ "$send_mail" = "yes" ]; then
+  mail -s "Daily report $(hostname)" "$to" &lt; "$out"
+fi</code></pre></div>
+<div class="output"><div class="out-head">output (host name and date will differ)</div><pre>Daily report for web01, 2026-11-17
+
+Disks above 85%:
+  / 87%
+  /backup 96%
+  /data 92%
+Top 3 web clients:
+     18 192.168.1.10
+     14 192.168.1.15
+     13 10.0.0.5
+Failed SSH logins: 27</pre></div>
+<div class="code"><div class="code-head">bash · schedule it with crontab -e</div><pre><code class="language-bash">30 7 * * *  cd /home/student/CBCS-UNIT4-STUDY-GUIDE &amp;&amp; ./daily_report.sh &gt;&gt; /tmp/daily_report.log 2&gt;&amp;1</code></pre></div>
+<p><strong>How it works</strong></p>
+<ul>
+  <li>Each section appends to the same file with <code>&gt;&gt;</code>, then the whole file is mailed.</li>
+  <li><code>$5+0</code> in awk turns <code>87%</code> into the number 87, so <code>$5+0 &gt;= 85</code> works without <code>tr</code>.</li>
+  <li><code>$(grep -c …)</code> inside the echo text puts the count straight into the sentence.</li>
+  <li>The cron line does <code>cd</code> first, because the script uses the relative path <code>datasets/</code>.</li>
+</ul>
+</div>
+
+<details><summary>Optional: going further (stop repeated alerts)</summary>
+<p>If cron runs <code>disk_alert.sh</code> every 10 minutes, a full disk sends 144 mails a day. Save the time of the last mail in a file and only mail again after one hour:</p>
+<div class="code"><div class="code-head">bash · cooldown.sh</div><pre><code class="language-bash">#!/bin/bash
+stamp=/tmp/disk_alert.last              # file that holds the time of the last mail
+now=$(date +%s)                         # seconds since 1970
+last=0
+if [ -f "$stamp" ]; then last=$(cat "$stamp"); fi
+
+if [ $((now - last)) -ge 3600 ]; then   # 3600 seconds = 1 hour
+  echo "Disk alert!" | mail -s "Disk alert" admin@example.com
+  echo "$now" &gt; "$stamp"                # remember when we sent it
+else
+  echo "Alert already sent less than an hour ago, skipping"
+fi</code></pre></div>
+<div class="output"><div class="out-head">sample output (second run within an hour)</div><pre>Alert already sent less than an hour ago, skipping</pre></div>
+</details>
+
+<h2 id="mistakes">Common mistakes</h2>
+<div class="table-wrap"><table>
+<tr><th>Mistake</th><th>What happens</th><th>Fix</th></tr>
+<tr><td><code>if [$usage -ge 80]</code></td><td><em>command not found</em></td><td>Spaces inside the brackets: <code>[ "$usage" -ge 80 ]</code></td></tr>
+<tr><td>Comparing <code>87%</code> with <code>-ge</code></td><td><em>integer expression expected</em></td><td>Remove the % with <code>tr -d '%'</code></td></tr>
+<tr><td><code>[ "$a" &gt; "$b" ]</code> for numbers</td><td><code>&gt;</code> is a redirection: creates a file named after <code>$b</code></td><td>Use <code>-gt</code></td></tr>
+<tr><td><code>usage = 80</code></td><td><em>usage: command not found</em></td><td>No spaces around <code>=</code>: <code>usage=80</code></td></tr>
+<tr><td><code>./disk_alert.sh: Permission denied</code></td><td>File is not executable</td><td><code>chmod +x disk_alert.sh</code> or run <code>bash disk_alert.sh</code></td></tr>
+<tr><td><code>/bin/bash^M: bad interpreter</code></td><td>Script saved with Windows (CRLF) line endings</td><td><code>sed -i 's/\r$//' disk_alert.sh</code> or <code>dos2unix</code></td></tr>
+<tr><td>Works by hand, nothing from cron</td><td>Cron uses a short PATH and your home directory</td><td>Full paths, <code>cd</code> first, log output with <code>&gt;&gt; file 2&gt;&amp;1</code></td></tr>
+<tr><td>Gmail: <em>535 Username and Password not accepted</em></td><td>Normal password used</td><td>Create an app password</td></tr>
+</table></div>
+
+<h2 id="exercises">Practice exercises</h2>
+<ol class="steps">
+  <li>Print only the Use% of <code>/backup</code> from <code>datasets/df.txt</code>.</li>
+  <li>Change <code>disk_check.sh</code> so it prints <code>CRITICAL</code> at 95% or more, <code>WARNING</code> at 80% or more, otherwise <code>OK</code>.</li>
+  <li>Count how many <em>successful</em> SSH logins (<code>Accepted</code>) are in <code>datasets/auth.log</code>.</li>
+  <li>Write a crontab line that runs <code>/home/student/ssh_alert.sh</code> every 15 minutes.</li>
+</ol>
+<details><summary>Solution 1</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep ' /backup$' datasets/df.txt | awk '{print $5}'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>96%</pre></div>
+</details>
+<details><summary>Solution 2</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">usage=$(grep ' /$' datasets/df.txt | awk '{print $5}' | tr -d '%')
+if [ "$usage" -ge 95 ]; then
+  echo "CRITICAL: ${usage}%"
+elif [ "$usage" -ge 80 ]; then
+  echo "WARNING: ${usage}%"
+else
+  echo "OK: ${usage}%"
+fi</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>WARNING: 87%</pre></div>
+</details>
+<details><summary>Solution 3</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -c 'Accepted' datasets/auth.log</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>11</pre></div>
+</details>
+<details><summary>Solution 4</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">*/15 * * * *  /home/student/ssh_alert.sh &gt;&gt; /home/student/ssh_alert.log 2&gt;&amp;1</code></pre></div>
+</details>
+
+<h2 id="viva">Viva / exam questions</h2>
+<details><summary>What does <code>mail -s "Disk alert" admin@example.com</code> do?</summary><p>It sends an email with the subject "Disk alert" to admin@example.com. The body is read from standard input, for example from <code>echo "text" |</code> or <code>&lt; file</code>.</p></details>
+<details><summary>What is msmtp and why do we need it?</summary><p>msmtp is a small SMTP client. It takes the message built by <code>mail</code> and delivers it to a real mail server such as smtp.gmail.com, logging in with the account in <code>~/.msmtprc</code>.</p></details>
+<details><summary>Why must <code>~/.msmtprc</code> have permission 600?</summary><p>It contains the mail password. 600 means only the owner can read and write it. msmtp refuses to start if other users can read the file.</p></details>
+<details><summary>How do you get the disk usage of <code>/</code> as a number in a script?</summary><p><code>df -P / | awk 'NR==2 {print $5}' | tr -d '%'</code>. awk picks column 5 of line 2 (for example <code>87%</code>), and tr removes the % sign.</p></details>
+<details><summary>What is the difference between <code>-gt</code> and <code>&gt;</code> inside <code>[ ]</code>?</summary><p><code>-gt</code> compares numbers. Inside <code>[ ]</code>, <code>&gt;</code> is treated as output redirection and creates a file, so it must not be used for numbers.</p></details>
+<details><summary>Explain the five time fields of a crontab line.</summary><p>Minute, hour, day of month, month, day of week, followed by the command. <code>30 7 * * *</code> means 07:30 every day; <code>*/10 * * * *</code> means every 10 minutes.</p></details>
+<details><summary>What does <code>MAILTO</code> do in a crontab?</summary><p>Cron emails anything a job prints to the address in <code>MAILTO</code>. <code>MAILTO=""</code> switches this off.</p></details>
+<details><summary>Why does a script that works in the terminal sometimes fail in cron?</summary><p>Cron runs it with a minimal environment: a short PATH, the home directory as the current folder, and no terminal. Use full paths and redirect output to a log file to see errors.</p></details>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="../tools/awk.html">awk: column processing</a></li>
+  <li><a href="../tools/grep.html">grep: search text</a></li>
+  <li><a href="../tools/sort-uniq.html">sort &amp; uniq</a></li>
+  <li><a href="lab06-access-logs.html">Lab 06: Access log analysis</a> · <a href="lab09-pipes-redirection.html">Lab 09: Pipes &amp; redirection</a> · <a href="lab12-service-health.html">Lab 12: Service health monitoring</a></li>
+</ul>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CBCS Unit 4 Shell Wiki</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-root="" data-page="home">
+<main class="content">
+<article>
+
+<div class="breadcrumb">Home</div>
+<h1>CBCS Unit 4: Shell Scripting Study Wiki</h1>
+<p class="lead">Twelve lab guides plus stand-alone tutorials for the text-processing commands you will use in every lab: <code>grep</code>, <code>sed</code>, <code>awk</code>, <code>jq</code>, <code>sort</code>/<code>uniq</code>, <code>cut</code>/<code>tr</code>, <code>find</code>/<code>xargs</code> and <code>curl</code>.</p>
+<div class="meta-row">
+  <span class="pill">12 labs</span><span class="pill">8 command tutorials</span><span class="pill grey">Bash 5 · Linux (GNU tools)</span><span class="pill grey">Works offline</span>
+</div>
+
+<h2 id="how-to-use">How to use this wiki</h2>
+<ol class="steps">
+  <li><strong>Read the command tutorials first</strong> if <code>awk</code> or <code>jq</code> are new to you. Each lab links back to the commands it uses.</li>
+  <li><strong>Open a terminal in this folder.</strong> Every example reads from <code>datasets/</code>, so you can paste commands and get the same output shown on the page.</li>
+  <li><strong>Work through the lab's three use cases.</strong> Each one is a complete, runnable script, followed by its expected output.</li>
+  <li><strong>Finish with the viva / exam questions</strong> at the bottom of every lab.</li>
+</ol>
+
+<div class="code"><div class="code-head">bash · try it now</div><pre><code class="language-bash">cd CBCS-UNIT4-STUDY-GUIDE
+# top 3 client IPs in the sample web log
+awk '{print $1}' datasets/access.log | sort | uniq -c | sort -rn | head -3</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>     18 192.168.1.10
+     14 192.168.1.15
+     13 10.0.0.5</pre></div>
+
+<div class="callout note"><span class="ct">Linux vs macOS</span>The labs target Linux with GNU tools. On macOS, <code>sed -i</code>, <code>date -d</code> and a few <code>awk</code> functions behave differently; the pages flag these where they matter. Install <code>gnu-sed</code>, <code>gawk</code> and <code>coreutils</code> with Homebrew to match the outputs exactly.</div>
+
+<h2 id="labs">Labs</h2>
+<div class="cards">
+  <a class="card" href="labs/lab01-multi-function.html"><span class="card-num">LAB 01</span><h3>Multi-function scripting</h3><p>Functions, arguments, return codes, local scope, libraries, getopts.</p></a>
+  <a class="card" href="labs/lab02-menus-colors.html"><span class="card-num">LAB 02</span><h3>Interactive menus &amp; colors</h3><p>select, case loops, ANSI escape codes, tput, read prompts.</p></a>
+  <a class="card" href="labs/lab03-remote-execution.html"><span class="card-num">LAB 03</span><h3>Remote script execution</h3><p>ssh keys, heredocs over ssh, running scripts on many hosts, scp/rsync.</p></a>
+  <a class="card" href="labs/lab04-json-jq.html"><span class="card-num">LAB 04</span><h3>JSON with jq</h3><p>Filtering, transforming and reporting on JSON from files and APIs.</p></a>
+  <a class="card" href="labs/lab05-cloudflare-api.html"><span class="card-num">LAB 05</span><h3>Cloudflare API</h3><p>API tokens, listing zones, creating and updating DNS records with curl and jq.</p></a>
+  <a class="card" href="labs/lab06-access-logs.html"><span class="card-num">LAB 06</span><h3>Access log analysis</h3><p>Top IPs, status codes, bandwidth and attack detection from web logs.</p></a>
+  <a class="card" href="labs/lab07-email-alerts.html"><span class="card-num">LAB 07</span><h3>Automated email alerts</h3><p>mail/msmtp, threshold checks, HTML reports, cron scheduling.</p></a>
+  <a class="card" href="labs/lab08-password-generation.html"><span class="card-num">LAB 08</span><h3>Password generation</h3><p>/dev/urandom, openssl, policy rules, passphrases and hashing.</p></a>
+  <a class="card" href="labs/lab09-pipes-redirection.html"><span class="card-num">LAB 09</span><h3>Pipes &amp; redirection</h3><p>stdin/stdout/stderr, file descriptors, tee, here-docs, process substitution.</p></a>
+  <a class="card" href="labs/lab10-wordpress-lamp.html"><span class="card-num">LAB 10</span><h3>WordPress on LAMP</h3><p>Automated Apache, MySQL, PHP and WordPress install script.</p></a>
+  <a class="card" href="labs/lab11-backup-retention.html"><span class="card-num">LAB 11</span><h3>Backup &amp; retention</h3><p>tar, mysqldump, rotation policies, find -mtime cleanup, verification.</p></a>
+  <a class="card" href="labs/lab12-service-health.html"><span class="card-num">LAB 12</span><h3>Service health monitoring</h3><p>systemctl, HTTP and port checks, auto-restart, status dashboards.</p></a>
+</div>
+
+<h2 id="tools">Command tutorials</h2>
+<div class="cards">
+  <a class="card" href="tools/grep.html"><span class="card-num">$ grep</span><h3>Search text with patterns</h3><p>Regex, context lines, counting, recursive search.</p></a>
+  <a class="card" href="tools/sed.html"><span class="card-num">$ sed</span><h3>Stream editing</h3><p>Substitute, delete, insert, in-place config edits.</p></a>
+  <a class="card" href="tools/awk.html"><span class="card-num">$ awk</span><h3>Column processing</h3><p>Fields, patterns, arrays, reports and aggregates.</p></a>
+  <a class="card" href="tools/jq.html"><span class="card-num">$ jq</span><h3>JSON processing</h3><p>Select, map, group, reshape and output JSON or CSV.</p></a>
+  <a class="card" href="tools/sort-uniq.html"><span class="card-num">$ sort · uniq</span><h3>Ordering &amp; counting</h3><p>Keys, numeric and human sorts, frequency tables.</p></a>
+  <a class="card" href="tools/cut-tr.html"><span class="card-num">$ cut · tr · wc</span><h3>Slicing &amp; translating</h3><p>cut, tr, paste, wc, head, tail and tee.</p></a>
+  <a class="card" href="tools/find-xargs.html"><span class="card-num">$ find · xargs</span><h3>Finding files &amp; batching</h3><p>Search by name, age and size; act on results safely.</p></a>
+  <a class="card" href="tools/curl.html"><span class="card-num">$ curl</span><h3>HTTP from the shell</h3><p>GET/POST, headers, JSON bodies, status codes, timeouts.</p></a>
+</div>
+
+<h2 id="datasets">Practice datasets</h2>
+<p>All examples use the files in <code>datasets/</code>. Browse them on the <a href="reference/datasets.html">dataset library</a> page.</p>
+<div class="table-wrap"><table>
+<tr><th>File</th><th>Format</th><th>Used in</th></tr>
+<tr><td><code>access.log</code></td><td>Apache/Nginx combined log, 80 lines</td><td>awk, grep, sort/uniq, Lab 06, Lab 09</td></tr>
+<tr><td><code>auth.log</code></td><td>sshd / sudo syslog lines</td><td>grep, awk, Lab 07</td></tr>
+<tr><td><code>employees.csv</code></td><td>CSV with header, 25 rows</td><td>awk, cut, sort</td></tr>
+<tr><td><code>sales.csv</code></td><td>CSV with header, 30 rows</td><td>awk, sort</td></tr>
+<tr><td><code>users.json</code></td><td>JSON array of 12 user objects</td><td>jq, Lab 04</td></tr>
+<tr><td><code>servers.json</code></td><td>JSON object with nested server list</td><td>jq, Lab 04, Lab 12</td></tr>
+<tr><td><code>cf_dns_records.json</code></td><td>Cloudflare API v4 DNS list response</td><td>jq, Lab 05</td></tr>
+<tr><td><code>servers.txt</code></td><td>Whitespace inventory with comments</td><td>Lab 03, Lab 12</td></tr>
+<tr><td><code>services.txt</code></td><td>Service check definitions</td><td>Lab 12</td></tr>
+<tr><td><code>df.txt</code></td><td><code>df -h</code> snapshot</td><td>awk, Lab 07</td></tr>
+<tr><td><code>app.conf</code></td><td>KEY=VALUE config file</td><td>sed, Lab 10</td></tr>
+<tr><td><code>tags.txt</code></td><td>One word per line, with duplicates</td><td>sort/uniq</td></tr>
+</table></div>
+
+</article>
+</main>
+<script src="assets/app.js"></script>
+</body>
+</html>

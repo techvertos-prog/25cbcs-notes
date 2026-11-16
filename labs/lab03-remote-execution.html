@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 03 · Remote script execution</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="lab03">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Labs / Lab 03</div>
+<h1>Lab 03: Remote script execution</h1>
+<p class="lead">Run commands on other Linux machines from your own terminal with <code>ssh</code>. Start with one command, then send several lines at once, then loop over a list of servers, and copy files with <code>scp</code>.</p>
+<div class="meta-row">
+  <span class="pill">Commands: ssh, ssh-keygen, ssh-copy-id, scp</span>
+  <span class="pill grey">Difficulty: beginner</span>
+  <span class="pill grey">~45 min</span>
+</div>
+
+<div class="callout note"><span class="ct">About the outputs on this page</span>Remote commands need real servers, so most outputs are labelled <strong>sample output</strong>. Your names and numbers will differ. Outputs that only read <code>datasets/</code> are real. To practise, two Linux virtual machines on the same network are enough; replace the IP addresses with yours.</div>
+
+<h2 id="aim">Aim and objectives</h2>
+<p><strong>Aim:</strong> run commands and scripts on remote Linux machines from a shell script.</p>
+<ul>
+  <li>Log in with an SSH key instead of a password.</li>
+  <li>Run one command on a server, and several commands with a heredoc.</li>
+  <li>Run the same command on several servers with a <code>for</code> loop.</li>
+  <li>Run a local script on a server, and copy files with <code>scp</code>.</li>
+</ul>
+
+<h2 id="prereq">Prerequisites</h2>
+<div class="code"><div class="code-head">bash · install</div><pre><code class="language-bash">sudo apt install openssh-client      # on your machine (usually already there)
+sudo apt install openssh-server      # on each server you want to reach
+sudo systemctl enable --now ssh      # start the SSH service on the server</code></pre></div>
+<p>You need a user account on each server. Our server list uses the users <code>deploy</code>, <code>dbadmin</code> and <code>ops</code>.</p>
+
+<h3 id="keys">One-time setup: SSH keys</h3>
+<p>Scripts cannot type passwords, so we use a key pair. The <strong>private key</strong> stays on your machine. The <strong>public key</strong> is copied to the server.</p>
+<ol class="steps">
+  <li>Create a key pair (press Enter to accept the defaults):
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">ssh-keygen -t ed25519</code></pre></div></li>
+  <li>Copy the public key to the server (you type the password one last time):
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">ssh-copy-id deploy@10.0.1.11</code></pre></div></li>
+  <li>Test it. You should get in without a password:
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">ssh deploy@10.0.1.11</code></pre></div></li>
+</ol>
+
+<h2 id="start-here">Start here: simple scripts</h2>
+
+<h3 id="s1">Step 1: one command on a server</h3>
+<div class="code"><div class="code-head">bash · one.sh</div><pre><code class="language-bash">#!/bin/bash
+# one.sh: run ONE command on a remote server
+
+server="deploy@10.0.1.11"          # user@address of the remote machine
+
+ssh "$server" uptime               # runs "uptime" on the server, prints here
+echo "ssh finished with exit code $?"</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">chmod +x one.sh
+./one.sh</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre> 10:42:17 up 3 days,  2:11,  1 user,  load average: 0.08, 0.05, 0.01
+ssh finished with exit code 0</pre></div>
+<ul>
+  <li><code>ssh user@address command</code> logs in, runs the command, prints its output on <em>your</em> screen and logs out.</li>
+  <li><code>$?</code> after <code>ssh</code> is the exit code of the remote command. If ssh could not connect at all, it is <code>255</code>.</li>
+</ul>
+
+<h3 id="s2">Step 2: several commands with a heredoc</h3>
+<div class="code"><div class="code-head">bash · heredoc.sh</div><pre><code class="language-bash">#!/bin/bash
+# heredoc.sh: send several commands to the server in one go
+
+ssh deploy@10.0.1.11 bash &lt;&lt;'EOF'      # bash on the server reads the lines below
+echo "Logged in to: $(hostname)"
+echo "Today is: $(date +%d-%m-%Y)"
+df -h / | tail -n 1
+EOF</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>Logged in to: web01
+Today is: 17-11-2026
+/dev/sda2        49G   20G   27G  43% /</pre></div>
+<ul>
+  <li>Everything between <code>&lt;&lt;'EOF'</code> and the line <code>EOF</code> is sent to the server as input. <code>bash</code> on the server reads it and runs it line by line.</li>
+  <li>The quotes in <code>'EOF'</code> mean "do not change anything here". So <code>$(hostname)</code> runs on the <strong>server</strong> and prints web01.</li>
+  <li>The closing <code>EOF</code> must be alone on its line, with no spaces before it.</li>
+</ul>
+
+<h3 id="s3">Step 3: a for loop over several servers</h3>
+<div class="code"><div class="code-head">bash · loop.sh</div><pre><code class="language-bash">#!/bin/bash
+# loop.sh: run the same command on several servers
+
+for host in 10.0.1.11 10.0.1.12 10.0.1.16; do
+  echo "=== $host ==="
+  ssh deploy@"$host" hostname        # ask each server for its name
+done</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>=== 10.0.1.11 ===
+web01
+=== 10.0.1.12 ===
+web02
+=== 10.0.1.16 ===
+cache01</pre></div>
+<ul>
+  <li>The loop variable <code>host</code> takes each address in turn.</li>
+  <li><code>deploy@"$host"</code> builds the login, e.g. <code>deploy@10.0.1.11</code>.</li>
+  <li>The servers are done one after another. A slow server makes the whole loop wait.</li>
+</ul>
+
+<h3 id="s4">Step 4: build the server list from a file</h3>
+<p>Typing addresses into the script is fine for 3 servers. For more, keep them in a file. Here is our inventory:</p>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/servers.txt</span></div><pre><code># hostname        ip            user     role
+web01             10.0.1.11     deploy   web
+web02             10.0.1.12     deploy   web
+db01              10.0.1.14     dbadmin  database
+cache01           10.0.1.16     deploy   cache
+mon01             10.0.1.18     ops      monitoring</code></pre></div>
+<div class="code"><div class="code-head">bash · dryrun.sh</div><pre><code class="language-bash">#!/bin/bash
+# dryrun.sh: read servers.txt and PRINT the ssh command for each host
+# (safe to run anywhere: nothing connects)
+
+grep -v '^#' datasets/servers.txt | while read -r name ip user role; do
+  echo "ssh $user@$ip   # $name ($role)"
+done</code></pre></div>
+<div class="output"><div class="out-head">output · bash dryrun.sh</div><pre>ssh deploy@10.0.1.11   # web01 (web)
+ssh deploy@10.0.1.12   # web02 (web)
+ssh dbadmin@10.0.1.14   # db01 (database)
+ssh deploy@10.0.1.16   # cache01 (cache)
+ssh ops@10.0.1.18   # mon01 (monitoring)</pre></div>
+<ul>
+  <li><code>grep -v '^#'</code> removes the comment line (the header).</li>
+  <li><code>read -r name ip user role</code> splits each line into four variables at the spaces.</li>
+  <li>This script only <em>prints</em> the commands, so you can check them safely. Use case 1 runs them for real.</li>
+</ul>
+
+<h3 id="s5">Step 5: copy files with scp</h3>
+<div class="code"><div class="code-head">bash · copy.sh</div><pre><code class="language-bash">#!/bin/bash
+# copy.sh: copy files to and from a server with scp
+
+scp datasets/app.conf deploy@10.0.1.11:/tmp/       # local -&gt; server
+scp deploy@10.0.1.11:/etc/hostname ./web01-hostname.txt   # server -&gt; local
+cat web01-hostname.txt</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>app.conf                                      100%  498    61.2KB/s   00:00
+hostname                                      100%    6     0.9KB/s   00:00
+web01</pre></div>
+<ul>
+  <li><code>scp SOURCE DESTINATION</code> works like <code>cp</code>. A remote path is written <code>user@address:/path</code>.</li>
+  <li>Use <code>scp -r</code> to copy a whole folder.</li>
+</ul>
+
+<h2 id="concepts">Concepts</h2>
+
+<h3 id="ssh-forms">Ways to run things remotely</h3>
+<div class="table-wrap"><table>
+<tr><th>Command</th><th>What it does</th></tr>
+<tr><td><code>ssh user@host</code></td><td>Interactive login (type <code>exit</code> to leave)</td></tr>
+<tr><td><code>ssh user@host 'cmd'</code></td><td>Run one command and come back</td></tr>
+<tr><td><code>ssh user@host 'cmd1; cmd2'</code></td><td>Several commands in one string</td></tr>
+<tr><td><code>ssh user@host bash &lt;&lt;'EOF' ... EOF</code></td><td>Send several lines written inside your script</td></tr>
+<tr><td><code>ssh user@host 'bash -s' &lt; script.sh</code></td><td>Run a script file from your machine on the server</td></tr>
+<tr><td><code>scp file user@host:/path/</code></td><td>Copy a file to the server</td></tr>
+<tr><td><code>scp user@host:/path/file .</code></td><td>Copy a file from the server to here</td></tr>
+</table></div>
+
+<h3 id="quotes">Single or double quotes?</h3>
+<p>Your own shell reads the command first, then the server reads it again.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">ssh deploy@10.0.1.11 "echo $HOSTNAME"   # double quotes: YOUR machine fills in $HOSTNAME
+ssh deploy@10.0.1.11 'echo $HOSTNAME'   # single quotes: the SERVER fills it in</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>student-laptop
+web01</pre></div>
+<p>The same rule applies to heredocs: <code>&lt;&lt;'EOF'</code> (quoted) leaves <code>$</code> for the server, while <code>&lt;&lt;EOF</code> (unquoted) fills in variables on your machine first.</p>
+
+<h3 id="useful-options">Useful ssh options for scripts</h3>
+<div class="table-wrap"><table>
+<tr><th>Option</th><th>Why</th></tr>
+<tr><td><code>-o BatchMode=yes</code></td><td>Never ask for a password. If the key does not work, fail at once instead of waiting</td></tr>
+<tr><td><code>-o ConnectTimeout=5</code></td><td>Give up after 5 seconds if the server is down</td></tr>
+<tr><td><code>-n</code></td><td>Do not read keyboard input. Needed inside <code>while read</code> loops (see use case 1)</td></tr>
+<tr><td><code>-p 2222</code></td><td>Connect to a different port (scp uses capital <code>-P</code>)</td></tr>
+</table></div>
+
+<h3 id="ssh-config">Short names with ~/.ssh/config</h3>
+<p>Instead of <code>deploy@10.0.1.11</code> you can write <code>ssh web01</code> after adding entries to <code>~/.ssh/config</code>. This command makes the entries from our server list:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk '!/^#/ &amp;&amp; NF { print "Host " $1; print "    HostName " $2; print "    User " $3; print "" }' datasets/servers.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Host web01
+    HostName 10.0.1.11
+    User deploy
+
+Host web02
+    HostName 10.0.1.12
+    User deploy
+
+Host db01
+    HostName 10.0.1.14
+    User dbadmin
+
+Host cache01
+    HostName 10.0.1.16
+    User deploy
+
+Host mon01
+    HostName 10.0.1.18
+    User ops</pre></div>
+<p>Add them with <code>&gt;&gt; ~/.ssh/config</code>. <code>scp</code> understands the short names too, as use case 3 shows.</p>
+
+<h2 id="use-cases">Use cases</h2>
+<p>All three use cases use the servers from <code>datasets/servers.txt</code> shown in Step 4.</p>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 1</span> Health check of every server</h3>
+<p><strong>What and why:</strong> each morning, check that every server answers and see its uptime and disk usage. Servers that are down are reported instead of stopping the script.</p>
+<div class="code"><div class="code-head">bash · check-all.sh</div><pre><code class="language-bash">#!/bin/bash
+# check-all.sh: check every server in datasets/servers.txt
+# prints uptime and root disk usage, or UNREACHABLE
+
+file="datasets/servers.txt"
+
+grep -v '^#' "$file" | while read -r name ip user role; do
+  echo "=== $name ($ip) ==="
+  # -n: do not read our host list; BatchMode: never ask for a password
+  if ssh -n -o BatchMode=yes -o ConnectTimeout=5 "$user@$ip" "uptime -p; df -h / | tail -n 1"; then
+    echo "status: OK"
+  else
+    echo "status: UNREACHABLE"
+  fi
+done</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>=== web01 (10.0.1.11) ===
+up 3 days, 2 hours, 11 minutes
+/dev/sda2        49G   20G   27G  43% /
+status: OK
+=== web02 (10.0.1.12) ===
+up 3 days, 2 hours, 9 minutes
+/dev/sda2        49G   19G   28G  41% /
+status: OK
+=== db01 (10.0.1.14) ===
+up 12 days, 5 hours, 40 minutes
+/dev/sdb1       196G  168G   19G  90% /
+status: OK
+=== cache01 (10.0.1.16) ===
+ssh: connect to host 10.0.1.16 port 22: Connection timed out
+status: UNREACHABLE
+=== mon01 (10.0.1.18) ===
+up 21 hours, 4 minutes
+/dev/sda2        29G   16G   12G  57% /
+status: OK</pre></div>
+<p><strong>How it works:</strong></p>
+<ul>
+  <li>Each line of the file gives <code>name ip user role</code>, so each server is reached with its own user.</li>
+  <li><code>if ssh ...; then</code> checks ssh's exit code: 0 means the commands ran, anything else means a problem.</li>
+  <li><strong><code>-n</code> is important.</strong> Without it, the first <code>ssh</code> reads the rest of the server list as its own input, and the loop stops after the first server.</li>
+  <li><code>BatchMode</code> and <code>ConnectTimeout</code> stop the script from hanging on a password prompt or a dead server.</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 2</span> Run a local script on the web servers</h3>
+<p><strong>What and why:</strong> you have a script on your machine and want its result from each server, without copying the file to every server first.</p>
+<div class="code"><div class="code-head">bash · info.sh (runs on the server)</div><pre><code class="language-bash">#!/bin/bash
+# info.sh: this script will run ON the remote server
+echo "Host     : $(hostname)"
+echo "Kernel   : $(uname -r)"
+echo "Users on : $(who | wc -l)"
+echo "Memory   : $(free -m | awk 'NR==2 {print $3 " MB used of " $2 " MB"}')"</code></pre></div>
+<div class="code"><div class="code-head">bash · run-script.sh (runs on your machine)</div><pre><code class="language-bash">#!/bin/bash
+# run-script.sh: run the local file info.sh on each web server
+# (the script is sent over ssh, it is NOT copied to the server)
+
+for ip in 10.0.1.11 10.0.1.12; do
+  echo "----- deploy@$ip -----"
+  ssh deploy@"$ip" 'bash -s' &lt; info.sh
+done</code></pre></div>
+<div class="output"><div class="out-head">sample output · ./run-script.sh</div><pre>----- deploy@10.0.1.11 -----
+Host     : web01
+Kernel   : 6.8.0-45-generic
+Users on : 1
+Memory   : 1873 MB used of 7951 MB
+----- deploy@10.0.1.12 -----
+Host     : web02
+Kernel   : 6.8.0-45-generic
+Users on : 0
+Memory   : 2210 MB used of 7951 MB</pre></div>
+<p><strong>How it works:</strong></p>
+<ul>
+  <li><code>&lt; info.sh</code> feeds the file into ssh. On the server, <code>bash -s</code> reads commands from that input and runs them.</li>
+  <li>The file is never saved on the server, so there is nothing to clean up and only one copy to maintain.</li>
+  <li>Change <code>info.sh</code> and the next run uses the new version on every server.</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 3</span> Collect log files from the web servers</h3>
+<p><strong>What and why:</strong> copy each web server's access log into a local <code>logs/</code> folder, named with the server and the date, so you can analyse them later (see <a href="lab06-access-logs.html">Lab 06</a>).</p>
+<div class="code"><div class="code-head">bash · collect-logs.sh</div><pre><code class="language-bash">#!/bin/bash
+# collect-logs.sh: copy the nginx access log from each web server
+# into a local folder called logs/, one file per server
+
+mkdir -p logs                                  # make the folder if needed
+today=$(date +%Y-%m-%d)
+
+for host in web01 web02; do                    # names from ~/.ssh/config
+  echo "Copying from $host ..."
+  if scp "$host":/var/log/nginx/access.log "logs/$host-$today.log"; then
+    echo "  saved logs/$host-$today.log"
+  else
+    echo "  FAILED to copy from $host"
+  fi
+done
+
+ls -l logs/</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>Copying from web01 ...
+access.log                                    100%  842KB  12.1MB/s   00:00
+  saved logs/web01-2026-11-17.log
+Copying from web02 ...
+scp: /var/log/nginx/access.log: Permission denied
+  FAILED to copy from web02
+total 848
+-rw-r--r-- 1 student student 862144 Nov 17 10:51 web01-2026-11-17.log</pre></div>
+<p><strong>How it works:</strong></p>
+<ul>
+  <li><code>web01</code> and <code>web02</code> are short names from <code>~/.ssh/config</code> (see Concepts).</li>
+  <li><code>mkdir -p</code> creates the folder, and does nothing if it already exists.</li>
+  <li><code>if scp ...; then</code> reports each copy separately, so one failure does not hide the others.</li>
+  <li>"Permission denied" usually means the user cannot read the log. Add the user to the <code>adm</code> group on that server.</li>
+</ul>
+</div>
+
+<details><summary>Optional: going further (rsync instead of scp)</summary>
+<p><code>rsync</code> copies only the files that changed, which is much faster for folders you copy again and again. It must be installed on both machines.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">rsync -av website/ deploy@10.0.1.11:/var/www/html/      # copy changed files only
+rsync -avn website/ deploy@10.0.1.11:/var/www/html/     # -n: dry run, just show what would change</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>sending incremental file list
+index.html
+css/style.css
+
+sent 2,413 bytes  received 57 bytes  4,940.00 bytes/sec
+total size is 18,204  speedup is 7.37</pre></div>
+<p>The slash after <code>website/</code> means "the contents of the folder". Without it, rsync creates <code>/var/www/html/website</code>.</p>
+</details>
+
+<h2 id="mistakes">Common mistakes</h2>
+<div class="table-wrap"><table>
+<tr><th>Mistake</th><th>What happens</th><th>Fix</th></tr>
+<tr><td>ssh inside <code>while read</code> without <code>-n</code></td><td>Only the first server is checked</td><td><code>ssh -n ...</code> or add <code>&lt; /dev/null</code></td></tr>
+<tr><td>Keys not set up</td><td>The script stops and asks for a password</td><td><code>ssh-copy-id user@host</code>; use <code>-o BatchMode=yes</code> in scripts</td></tr>
+<tr><td><code>Permission denied (publickey)</code></td><td>Login refused</td><td>Check the user name; run <code>ssh-copy-id</code> again; <code>chmod 700 ~/.ssh</code></td></tr>
+<tr><td>Double quotes around remote commands</td><td><code>$HOSTNAME</code> shows your own machine</td><td>Use single quotes or <code>&lt;&lt;'EOF'</code></td></tr>
+<tr><td>Spaces before the closing <code>EOF</code></td><td><code>warning: here-document delimited by end-of-file</code></td><td>Put <code>EOF</code> alone at the start of the line</td></tr>
+<tr><td><code>scp -p 2222</code> for a port</td><td>Wrong option (lowercase <code>-p</code> keeps file times)</td><td>scp uses capital <code>-P 2222</code></td></tr>
+<tr><td>Forgetting <code>chmod +x</code></td><td><code>Permission denied</code> running your script</td><td><code>chmod +x script.sh</code> or <code>bash script.sh</code></td></tr>
+<tr><td>Script saved with Windows line endings</td><td><code>$'\r': command not found</code> on the server</td><td><code>dos2unix script.sh</code></td></tr>
+</table></div>
+
+<h2 id="exercises">Practice exercises</h2>
+<details><summary>1. Print the free memory (<code>free -h</code>) of two servers, with a heading for each.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">for ip in 10.0.1.11 10.0.1.12; do
+  echo "== $ip =="
+  ssh deploy@"$ip" free -h
+done</code></pre></div>
+</details>
+
+<details><summary>2. Use a heredoc to create a folder <code>~/backup</code> on a server and list your home folder.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">ssh deploy@10.0.1.11 bash &lt;&lt;'EOF'
+mkdir -p ~/backup
+ls -l ~
+EOF</code></pre></div>
+</details>
+
+<details><summary>3. Change <code>dryrun.sh</code> so it prints only the web servers.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -v '^#' datasets/servers.txt | while read -r name ip user role; do
+  if [ "$role" = "web" ]; then
+    echo "ssh $user@$ip   # $name"
+  fi
+done</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>ssh deploy@10.0.1.11   # web01
+ssh deploy@10.0.1.12   # web02</pre></div>
+</details>
+
+<details><summary>4. Ask the user for a server address and a command, then run it and say whether it worked.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">read -p "Server (user@ip): " server
+read -p "Command to run: " cmd
+if ssh -o ConnectTimeout=5 "$server" "$cmd"; then
+  echo "Command worked"
+else
+  echo "Command failed (exit code $?)"
+fi</code></pre></div>
+</details>
+
+<h2 id="viva">Viva / exam questions</h2>
+<details><summary>What is SSH?</summary><p>Secure Shell: a protocol and program for logging in to and running commands on a remote machine over an encrypted connection. It uses port 22 by default.</p></details>
+<details><summary>Why use SSH keys instead of passwords in scripts?</summary><p>Scripts cannot type passwords. With a key pair, the server checks your private key against the public key you copied with <code>ssh-copy-id</code>, so no password is needed. Keys are also much harder to guess than passwords.</p></details>
+<details><summary>Which key do you copy to the server, and which do you keep secret?</summary><p>Copy the public key (<code>.pub</code>). Keep the private key secret on your own machine.</p></details>
+<details><summary>How do you run a single command on a remote machine?</summary><p><code>ssh user@host command</code>, for example <code>ssh deploy@10.0.1.11 uptime</code>.</p></details>
+<details><summary>How do you run a local script on a remote machine?</summary><p><code>ssh user@host 'bash -s' &lt; script.sh</code>. The script is sent over the connection and run there without being copied.</p></details>
+<details><summary>What is the difference between <code>&lt;&lt;EOF</code> and <code>&lt;&lt;'EOF'</code>?</summary><p>With <code>&lt;&lt;EOF</code>, your own shell fills in variables first. With <code>&lt;&lt;'EOF'</code>, the text is sent exactly as written and the server fills in variables.</p></details>
+<details><summary>Why does a <code>while read</code> loop with ssh stop after the first server?</summary><p>ssh reads input, so it swallows the remaining lines of the server list. <code>ssh -n</code> stops it from reading input.</p></details>
+<details><summary>What does exit code 255 from ssh mean?</summary><p>ssh itself failed, for example the server is down, the connection timed out or login was refused. Other codes come from the remote command.</p></details>
+<details><summary>What does <code>scp</code> do?</summary><p>It copies files between machines over SSH, like <code>cp</code>. A remote path is written as <code>user@host:/path</code>.</p></details>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="lab01-multi-function.html">Lab 01: Multi-function scripting</a></li>
+  <li><a href="lab06-access-logs.html">Lab 06: Access log analysis</a> (analyse the collected logs)</li>
+  <li><a href="lab12-service-health.html">Lab 12: Service health monitoring</a> (uses the same server list)</li>
+  <li><a href="../tools/awk.html">awk</a> and <a href="../tools/grep.html">grep</a></li>
+</ul>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

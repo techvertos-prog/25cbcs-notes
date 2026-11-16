@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 01 · Multi-function scripting</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="lab01">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Labs / Lab 01</div>
+<h1>Lab 01: Multi-function scripting</h1>
+<p class="lead">Split a script into small named functions. You will write a function, give it arguments, get a value back, check its exit code, and share functions between scripts with <code>source</code>.</p>
+<div class="meta-row">
+  <span class="pill">Concepts: functions, $1 $2 $#, echo vs return, $?, local, source</span>
+  <span class="pill grey">Difficulty: beginner</span>
+  <span class="pill grey">~45 min</span>
+</div>
+
+<h2 id="aim">Aim and objectives</h2>
+<p><strong>Aim:</strong> write a shell script made of several functions, each doing one small job.</p>
+<ul>
+  <li>Define a function and call it.</li>
+  <li>Pass arguments to a function (<code>$1</code>, <code>$2</code>, <code>$#</code>).</li>
+  <li>Get a value out of a function with <code>echo</code>, and a yes/no answer with <code>return</code>.</li>
+  <li>Check exit codes with <code>$?</code> and <code>if</code>.</li>
+  <li>Keep variables inside a function with <code>local</code>, and reuse functions with <code>source</code>.</li>
+</ul>
+
+<h2 id="prereq">Prerequisites</h2>
+<p>Any Linux terminal with Bash (it is installed by default). Open a terminal in the wiki folder so <code>datasets/</code> is found:</p>
+<div class="code"><div class="code-head">bash · setup</div><pre><code class="language-bash">cd CBCS-UNIT4-STUDY-GUIDE
+bash --version | head -1      # any version 3.2 or newer works for this lab</code></pre></div>
+
+<h2 id="start-here">Start here: simple scripts</h2>
+<p>Type each script into a file, then run it. Each one adds one new idea.</p>
+
+<h3 id="s1">Step 1: a function that prints hello</h3>
+<div class="code"><div class="code-head">bash · hello.sh</div><pre><code class="language-bash">#!/bin/bash
+# hello.sh: the smallest possible function
+
+say_hello() {            # define a function called say_hello
+  echo "Hello from a function!"
+}
+
+say_hello                # call it (just write its name)
+say_hello                # call it again: functions are reusable</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">chmod +x hello.sh     # make it executable (only needed once)
+./hello.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Hello from a function!
+Hello from a function!</pre></div>
+<ul>
+  <li><code>say_hello() { ... }</code> defines the function. Nothing runs yet.</li>
+  <li>Writing <code>say_hello</code> on its own line <em>calls</em> it, like any command.</li>
+  <li>The function must be defined <strong>above</strong> the line that calls it.</li>
+</ul>
+
+<h3 id="s2">Step 2: give the function an argument</h3>
+<div class="code"><div class="code-head">bash · greet.sh</div><pre><code class="language-bash">#!/bin/bash
+# greet.sh: a function that takes an argument
+
+greet() {
+  echo "Hello, $1!"      # $1 = first argument given to the function
+}
+
+greet "Aarav"            # $1 is Aarav
+greet "Priya Sharma"     # quotes keep the two words together as $1</code></pre></div>
+<div class="output"><div class="out-head">output · bash greet.sh</div><pre>Hello, Aarav!
+Hello, Priya Sharma!</pre></div>
+<ul>
+  <li>Words written after the function name are its arguments.</li>
+  <li>Inside the function, <code>$1</code> is the first argument, <code>$2</code> the second, and so on.</li>
+  <li>Quotes turn <code>"Priya Sharma"</code> into one argument instead of two.</li>
+</ul>
+
+<h3 id="s3">Step 3: return a value with echo</h3>
+<div class="code"><div class="code-head">bash · add.sh</div><pre><code class="language-bash">#!/bin/bash
+# add.sh: get a value OUT of a function with echo
+
+add() {
+  total=$(( $1 + $2 ))   # do the arithmetic
+  echo "$total"          # "return" the answer by printing it
+}
+
+result=$(add 7 35)       # $( ) captures what the function printed
+echo "7 + 35 = $result"</code></pre></div>
+<div class="output"><div class="out-head">output · bash add.sh</div><pre>7 + 35 = 42</pre></div>
+<ul>
+  <li>A Bash function cannot "return" a number or text the way Python does.</li>
+  <li>Instead it <strong>prints</strong> the answer with <code>echo</code>.</li>
+  <li><code>result=$(add 7 35)</code> runs the function and stores what it printed in <code>result</code>.</li>
+</ul>
+
+<h3 id="s4">Step 4: check the exit code</h3>
+<div class="code"><div class="code-head">bash · check.sh</div><pre><code class="language-bash">#!/bin/bash
+# check.sh: a function that answers yes/no with an exit code
+
+is_even() {
+  if [ $(( $1 % 2 )) -eq 0 ]; then
+    return 0             # 0 means success / true
+  else
+    return 1             # non-zero means failure / false
+  fi
+}
+
+is_even 4
+echo "is_even 4 -&gt; exit code $?"     # $? = exit code of the last command
+
+if is_even 7; then echo "7 is even"; else echo "7 is odd"; fi</code></pre></div>
+<div class="output"><div class="out-head">output · bash check.sh</div><pre>is_even 4 -&gt; exit code 0
+7 is odd</pre></div>
+<ul>
+  <li><code>return 0</code> means "yes / success", <code>return 1</code> means "no / failure".</li>
+  <li><code>$?</code> holds the exit code of the command that just finished.</li>
+  <li><code>if is_even 7; then</code> runs the function and checks its exit code directly.</li>
+</ul>
+
+<h3 id="s5">Step 5: local variables</h3>
+<div class="code"><div class="code-head">bash · scope.sh</div><pre><code class="language-bash">#!/bin/bash
+# scope.sh: local keeps a variable inside the function
+
+name="outside"
+
+change_global() { name="changed"; }        # no local: overwrites the script's variable
+use_local()     { local name="inside"; echo "in function: $name"; }
+
+use_local
+echo "after use_local:     $name"
+change_global
+echo "after change_global: $name"</code></pre></div>
+<div class="output"><div class="out-head">output · bash scope.sh</div><pre>in function: inside
+after use_local:     outside
+after change_global: changed</pre></div>
+<ul>
+  <li>In Bash, every variable is <strong>global</strong> by default, even when set inside a function.</li>
+  <li><code>local name=...</code> creates a separate variable that exists only inside that function.</li>
+  <li>Use <code>local</code> for every variable inside a function. That way two functions cannot overwrite each other's variables.</li>
+</ul>
+
+<h2 id="concepts">Concepts</h2>
+
+<h3 id="syntax">Function syntax</h3>
+<div class="code"><div class="code-head">bash · two ways to write a function</div><pre><code class="language-bash">greet() {            # common style
+  echo "Hi $1"
+}
+
+function greet {     # Bash keyword style, works the same
+  echo "Hi $1"
+}</code></pre></div>
+
+<h3 id="args">Special variables inside a function</h3>
+<div class="table-wrap"><table>
+<tr><th>Variable</th><th>Meaning</th></tr>
+<tr><td><code>$1</code>, <code>$2</code>, ...</td><td>First, second, ... argument</td></tr>
+<tr><td><code>$#</code></td><td>How many arguments were given</td></tr>
+<tr><td><code>"$@"</code></td><td>All arguments, each kept separate (use this to pass them on)</td></tr>
+<tr><td><code>$?</code></td><td>Exit code of the last command (0 = success)</td></tr>
+<tr><td><code>$0</code></td><td>Name of the <em>script</em> (not the function)</td></tr>
+</table></div>
+
+<h3 id="echo-vs-return">echo vs return</h3>
+<div class="table-wrap"><table>
+<tr><th></th><th><code>echo</code></th><th><code>return N</code></th></tr>
+<tr><td>Sends back</td><td>Any text or number</td><td>Only a number from 0 to 255</td></tr>
+<tr><td>Caller reads it with</td><td><code>x=$(func)</code></td><td><code>$?</code> or <code>if func; then</code></td></tr>
+<tr><td>Use it for</td><td>Results (sums, names, lists)</td><td>Yes/no answers (success or failure)</td></tr>
+</table></div>
+<div class="callout exam"><span class="ct">Exam hint</span><code>return</code> does not send data back. It only sets the exit code. To get a value from a function, <code>echo</code> it and capture it with <code>$( )</code>.</div>
+
+<h3 id="return-exit">return vs exit</h3>
+<ul>
+  <li><code>return</code> leaves the <strong>function</strong>. The script carries on.</li>
+  <li><code>exit</code> stops the <strong>whole script</strong>, even if it is called inside a function.</li>
+</ul>
+
+<h3 id="source">Sharing functions with source</h3>
+<p>Put functions you use often in one file, for example <code>lib.sh</code>. Any script can load them with <code>source ./lib.sh</code> (or the short form <code>. ./lib.sh</code>). <code>source</code> runs the file inside the current script, so its functions become available. Use case 3 shows this.</p>
+
+<h2 id="datasets">Datasets used</h2>
+<p>Use cases 2 and 3 read the employee CSV: a header line, then 25 employees. Columns: <code>id,name,department,city,salary,join_date</code>.</p>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/employees.csv</span></div><pre><code>id,name,department,city,salary,join_date
+101,Aarav Kapoor,Engineering,Delhi,110000,2023-08-11
+102,Priya Sharma,Engineering,Delhi,135000,2023-02-27
+103,Rohan Mehta,Engineering,Mumbai,84000,2025-11-22
+104,Ananya Iyer,Engineering,Pune,131000,2025-05-03
+105,Vikram Verma,Sales,Hyderabad,93000,2022-10-20
+106,Sneha Joshi,Sales,Mumbai,73000,2023-05-28
+107,Arjun Nair,Finance,Hyderabad,94000,2016-10-24
+108,Kavya Gupta,Engineering,Chennai,93000,2020-11-03
+109,Rahul Gupta,Engineering,Pune,115000,2017-03-01
+110,Isha Das,Finance,Chennai,93000,2023-05-02
+111,Karan Nair,Sales,Chennai,63000,2023-02-22
+112,Meera Nair,Sales,Chennai,82000,2019-07-04
+113,Aditya Singh,Sales,Pune,62000,2018-02-02
+114,Pooja Nair,Engineering,Hyderabad,127000,2025-05-15
+115,Nikhil Das,Engineering,Chennai,99000,2022-05-17
+116,Riya Das,Support,Bengaluru,65000,2016-07-24
+117,Sanjay Kapoor,HR,Delhi,38000,2017-04-22
+118,Divya Singh,Engineering,Delhi,116000,2016-03-16
+119,Manish Nair,Support,Pune,64000,2022-11-27
+120,Neha Verma,Support,Mumbai,49000,2022-06-11
+121,Yash Iyer,Engineering,Delhi,106000,2023-05-22
+122,Tanvi Joshi,Finance,Bengaluru,84000,2017-06-09
+123,Harsh Verma,HR,Mumbai,92000,2024-01-22
+124,Simran Mehta,Support,Bengaluru,39000,2024-06-20
+125,Kunal Singh,Support,Mumbai,75000,2016-04-09</code></pre></div>
+
+<h2 id="use-cases">Use cases</h2>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 1</span> System information toolkit</h3>
+<p><strong>What and why:</strong> a script that prints basic information about the computer. Each piece of information has its own function, so you can reorder, remove or reuse them easily.</p>
+<div class="code"><div class="code-head">bash · sysinfo.sh</div><pre><code class="language-bash">#!/bin/bash
+# sysinfo.sh: a small system-information toolkit, one function per job
+
+line() {
+  echo "------------------------------"
+}
+
+show_user() {
+  echo "User     : $(whoami)"
+  echo "Hostname : $(hostname)"
+}
+
+show_time() {
+  echo "Date     : $(date '+%d-%m-%Y %H:%M')"
+  echo "Uptime   : $(uptime -p)"
+}
+
+show_disk() {
+  echo "Root disk usage:"
+  df -h / | tail -n 1      # tail skips the header line
+}
+
+# main part: call the functions in the order we want
+line; show_user; line; show_time; line; show_disk; line</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">chmod +x sysinfo.sh
+./sysinfo.sh</code></pre></div>
+<div class="output"><div class="out-head">sample output (your values will differ)</div><pre>------------------------------
+User     : student
+Hostname : lab-pc
+------------------------------
+Date     : 17-11-2026 10:42
+Uptime   : up 2 hours, 14 minutes
+------------------------------
+Root disk usage:
+/dev/sda2        49G   30G   17G  64% /
+------------------------------</pre></div>
+<p><strong>How it works:</strong></p>
+<ul>
+  <li><code>line</code> is a tiny helper used four times. Change the dashes once and every separator changes.</li>
+  <li><code>$(whoami)</code> inside <code>echo</code> runs a command and puts its output into the text.</li>
+  <li>The last line is the "main" part: it calls the functions in order. Several commands on one line are separated by <code>;</code>.</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 2</span> Employee report with simple commands</h3>
+<p><strong>What and why:</strong> one script that answers three questions about <code>employees.csv</code>. The first argument (<code>$1</code>) chooses which function runs, using <code>case</code>.</p>
+<div class="code"><div class="code-head">bash · emp-report.sh</div><pre><code class="language-bash">#!/bin/bash
+# emp-report.sh: report tool for datasets/employees.csv
+# usage: ./emp-report.sh count | dept NAME | top
+
+file="datasets/employees.csv"
+
+count_staff() {
+  echo "Total employees: $(tail -n +2 "$file" | wc -l)"
+}
+
+list_dept() {
+  echo "Employees in $1:"
+  grep ",$1," "$file" | cut -d, -f2,5
+}
+
+top_earners() {
+  echo "Top 3 salaries:"
+  tail -n +2 "$file" | sort -t, -k5 -nr | head -n 3 | cut -d, -f2,5
+}
+
+case "$1" in
+  count) count_staff ;;
+  dept)  list_dept "$2" ;;
+  top)   top_earners ;;
+  *)     echo "usage: $0 count | dept NAME | top"; exit 1 ;;
+esac</code></pre></div>
+<p><strong>Run it</strong> from the wiki folder:</p>
+<div class="output"><div class="out-head">output</div><pre>$ ./emp-report.sh count
+Total employees: 25
+$ ./emp-report.sh dept Finance
+Employees in Finance:
+Arjun Nair,94000
+Isha Das,93000
+Tanvi Joshi,84000
+$ ./emp-report.sh top
+Top 3 salaries:
+Priya Sharma,135000
+Ananya Iyer,131000
+Pooja Nair,127000
+$ ./emp-report.sh
+usage: ./emp-report.sh count | dept NAME | top</pre></div>
+<p><strong>How it works:</strong></p>
+<ul>
+  <li><code>tail -n +2</code> skips the header line, so only employees are counted.</li>
+  <li><code>list_dept "$2"</code> passes the script's second argument (<code>Finance</code>) to the function, where it becomes <code>$1</code>.</li>
+  <li><code>grep ",$1,"</code> matches the department between two commas, and <code>cut -d, -f2,5</code> keeps the name and salary columns.</li>
+  <li><code>sort -t, -k5 -nr</code> sorts by column 5 (salary), numerically (<code>n</code>), biggest first (<code>r</code>).</li>
+  <li>The <code>*)</code> branch catches anything else, prints usage and exits with code 1.</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 3</span> A shared lib.sh loaded with source</h3>
+<p><strong>What and why:</strong> many scripts need the same helpers: print a message, stop with an error, check that input is a number. We write them once in <code>lib.sh</code> and load them into another script with <code>source</code>.</p>
+<div class="code"><div class="code-head">bash · lib.sh</div><pre><code class="language-bash"># lib.sh: shared helper functions (no need to run it, we "source" it)
+
+log() {
+  echo "[INFO] $1"
+}
+
+die() {
+  echo "[ERROR] $1"
+  exit 1                       # stop the whole script
+}
+
+is_number() {
+  case "$1" in
+    ''|*[!0-9]*) return 1 ;;   # empty, or has a non-digit: not a number
+    *) return 0 ;;
+  esac
+}</code></pre></div>
+<div class="code"><div class="code-head">bash · salary-check.sh</div><pre><code class="language-bash">#!/bin/bash
+# salary-check.sh: list employees earning more than a given amount
+# usage: ./salary-check.sh AMOUNT
+
+source ./lib.sh                 # load log, die and is_number from lib.sh
+
+file="datasets/employees.csv"
+amount="$1"
+
+[ -f "$file" ] || die "file $file not found"
+is_number "$amount" || die "please give a number, e.g. ./salary-check.sh 100000"
+
+log "Employees earning more than $amount:"
+awk -F, -v min="$amount" 'NR &gt; 1 &amp;&amp; $5 &gt; min { print $2, $5 }' "$file"
+log "done"</code></pre></div>
+<p><strong>Run it</strong> with <code>lib.sh</code> and <code>salary-check.sh</code> both saved in the wiki folder:</p>
+<div class="output"><div class="out-head">output</div><pre>$ ./salary-check.sh 120000; echo "exit code: $?"
+[INFO] Employees earning more than 120000:
+Priya Sharma 135000
+Ananya Iyer 131000
+Pooja Nair 127000
+[INFO] done
+exit code: 0
+$ ./salary-check.sh abc; echo "exit code: $?"
+[ERROR] please give a number, e.g. ./salary-check.sh 100000
+exit code: 1
+$ ./salary-check.sh; echo "exit code: $?"
+[ERROR] please give a number, e.g. ./salary-check.sh 100000
+exit code: 1</pre></div>
+<p><strong>How it works:</strong></p>
+<ul>
+  <li><code>source ./lib.sh</code> reads <code>lib.sh</code> into this script, so <code>log</code>, <code>die</code> and <code>is_number</code> can be used here.</li>
+  <li><code>[ -f "$file" ] || die "..."</code> means "if the file does not exist, call die". <code>||</code> runs the right side only when the left side fails.</li>
+  <li><code>is_number</code> uses <code>case</code>: an empty value, or one containing any non-digit, returns 1 (not a number).</li>
+  <li><code>die</code> calls <code>exit 1</code>, which stops the whole script. That is why "done" is not printed for bad input.</li>
+  <li><code>awk -v min="$amount"</code> passes the shell variable into awk. <code>NR &gt; 1</code> skips the header.</li>
+</ul>
+</div>
+
+<details><summary>Optional: going further (reading options with getopts)</summary>
+<p>Real commands accept options like <code>-n NAME</code>. The <code>getopts</code> builtin reads them one at a time in a <code>while</code> loop.</p>
+<div class="code"><div class="code-head">bash · opts.sh</div><pre><code class="language-bash">#!/bin/bash
+# opts.sh: read options like -n NAME and -h with getopts
+name="world"
+while getopts "n:h" opt; do          # n: means -n needs a value
+  case "$opt" in
+    n) name="$OPTARG" ;;             # the value after -n
+    h) echo "usage: $0 [-n NAME]"; exit 0 ;;
+    *) echo "unknown option"; exit 1 ;;
+  esac
+done
+echo "Hello, $name"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>$ ./opts.sh
+Hello, world
+$ ./opts.sh -n Priya
+Hello, Priya
+$ ./opts.sh -h
+usage: ./opts.sh [-n NAME]
+$ ./opts.sh -x
+./opts.sh: illegal option -- x
+unknown option</pre></div>
+<p>In <code>"n:h"</code>, the colon after <code>n</code> means <code>-n</code> needs a value, which arrives in <code>$OPTARG</code>. An unknown option such as <code>-x</code> makes Bash print its own error, and <code>opt</code> becomes <code>?</code>, so the <code>*)</code> branch runs.</p>
+</details>
+
+<h2 id="mistakes">Common mistakes</h2>
+<div class="table-wrap"><table>
+<tr><th>Mistake</th><th>What happens</th><th>Fix</th></tr>
+<tr><td>Calling a function before defining it</td><td><code>command not found</code></td><td>Put all functions at the top, calls at the bottom</td></tr>
+<tr><td>Writing <code>say_hello()</code> to call it</td><td>Bash thinks you are defining a new function</td><td>Call it without brackets: <code>say_hello</code></td></tr>
+<tr><td>Using <code>return 300</code> or <code>return "text"</code></td><td>Wrong number, or an error</td><td><code>echo</code> the value and capture it with <code>$( )</code></td></tr>
+<tr><td>Missing spaces: <code>[$1 -eq 0]</code></td><td><code>[4: command not found</code> (when $1 is 4)</td><td>Spaces inside the brackets: <code>[ "$1" -eq 0 ]</code></td></tr>
+<tr><td>Using <code>=</code> for numbers, <code>-eq</code> for text</td><td>Wrong results or errors</td><td>Numbers: <code>-eq -ne -lt -gt</code>. Text: <code>=</code> and <code>!=</code></td></tr>
+<tr><td>Forgetting <code>chmod +x</code></td><td><code>Permission denied</code></td><td><code>chmod +x file.sh</code>, or run <code>bash file.sh</code></td></tr>
+<tr><td>Forgetting <code>local</code></td><td>A variable changes "by itself"</td><td>Declare function variables with <code>local</code></td></tr>
+<tr><td>Running <code>./lib.sh</code> instead of sourcing it</td><td>Functions are not available</td><td><code>source ./lib.sh</code> inside your script</td></tr>
+<tr><td>File saved on Windows (CRLF)</td><td><code>$'\r': command not found</code></td><td><code>sed -i 's/\r$//' file.sh</code> or <code>dos2unix file.sh</code></td></tr>
+</table></div>
+
+<h2 id="exercises">Practice exercises</h2>
+<details><summary>1. Write a function <code>square</code> that prints the square of a number.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">square() {
+  echo $(( $1 * $1 ))
+}
+echo "5 squared is $(square 5)"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>5 squared is 25</pre></div>
+</details>
+
+<details><summary>2. Write a function <code>bigger</code> that prints the bigger of two numbers.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">bigger() {
+  if [ "$1" -gt "$2" ]; then
+    echo "$1"
+  else
+    echo "$2"
+  fi
+}
+echo "bigger of 12 and 40: $(bigger 12 40)"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>bigger of 12 and 40: 40</pre></div>
+</details>
+
+<details><summary>3. Write <code>count_lines FILE</code> that prints how many lines a file has. Try it on <code>datasets/employees.csv</code>.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">count_lines() {
+  wc -l &lt; "$1"
+}
+echo "employees.csv has $(count_lines datasets/employees.csv) lines"</code></pre></div>
+<div class="output"><div class="out-head">output (Linux)</div><pre>employees.csv has 26 lines</pre></div>
+</details>
+
+<details><summary>4. Write <code>is_adult AGE</code> that returns 0 if age is 18 or more, and use it with <code>if</code>.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">is_adult() {
+  [ "$1" -ge 18 ]          # the test's own exit code becomes the function's
+}
+read -p "Enter your age: " age
+if is_adult "$age"; then echo "You can vote"; else echo "Too young to vote"; fi</code></pre></div>
+</details>
+
+<details><summary>5. Add a <code>cities</code> command to <code>emp-report.sh</code> that counts employees per city.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">count_cities() {
+  tail -n +2 "$file" | cut -d, -f4 | sort | uniq -c
+}
+# and inside case:   cities) count_cities ;;</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>      3 Bengaluru
+      5 Chennai
+      5 Delhi
+      3 Hyderabad
+      5 Mumbai
+      4 Pune</pre></div>
+</details>
+
+<h2 id="viva">Viva / exam questions</h2>
+<details><summary>What is a function in a shell script?</summary><p>A named group of commands. You define it once and call it by name as often as you need, like a small command of your own.</p></details>
+<details><summary>How do you pass arguments to a function?</summary><p>Write them after the function name: <code>greet Aarav</code>. Inside the function they are <code>$1</code>, <code>$2</code>, and so on. <code>$#</code> gives how many there are.</p></details>
+<details><summary>How do you get a value back from a function?</summary><p>The function prints it with <code>echo</code>, and the caller captures it: <code>result=$(add 3 4)</code>.</p></details>
+<details><summary>What does <code>return</code> do in a function?</summary><p>It ends the function and sets its exit code (0 to 255). 0 means success. It does not send back text.</p></details>
+<details><summary>What is <code>$?</code>?</summary><p>The exit code of the last command or function that ran. 0 means success, anything else means failure.</p></details>
+<details><summary>Difference between <code>return</code> and <code>exit</code>?</summary><p><code>return</code> leaves only the function. <code>exit</code> stops the whole script.</p></details>
+<details><summary>Why use <code>local</code>?</summary><p>Variables are global by default. <code>local</code> keeps a variable inside its function so it cannot overwrite a variable with the same name elsewhere.</p></details>
+<details><summary>What does <code>source lib.sh</code> do?</summary><p>It runs <code>lib.sh</code> inside the current shell, so the functions and variables defined in it become available to the current script.</p></details>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="../tools/cut-tr.html">cut, tr, wc, head, tail</a> (used in the report functions)</li>
+  <li><a href="../tools/sort-uniq.html">sort &amp; uniq</a></li>
+  <li><a href="../tools/awk.html">awk</a> (used in salary-check.sh)</li>
+  <li><a href="lab02-menus-colors.html">Lab 02: Interactive menus &amp; colors</a> builds menus from functions</li>
+</ul>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

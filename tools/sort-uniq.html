@@ -1,0 +1,755 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sort &amp; uniq · CBCS Unit 4 Shell Wiki</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="sort-uniq">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Command tutorials / sort &amp; uniq</div>
+<h1>sort &amp; uniq: ordering and counting</h1>
+<p class="lead"><code>sort</code> puts lines in order by any column, as text, numbers, human sizes, versions or months. <code>uniq</code> collapses or counts <em>adjacent</em> repeated lines. Together they make the most used idiom in log analysis: <code>sort | uniq -c | sort -rn</code>. <code>comm</code> rounds this out by comparing two sorted lists.</p>
+<div class="meta-row">
+  <span class="pill">Commands: sort, uniq, comm</span><span class="pill grey">GNU coreutils</span><span class="pill grey">~40 min</span><span class="pill grey">Used in Lab 06, 07, 11, 12</span>
+</div>
+
+<h2 id="syntax">Syntax and mental model</h2>
+<div class="code"><div class="code-head">bash · syntax</div><pre><code class="language-bash">sort [options] [file...]          # reads stdin if no file
+uniq [options] [input [output]]   # works on ADJACENT lines only
+comm [-123] sorted_file1 sorted_file2</code></pre></div>
+
+<p><strong>How sort thinks.</strong> Each line is a record. Without options the whole line is compared character by character (using the current locale's collation). With <code>-k</code> you choose a <em>key</em>: a slice of the line from a start field to an end field. Fields are separated by runs of blanks by default, or by a single character given with <code>-t</code>. If two keys compare equal, sort falls back to comparing the whole line (the "last-resort comparison") unless you give <code>-s</code> or <code>-u</code>.</p>
+<p><strong>How uniq thinks.</strong> It reads the input once and compares each line only with the line before it. So <code>a a b a</code> becomes <code>a b a</code>, not <code>a b</code>. That is why you almost always <code>sort</code> first.</p>
+<p><strong>How comm thinks.</strong> It walks two <em>sorted</em> files in parallel and prints three columns: lines only in file 1, lines only in file 2, lines in both. <code>-1</code>, <code>-2</code>, <code>-3</code> hide those columns.</p>
+
+<div class="callout exam"><span class="ct">Viva</span>"Why does <code>uniq</code> need sorted input?" Because it only compares neighbouring lines; sorting brings all identical lines next to each other so each group is one run.</div>
+
+<h2 id="options">Options cheat table</h2>
+<h3>sort</h3>
+<div class="table-wrap"><table>
+<tr><th>Option</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>-n</code></td><td>Numeric compare (leading number on the key)</td><td><code>sort -n</code></td></tr>
+<tr><td><code>-r</code></td><td>Reverse the result</td><td><code>sort -rn</code></td></tr>
+<tr><td><code>-k F1[,F2]</code></td><td>Key from field F1 to F2. Without <code>,F2</code> the key runs to end of line</td><td><code>-k2,2</code>, <code>-k5,5nr</code></td></tr>
+<tr><td><code>-k F.C</code></td><td>Start at character C of field F</td><td><code>-k6.6,6.7</code></td></tr>
+<tr><td><code>-t C</code></td><td>Field separator is the single character C</td><td><code>-t,</code> <code>-t:</code></td></tr>
+<tr><td><code>-u</code></td><td>Output only the first line of each run of equal keys</td><td><code>sort -u</code></td></tr>
+<tr><td><code>-h</code></td><td>Human sizes: 2K &lt; 1M &lt; 1G &lt; 1T</td><td><code>du -sh * | sort -h</code></td></tr>
+<tr><td><code>-V</code></td><td>Version order: 1.2 &lt; 1.10</td><td><code>sort -V</code></td></tr>
+<tr><td><code>-M</code></td><td>Month names: Jan &lt; Feb &lt; … &lt; Dec</td><td><code>sort -M</code></td></tr>
+<tr><td><code>-f</code></td><td>Fold case (ignore upper/lower)</td><td><code>sort -f</code></td></tr>
+<tr><td><code>-b</code></td><td>Ignore leading blanks in keys</td><td><code>sort -b -k2</code></td></tr>
+<tr><td><code>-s</code></td><td>Stable: keep input order for equal keys</td><td><code>sort -s -k3,3</code></td></tr>
+<tr><td><code>-c</code> / <code>-C</code></td><td>Check if sorted (report first disorder / silent), exit 1 if not</td><td><code>sort -c file</code></td></tr>
+<tr><td><code>-o FILE</code></td><td>Write output to FILE (safe even if FILE is the input)</td><td><code>sort -o f f</code></td></tr>
+<tr><td><code>-R</code></td><td>Random shuffle (GNU)</td><td><code>sort -R</code></td></tr>
+<tr><td><code>-z</code></td><td>Lines end in NUL, not newline</td><td><code>find -print0 | sort -z</code></td></tr>
+</table></div>
+<h3>uniq and comm</h3>
+<div class="table-wrap"><table>
+<tr><th>Option</th><th>Meaning</th></tr>
+<tr><td><code>uniq -c</code></td><td>Prefix each line with the number of times it occurred</td></tr>
+<tr><td><code>uniq -d</code></td><td>Print only lines that are repeated (one copy each)</td></tr>
+<tr><td><code>uniq -u</code></td><td>Print only lines that are NOT repeated</td></tr>
+<tr><td><code>uniq -i</code></td><td>Ignore case when comparing</td></tr>
+<tr><td><code>uniq -f N</code></td><td>Skip the first N fields before comparing</td></tr>
+<tr><td><code>uniq -s N</code></td><td>Skip the first N characters before comparing</td></tr>
+<tr><td><code>uniq -w N</code></td><td>Compare only the first N characters (GNU only)</td></tr>
+<tr><td><code>comm -12 a b</code></td><td>Lines in both files (intersection)</td></tr>
+<tr><td><code>comm -23 a b</code></td><td>Lines only in a</td></tr>
+<tr><td><code>comm -13 a b</code></td><td>Lines only in b</td></tr>
+</table></div>
+
+<h2 id="datasets">Datasets used</h2>
+<p><code>tags.txt</code> is one tag per line with duplicates, perfect for counting.</p>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/tags.txt</span></div><pre><code>postgres
+linux
+docker
+nginx
+bash
+docker
+git
+mysql
+nginx
+nginx
+bash
+python
+bash
+redis
+bash
+mysql
+docker
+docker
+linux
+nginx
+bash
+linux
+python
+linux
+docker
+linux
+docker
+linux
+docker
+bash
+mysql
+mysql
+mysql
+git
+bash
+docker
+nginx
+nginx
+docker
+linux
+redis
+nginx
+nginx
+git
+python
+bash
+docker
+linux
+git
+docker</code></pre></div>
+<p><code>employees.csv</code> is comma-separated with a header: <code>id,name,department,city,salary,join_date</code>.</p>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/employees.csv</span></div><pre><code>id,name,department,city,salary,join_date
+101,Aarav Kapoor,Engineering,Delhi,110000,2023-08-11
+102,Priya Sharma,Engineering,Delhi,135000,2023-02-27
+103,Rohan Mehta,Engineering,Mumbai,84000,2025-11-22
+104,Ananya Iyer,Engineering,Pune,131000,2025-05-03
+105,Vikram Verma,Sales,Hyderabad,93000,2022-10-20
+106,Sneha Joshi,Sales,Mumbai,73000,2023-05-28
+107,Arjun Nair,Finance,Hyderabad,94000,2016-10-24
+108,Kavya Gupta,Engineering,Chennai,93000,2020-11-03
+109,Rahul Gupta,Engineering,Pune,115000,2017-03-01
+110,Isha Das,Finance,Chennai,93000,2023-05-02
+111,Karan Nair,Sales,Chennai,63000,2023-02-22
+112,Meera Nair,Sales,Chennai,82000,2019-07-04
+113,Aditya Singh,Sales,Pune,62000,2018-02-02
+114,Pooja Nair,Engineering,Hyderabad,127000,2025-05-15
+115,Nikhil Das,Engineering,Chennai,99000,2022-05-17
+116,Riya Das,Support,Bengaluru,65000,2016-07-24
+117,Sanjay Kapoor,HR,Delhi,38000,2017-04-22
+118,Divya Singh,Engineering,Delhi,116000,2016-03-16
+119,Manish Nair,Support,Pune,64000,2022-11-27
+120,Neha Verma,Support,Mumbai,49000,2022-06-11
+121,Yash Iyer,Engineering,Delhi,106000,2023-05-22
+122,Tanvi Joshi,Finance,Bengaluru,84000,2017-06-09
+123,Harsh Verma,HR,Mumbai,92000,2024-01-22
+124,Simran Mehta,Support,Bengaluru,39000,2024-06-20
+125,Kunal Singh,Support,Mumbai,75000,2016-04-09</code></pre></div>
+<p><code>df.txt</code> is a saved <code>df -h</code> snapshot with human-readable sizes.</p>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/df.txt</span></div><pre><code>Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1        50G   41G  6.5G  87% /
+/dev/sda2       200G  120G   70G  64% /var
+/dev/sdb1       500G  478G   22G  96% /backup
+tmpfs           3.9G  1.2M  3.9G   1% /run
+/dev/sdc1       100G   12G   83G  13% /home
+/dev/nvme0n1p1  1.0T  910G   90G  92% /data</code></pre></div>
+<p><code>access.log</code> is an Apache/Nginx combined log: <code>$1</code> IP, <code>$4</code> time, <code>$7</code> URL, <code>$9</code> status, <code>$10</code> bytes.</p>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/access.log</span></div><pre><code>192.168.1.10 - - [16/Nov/2026:08:11:14 +0530] "GET /api/v1/users HTTP/1.1" 200 16949 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:08:24:08 +0530] "GET /api/v1/users HTTP/1.1" 200 36641 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:08:25:00 +0530] "GET /index.php HTTP/1.1" 200 34018 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:08:34:54 +0530] "GET /js/app.js HTTP/1.1" 200 36613 "-" "curl/8.4.0"
+203.0.113.7 - - [16/Nov/2026:08:42:53 +0530] "GET /old-page HTTP/1.1" 301 0 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+10.0.0.5 - - [16/Nov/2026:08:55:07 +0530] "GET /about.html HTTP/1.1" 200 15010 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+10.0.0.5 - - [16/Nov/2026:08:57:01 +0530] "GET /blog/post-1 HTTP/1.1" 200 23441 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:09:11:07 +0530] "POST /wp-login.php HTTP/1.1" 200 25707 "https://www.google.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+203.0.113.7 - - [16/Nov/2026:09:25:36 +0530] "GET /.env HTTP/1.1" 404 365 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:09:37:57 +0530] "GET /js/app.js HTTP/1.1" 200 51563 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:09:52:52 +0530] "GET / HTTP/1.1" 200 19117 "https://www.google.com/" "curl/8.4.0"
+10.0.0.5 - - [16/Nov/2026:09:55:58 +0530] "GET /index.php HTTP/1.1" 200 18396 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:10:06:41 +0530] "GET /images/logo.png HTTP/1.1" 200 16943 "https://example.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.15 - - [16/Nov/2026:10:13:29 +0530] "GET /api/v1/report HTTP/1.1" 500 532 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:10:25:30 +0530] "POST /api/v1/orders HTTP/1.1" 200 3003 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.10 - - [16/Nov/2026:10:30:24 +0530] "GET /admin HTTP/1.1" 403 470 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:10:34:21 +0530] "GET /blog/post-2 HTTP/1.1" 200 43029 "-" "curl/8.4.0"
+192.168.1.10 - - [16/Nov/2026:10:39:12 +0530] "GET /api/v1/users HTTP/1.1" 200 36222 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+10.0.0.5 - - [16/Nov/2026:10:49:29 +0530] "GET /index.php HTTP/1.1" 200 9965 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+203.0.113.99 - - [16/Nov/2026:10:51:22 +0530] "GET /missing.html HTTP/1.1" 404 258 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:11:05:13 +0530] "GET /css/style.css HTTP/1.1" 200 26116 "https://example.com/" "curl/8.4.0"
+192.168.1.15 - - [16/Nov/2026:11:14:34 +0530] "GET /images/logo.png HTTP/1.1" 200 1652 "-" "python-requests/2.31.0"
+172.16.4.8 - - [16/Nov/2026:11:26:32 +0530] "GET /api/v1/users HTTP/1.1" 200 51270 "https://www.google.com/" "python-requests/2.31.0"
+192.168.1.15 - - [16/Nov/2026:11:28:46 +0530] "GET /index.php HTTP/1.1" 200 1112 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.99 - - [16/Nov/2026:11:37:38 +0530] "GET /images/logo.png HTTP/1.1" 200 7873 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:11:52:19 +0530] "GET /css/style.css HTTP/1.1" 200 10916 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+185.220.101.3 - - [16/Nov/2026:12:01:51 +0530] "POST /wp-login.php HTTP/1.1" 200 32921 "-" "sqlmap/1.7.11#stable"
+185.220.101.3 - - [16/Nov/2026:12:04:05 +0530] "GET /admin HTTP/1.1" 403 302 "-" "sqlmap/1.7.11#stable"
+172.16.4.8 - - [16/Nov/2026:12:08:31 +0530] "GET /api/v1/report HTTP/1.1" 500 223 "https://example.com/" "python-requests/2.31.0"
+192.168.1.10 - - [16/Nov/2026:12:22:46 +0530] "GET /api/v1/users HTTP/1.1" 200 51089 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+10.0.0.5 - - [16/Nov/2026:12:34:21 +0530] "GET /images/logo.png HTTP/1.1" 200 18270 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+185.220.101.3 - - [16/Nov/2026:12:38:17 +0530] "GET /.env HTTP/1.1" 404 545 "https://www.google.com/" "sqlmap/1.7.11#stable"
+185.220.101.3 - - [16/Nov/2026:12:45:25 +0530] "GET /xmlrpc.php HTTP/1.1" 403 411 "-" "sqlmap/1.7.11#stable"
+192.168.1.15 - - [16/Nov/2026:12:49:58 +0530] "GET /blog/post-1 HTTP/1.1" 200 39455 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:13:00:20 +0530] "GET / HTTP/1.1" 200 42259 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+172.16.4.8 - - [16/Nov/2026:13:01:49 +0530] "GET /missing.html HTTP/1.1" 404 216 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+203.0.113.7 - - [16/Nov/2026:13:06:54 +0530] "GET /index.php HTTP/1.1" 200 9571 "https://example.com/" "python-requests/2.31.0"
+203.0.113.99 - - [16/Nov/2026:13:11:22 +0530] "POST /api/v1/orders HTTP/1.1" 200 7252 "https://example.com/" "python-requests/2.31.0"
+10.0.0.5 - - [16/Nov/2026:13:17:44 +0530] "GET /wp-admin/ HTTP/1.1" 302 0 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:13:29:33 +0530] "GET /js/app.js HTTP/1.1" 200 4872 "https://www.google.com/" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:13:43:32 +0530] "GET /about.html HTTP/1.1" 200 13365 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:13:46:15 +0530] "GET /about.html HTTP/1.1" 200 17271 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+172.16.4.8 - - [16/Nov/2026:14:00:22 +0530] "GET /images/logo.png HTTP/1.1" 200 4215 "-" "python-requests/2.31.0"
+185.220.101.3 - - [16/Nov/2026:14:02:17 +0530] "GET /.env HTTP/1.1" 404 388 "https://example.com/" "sqlmap/1.7.11#stable"
+192.168.1.15 - - [16/Nov/2026:14:10:49 +0530] "GET /blog/post-2 HTTP/1.1" 200 4742 "https://example.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+185.220.101.3 - - [16/Nov/2026:14:11:11 +0530] "POST /xmlrpc.php HTTP/1.1" 403 536 "https://example.com/" "sqlmap/1.7.11#stable"
+192.168.1.10 - - [16/Nov/2026:14:14:09 +0530] "GET /index.php HTTP/1.1" 200 4732 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:14:27:14 +0530] "GET / HTTP/1.1" 200 32146 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+185.220.101.3 - - [16/Nov/2026:14:28:32 +0530] "GET /.env HTTP/1.1" 404 215 "-" "sqlmap/1.7.11#stable"
+172.16.4.8 - - [16/Nov/2026:14:40:23 +0530] "GET /blog/post-2 HTTP/1.1" 200 38234 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:14:51:17 +0530] "GET /js/app.js HTTP/1.1" 200 37942 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:14:56:04 +0530] "GET /api/v1/users HTTP/1.1" 200 16542 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+203.0.113.7 - - [16/Nov/2026:14:58:38 +0530] "GET /contact.html HTTP/1.1" 200 21620 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+203.0.113.7 - - [16/Nov/2026:15:06:47 +0530] "GET /css/style.css HTTP/1.1" 200 7452 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.15 - - [16/Nov/2026:15:15:45 +0530] "GET /api/v1/report HTTP/1.1" 500 215 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:15:20:56 +0530] "GET /missing.html HTTP/1.1" 404 540 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+45.33.32.156 - - [16/Nov/2026:15:32:39 +0530] "GET /contact.html HTTP/1.1" 200 44375 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:15:37:29 +0530] "GET / HTTP/1.1" 200 37156 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+203.0.113.7 - - [16/Nov/2026:15:42:37 +0530] "GET /api/v1/users HTTP/1.1" 200 14242 "https://www.google.com/" "python-requests/2.31.0"
+10.0.0.23 - - [16/Nov/2026:15:51:34 +0530] "GET /admin HTTP/1.1" 403 206 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.15 - - [16/Nov/2026:16:06:03 +0530] "GET / HTTP/1.1" 200 51436 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+198.51.100.42 - - [16/Nov/2026:16:09:08 +0530] "GET /images/logo.png HTTP/1.1" 200 28928 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:16:11:22 +0530] "GET /.env HTTP/1.1" 404 256 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:16:25:56 +0530] "GET /images/logo.png HTTP/1.1" 200 29066 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+10.0.0.5 - - [16/Nov/2026:16:31:31 +0530] "GET /api/v1/report HTTP/1.1" 500 200 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:16:43:29 +0530] "GET / HTTP/1.1" 200 37592 "-" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:16:47:51 +0530] "GET /xmlrpc.php HTTP/1.1" 403 391 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+185.220.101.3 - - [16/Nov/2026:17:00:45 +0530] "GET /xmlrpc.php HTTP/1.1" 403 556 "-" "sqlmap/1.7.11#stable"
+192.168.1.10 - - [16/Nov/2026:17:05:38 +0530] "GET /api/v1/users HTTP/1.1" 200 25970 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:17:09:45 +0530] "GET /admin HTTP/1.1" 403 359 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.10 - - [16/Nov/2026:17:13:53 +0530] "GET /index.php HTTP/1.1" 200 22412 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:17:27:24 +0530] "GET /js/app.js HTTP/1.1" 200 27093 "https://www.google.com/" "python-requests/2.31.0"
+192.168.1.10 - - [16/Nov/2026:17:28:12 +0530] "POST /xmlrpc.php HTTP/1.1" 403 315 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+10.0.0.5 - - [16/Nov/2026:17:38:42 +0530] "GET /api/v1/users HTTP/1.1" 200 21457 "-" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:17:45:36 +0530] "GET /index.php HTTP/1.1" 200 3808 "https://example.com/" "python-requests/2.31.0"
+10.0.0.23 - - [16/Nov/2026:17:45:57 +0530] "POST /api/v1/orders HTTP/1.1" 200 49524 "-" "python-requests/2.31.0"
+10.0.0.5 - - [16/Nov/2026:17:52:29 +0530] "GET /api/v1/report HTTP/1.1" 500 349 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+45.33.32.156 - - [16/Nov/2026:18:04:08 +0530] "GET /api/v1/users HTTP/1.1" 200 20581 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:18:15:50 +0530] "GET /blog/post-2 HTTP/1.1" 200 20276 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:18:19:26 +0530] "GET /api/v1/report HTTP/1.1" 500 526 "-" "python-requests/2.31.0"</code></pre></div>
+
+<div class="callout warn"><span class="ct">Locale</span>Sort order depends on <code>LC_COLLATE</code>. In <code>en_US.UTF-8</code> GNU sort ignores case and punctuation at first pass (<code>apple Apple banana</code>); in the <code>C</code> locale it compares raw bytes (uppercase before lowercase). The outputs on this page use <code>export LC_ALL=C</code>, which is also what you want in scripts for predictable results and speed. For the lowercase datasets here both locales give the same output except where noted.</div>
+
+<h2 id="basics">Basics</h2>
+<h3>Sort lines alphabetically, remove duplicates</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sort -u datasets/tags.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>bash
+docker
+git
+linux
+mysql
+nginx
+postgres
+python
+redis</pre></div>
+<p><code>sort -u</code> is the same as <code>sort | uniq</code> but in one process. Add <code>-r</code> to reverse:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sort -ru datasets/tags.txt | head -3</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>redis
+python
+postgres</pre></div>
+
+<h3>uniq on unsorted input: the classic mistake</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">uniq -c datasets/tags.txt | head -3      # WRONG: input not sorted</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>      1 postgres
+      1 linux
+      1 docker</pre></div>
+<p>Every count is 1 because no two neighbouring lines are equal. Sort first.</p>
+
+<h3>The frequency table idiom</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sort datasets/tags.txt | uniq -c | sort -rn</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>     11 docker
+      8 nginx
+      8 linux
+      8 bash
+      5 mysql
+      4 git
+      3 python
+      2 redis
+      1 postgres</pre></div>
+<ol class="steps">
+  <li><code>sort</code> groups identical tags together.</li>
+  <li><code>uniq -c</code> collapses each group to one line and prefixes the count (GNU pads it to width 7).</li>
+  <li><code>sort -rn</code> orders by that number, largest first. Ties fall back to a whole-line reverse compare, which is why <code>nginx</code> comes before <code>bash</code>.</li>
+</ol>
+
+<h3>Only the duplicates, or only the singletons</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sort datasets/tags.txt | uniq -d | tr '\n' ' '; echo   # repeated tags
+sort datasets/tags.txt | uniq -u                         # tags seen exactly once</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>bash docker git linux mysql nginx python redis
+postgres</pre></div>
+
+<h3>Numeric vs text sort</h3>
+<p>Text sort compares character by character, so <code>99000</code> beats <code>135000</code> because <code>9</code> &gt; <code>1</code>:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">tail -n +2 datasets/employees.csv | sort -t, -k5,5r  | head -3   # text: wrong
+tail -n +2 datasets/employees.csv | sort -t, -k5,5nr | head -3   # numeric: right</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>115,Nikhil Das,Engineering,Chennai,99000,2022-05-17
+107,Arjun Nair,Finance,Hyderabad,94000,2016-10-24
+105,Vikram Verma,Sales,Hyderabad,93000,2022-10-20
+102,Priya Sharma,Engineering,Delhi,135000,2023-02-27
+104,Ananya Iyer,Engineering,Pune,131000,2025-05-03
+114,Pooja Nair,Engineering,Hyderabad,127000,2025-05-15</pre></div>
+<p><code>tail -n +2</code> skips the header line so it does not get sorted into the data.</p>
+
+<h2 id="keys">Keys and separators (intermediate)</h2>
+<h3><code>-k2,2</code> versus <code>-k2</code></h3>
+<p><code>-kF,F</code> means "this field only". <code>-kF</code> alone means "from field F to the end of the line". The difference shows up in how ties are broken:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">tail -n +2 datasets/employees.csv | sort -t, -k3,3 | head -4   # dept only, ties by whole line (id)
+echo ---
+tail -n +2 datasets/employees.csv | sort -t, -k3   | head -4   # dept,city,salary... as one key</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>101,Aarav Kapoor,Engineering,Delhi,110000,2023-08-11
+102,Priya Sharma,Engineering,Delhi,135000,2023-02-27
+103,Rohan Mehta,Engineering,Mumbai,84000,2025-11-22
+104,Ananya Iyer,Engineering,Pune,131000,2025-05-03
+---
+108,Kavya Gupta,Engineering,Chennai,93000,2020-11-03
+115,Nikhil Das,Engineering,Chennai,99000,2022-05-17
+121,Yash Iyer,Engineering,Delhi,106000,2023-05-22
+101,Aarav Kapoor,Engineering,Delhi,110000,2023-08-11</pre></div>
+<p>Modifiers can be attached to a key (<code>-k5,5nr</code>) so they apply only to that key. <code>-k5n</code> also works for numbers, because numeric parsing stops at the first non-digit:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">tail -n +2 datasets/employees.csv | sort -t, -k5n | head -3    # lowest salaries</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>117,Sanjay Kapoor,HR,Delhi,38000,2017-04-22
+124,Simran Mehta,Support,Bengaluru,39000,2024-06-20
+120,Neha Verma,Support,Mumbai,49000,2022-06-11</pre></div>
+
+<h3>Multi-key sort: department A–Z, then salary high–low</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">tail -n +2 datasets/employees.csv | sort -t, -k3,3 -k5,5nr | head -12</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>102,Priya Sharma,Engineering,Delhi,135000,2023-02-27
+104,Ananya Iyer,Engineering,Pune,131000,2025-05-03
+114,Pooja Nair,Engineering,Hyderabad,127000,2025-05-15
+118,Divya Singh,Engineering,Delhi,116000,2016-03-16
+109,Rahul Gupta,Engineering,Pune,115000,2017-03-01
+101,Aarav Kapoor,Engineering,Delhi,110000,2023-08-11
+121,Yash Iyer,Engineering,Delhi,106000,2023-05-22
+115,Nikhil Das,Engineering,Chennai,99000,2022-05-17
+108,Kavya Gupta,Engineering,Chennai,93000,2020-11-03
+103,Rohan Mehta,Engineering,Mumbai,84000,2025-11-22
+107,Arjun Nair,Finance,Hyderabad,94000,2016-10-24
+110,Isha Das,Finance,Chennai,93000,2023-05-02</pre></div>
+<p>The second <code>-k</code> is only consulted when the first keys are equal.</p>
+
+<h3>Character positions inside a field</h3>
+<p><code>-kF.C</code> starts the key at character C of field F. Sort by month of joining (characters 6–7 of <code>2023-08-11</code>), then by year:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">tail -n +2 datasets/employees.csv | sort -t, -k6.6,6.7 -k6.1,6.4 | head -4</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>123,Harsh Verma,HR,Mumbai,92000,2024-01-22
+113,Aditya Singh,Sales,Pune,62000,2018-02-02
+102,Priya Sharma,Engineering,Delhi,135000,2023-02-27
+111,Karan Nair,Sales,Chennai,63000,2023-02-22</pre></div>
+
+<h3>Whitespace-separated files and the header problem</h3>
+<p>Sort <code>df.txt</code> by the Use% column. Without <code>-t</code>, runs of spaces separate fields. <code>-n</code> reads <code>96%</code> as 96. The header has no number so it sorts as 0 and lands at the bottom:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sort -k5,5rn datasets/df.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>/dev/sdb1       500G  478G   22G  96% /backup
+/dev/nvme0n1p1  1.0T  910G   90G  92% /data
+/dev/sda1        50G   41G  6.5G  87% /
+/dev/sda2       200G  120G   70G  64% /var
+/dev/sdc1       100G   12G   83G  13% /home
+tmpfs           3.9G  1.2M  3.9G   1% /run
+Filesystem      Size  Used Avail Use% Mounted on</pre></div>
+<p>To keep the header on top, print it separately and sort only the body:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">{ head -n 1 datasets/df.txt; tail -n +2 datasets/df.txt | sort -k5,5rn; } | head -4</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Filesystem      Size  Used Avail Use% Mounted on
+/dev/sdb1       500G  478G   22G  96% /backup
+/dev/nvme0n1p1  1.0T  910G   90G  92% /data
+/dev/sda1        50G   41G  6.5G  87% /</pre></div>
+
+<h2 id="special">Special orderings: -h, -V, -M, -f</h2>
+<h3>Human sizes with <code>-h</code></h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">tail -n +2 datasets/df.txt | sort -k2,2n | awk '{print $2, $6}'   # -n: wrong
+echo ---
+tail -n +2 datasets/df.txt | sort -k2,2h | awk '{print $2, $6}'   # -h: right</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>1.0T /data
+3.9G /run
+50G /
+100G /home
+200G /var
+500G /backup
+---
+3.9G /run
+50G /
+100G /home
+200G /var
+500G /backup
+1.0T /data</pre></div>
+<p><code>-n</code> ignores the suffix so 1.0T looks like 1. <code>-h</code> understands K, M, G, T, P. Classic use: <code>du -sh /var/log/* | sort -rh | head</code>.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">tail -n +2 datasets/df.txt | sort -k3,3rh | awk '{print $3, $6}'   # biggest Used first</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>910G /data
+478G /backup
+120G /var
+41G /
+12G /home
+1.2M /run</pre></div>
+
+<h3>Version numbers with <code>-V</code></h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">printf '%s\n' app-1.10.0 app-1.2.0 app-1.9.3 app-1.2.10 app-2.0.0 | sort
+echo ---
+printf '%s\n' app-1.10.0 app-1.2.0 app-1.9.3 app-1.2.10 app-2.0.0 | sort -V</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>app-1.10.0
+app-1.2.0
+app-1.2.10
+app-1.9.3
+app-2.0.0
+---
+app-1.2.0
+app-1.2.10
+app-1.9.3
+app-1.10.0
+app-2.0.0</pre></div>
+<p>Use <code>sort -V | tail -1</code> to pick the newest release or backup file.</p>
+
+<h3>Month names with <code>-M</code></h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">printf '%s\n' "Mar 120" "Jan 300" "Dec 90" "Feb 250" "Nov 410" | sort -M</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Jan 300
+Feb 250
+Mar 120
+Nov 410
+Dec 90</pre></div>
+<p>Handy for syslog files such as <code>auth.log</code> whose lines start with <code>Nov 16</code>: <code>sort -k1,1M -k2,2n -k3,3</code>.</p>
+
+<h3>Case folding with <code>-f</code></h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">printf '%s\n' banana Apple cherry apple Banana | sort        # C locale: uppercase first
+echo ---
+printf '%s\n' banana Apple cherry apple Banana | sort -f
+echo ---
+printf '%s\n' banana Apple cherry apple Banana | sort -f | uniq -ci</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Apple
+Banana
+apple
+banana
+cherry
+---
+Apple
+apple
+Banana
+banana
+cherry
+---
+      2 Apple
+      2 Banana
+      1 cherry</pre></div>
+<p><code>uniq -i</code> compares case-insensitively and prints the first spelling of each group.</p>
+
+<h2 id="advanced">Advanced</h2>
+<h3>Stable sort with <code>-s</code></h3>
+<p>A stable sort keeps equal-key lines in their input order. This lets you sort in two passes: first by the secondary key, then stably by the primary key. Here the input is first sorted by salary, then stably by department, so salary order survives inside each department:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">tail -n +2 datasets/employees.csv | sort -t, -k5,5nr | sort -t, -s -k3,3 | head -5
+echo ---
+tail -n +2 datasets/employees.csv | sort -t, -k5,5nr | sort -t, -k3,3 | head -5   # no -s</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>102,Priya Sharma,Engineering,Delhi,135000,2023-02-27
+104,Ananya Iyer,Engineering,Pune,131000,2025-05-03
+114,Pooja Nair,Engineering,Hyderabad,127000,2025-05-15
+118,Divya Singh,Engineering,Delhi,116000,2016-03-16
+109,Rahul Gupta,Engineering,Pune,115000,2017-03-01
+---
+101,Aarav Kapoor,Engineering,Delhi,110000,2023-08-11
+102,Priya Sharma,Engineering,Delhi,135000,2023-02-27
+103,Rohan Mehta,Engineering,Mumbai,84000,2025-11-22
+104,Ananya Iyer,Engineering,Pune,131000,2025-05-03
+108,Kavya Gupta,Engineering,Chennai,93000,2020-11-03</pre></div>
+<p>Without <code>-s</code>, equal departments fall back to the last-resort whole-line compare, which orders them by id and throws the salary order away. In practice a single multi-key sort is simpler: <code>sort -t, -k3,3 -k5,5nr</code>. Two-pass stable sorting matters when the first pass is something sort cannot express, such as an order produced by another tool.</p>
+
+<h3>One line per key: <code>-u</code> with <code>-k</code></h3>
+<p>With a key, <code>-u</code> compares only the key, and keeps the first line of each group. Combine with a pre-sort to get "highest paid per department":</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">tail -n +2 datasets/employees.csv | sort -t, -k3,3 -k5,5nr | sort -t, -s -u -k3,3</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>102,Priya Sharma,Engineering,Delhi,135000,2023-02-27
+107,Arjun Nair,Finance,Hyderabad,94000,2016-10-24
+123,Harsh Verma,HR,Mumbai,92000,2024-01-22
+105,Vikram Verma,Sales,Hyderabad,93000,2022-10-20
+125,Kunal Singh,Support,Mumbai,75000,2016-04-09</pre></div>
+
+<h3>Sorting IP addresses</h3>
+<p>Text sort puts <code>10.0.0.23</code> before <code>10.0.0.5</code>. Split on dots and sort each octet numerically:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk '{print $1}' datasets/access.log | sort -u -t. -k1,1n -k2,2n -k3,3n -k4,4n</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>10.0.0.5
+10.0.0.23
+45.33.32.156
+172.16.4.8
+185.220.101.3
+192.168.1.10
+192.168.1.15
+198.51.100.42
+203.0.113.7
+203.0.113.99</pre></div>
+<p>GNU <code>sort -V</code> gives the same order for IPv4 addresses and is shorter to type.</p>
+
+<h3>Check whether input is sorted: <code>-c</code> and <code>-C</code></h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sort -c datasets/tags.txt; echo "exit=$?"
+sort -u datasets/tags.txt | sort -c; echo "exit=$?"
+sort -C datasets/tags.txt || echo "not sorted (silent check)"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>sort: datasets/tags.txt:2: disorder: linux
+exit=1
+exit=0
+not sorted (silent check)</pre></div>
+<p>Use <code>-C</code> in scripts before <code>comm</code> or <code>join</code>, which silently give wrong answers on unsorted input.</p>
+
+<h3>Sort a file in place</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sort -o names.txt names.txt      # correct: sort reads everything before writing
+sort names.txt &gt; names.txt       # WRONG: the shell truncates names.txt first -&gt; empty file</code></pre></div>
+
+<h3>uniq -f and -s: compare only part of the line</h3>
+<p><code>-f N</code> skips N fields. Collapse consecutive requests from the same IP while ignoring the time column:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk '{print substr($4,14,8), $1}' datasets/access.log | head -12 | uniq -c -f1</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>      4 08:11:14 192.168.1.10
+      1 08:42:53 203.0.113.7
+      2 08:55:07 10.0.0.5
+      1 09:11:07 192.168.1.10
+      1 09:25:36 203.0.113.7
+      1 09:37:57 192.168.1.10
+      1 09:52:52 192.168.1.15
+      1 09:55:58 10.0.0.5</pre></div>
+<p>This is a "burst" view: 192.168.1.10 made 4 requests in a row. Note that only <em>adjacent</em> lines are merged; we did not sort because time order matters here. <code>-s N</code> skips characters instead, useful for fixed-width timestamps:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">printf '%s\n' "08:11:14 ERROR disk full on /backup" "08:11:15 ERROR disk full on /backup" \
+  "08:11:16 ERROR disk full on /backup" "08:12:00 WARN load high" \
+  "08:12:30 ERROR disk full on /backup" | uniq -c -s9</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>      3 08:11:14 ERROR disk full on /backup
+      1 08:12:00 WARN load high
+      1 08:12:30 ERROR disk full on /backup</pre></div>
+
+<h3>Multi-column counts</h3>
+<p>Count IP + status pairs, sort by count then by IP:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk '{print $1, $9}' datasets/access.log | sort | uniq -c | sort -k1,1nr -k2,2 | head -8</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>     13 192.168.1.10 200
+     12 192.168.1.15 200
+      9 10.0.0.5 200
+      9 203.0.113.7 200
+      5 172.16.4.8 200
+      4 185.220.101.3 403
+      3 10.0.0.5 500
+      3 185.220.101.3 404</pre></div>
+
+<h3>comm: set operations on two lists</h3>
+<p>IPs that appear in the web log versus IPs with failed SSH logins in <code>auth.log</code>. Both inputs must be sorted; process substitution <code>&lt;( )</code> does it inline:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">web() { awk '{print $1}' datasets/access.log | sort -u; }
+ssh_fail() { grep 'Failed password' datasets/auth.log | grep -o 'from [0-9.]*' | awk '{print $2}' | sort -u; }
+
+comm &lt;(web) &lt;(ssh_fail)          # col1: web only, col2: ssh only, col3: both
+echo "--- in both:"
+comm -12 &lt;(web) &lt;(ssh_fail)</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>10.0.0.23
+10.0.0.5
+	103.21.244.9
+172.16.4.8
+		185.220.101.3
+192.168.1.10
+192.168.1.15
+198.51.100.42
+203.0.113.7
+203.0.113.99
+		45.33.32.156
+	91.240.118.172
+--- in both:
+185.220.101.3
+45.33.32.156</pre></div>
+<p>Columns are indented with tabs. 185.220.101.3 and 45.33.32.156 both brute-forced SSH and hit the web server: good candidates for a firewall block.</p>
+
+<h2 id="usecases">Use cases</h2>
+
+<div class="usecase"><h3><span class="uc-tag">Use case 1</span> Tag / word frequency table with percentages</h3>
+<p>You have a list of tags (or words, error codes, usernames) and want a ranked table with each item's share of the total. Normalising case and dropping blank lines first avoids counting <code>Docker</code> and <code>docker</code> separately.</p>
+<div class="code"><div class="code-head">bash · tag_freq.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# tag_freq.sh - frequency table with percentages for a one-item-per-line file
+set -euo pipefail
+
+file="${1:-datasets/tags.txt}"
+[[ -r "$file" ]] || { echo "cannot read $file" &gt;&amp;2; exit 1; }
+
+total=$(grep -c . "$file")            # non-empty lines
+
+printf '%-10s %5s %7s\n' "TAG" "COUNT" "SHARE"
+tr 'A-Z' 'a-z' &lt; "$file" |            # normalise case
+  grep -v '^[[:space:]]*$' |          # drop blank lines
+  sort | uniq -c |                    # count each distinct tag
+  sort -k1,1nr -k2,2 |                # most frequent first, ties A-Z
+  awk -v t="$total" '{ printf "%-10s %5d %6.1f%%\n", $2, $1, 100*$1/t }'
+echo "distinct: $(sort -u "$file" | wc -l | tr -d ' ')  total: $total"</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">chmod +x tag_freq.sh
+./tag_freq.sh datasets/tags.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>TAG        COUNT   SHARE
+docker        11   22.0%
+bash           8   16.0%
+linux          8   16.0%
+nginx          8   16.0%
+mysql          5   10.0%
+git            4    8.0%
+python         3    6.0%
+redis          2    4.0%
+postgres       1    2.0%
+distinct: 9  total: 50</pre></div>
+<p><strong>How it works.</strong> <code>sort -k1,1nr -k2,2</code> sorts by count descending and breaks ties alphabetically, so the three tags with 8 hits are listed A–Z instead of reverse order. The final <code>awk</code> swaps the columns and computes the percentage; <code>%%</code> prints a literal percent sign. For free text, first split into one word per line with <code>tr -cs '[:alpha:]' '\n'</code> (see <a href="cut-tr.html">cut &amp; tr</a>).</p>
+</div>
+
+<div class="usecase"><h3><span class="uc-tag">Use case 2</span> Top-N report from a web access log</h3>
+<p>The daily question from operations: who is hitting the server, which URLs are hot, and how many errors? One reusable function does the count-sort-head for any column.</p>
+<div class="code"><div class="code-head">bash · top_report.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# top_report.sh - top-N summary of an Apache/Nginx combined access log
+# usage: ./top_report.sh [logfile] [N]
+set -euo pipefail
+
+log="${1:-datasets/access.log}"
+n="${2:-5}"
+[[ -r "$log" ]] || { echo "error: cannot read $log" &gt;&amp;2; exit 1; }
+[[ "$n" =~ ^[0-9]+$ ]] || { echo "error: N must be a number" &gt;&amp;2; exit 2; }
+
+# top &lt;awk-field-expression&gt; &lt;title&gt;: count values, print the N largest
+top() {
+  local expr="$1" title="$2"
+  echo "== Top $n $title =="
+  awk "{ print $expr }" "$log" | sort | uniq -c | sort -k1,1nr -k2,2 | head -n "$n"
+  echo
+}
+
+echo "Report for $log ($(wc -l &lt; "$log" | tr -d ' ') requests)"
+echo
+top '$1'  "client IPs"
+top '$7'  "URLs"
+top '$9'  "status codes"
+echo "== Top $n IPs by bytes sent =="
+awk '{ bytes[$1] += $10 } END { for (ip in bytes) print bytes[ip], ip }' "$log" |
+  sort -k1,1nr | head -n "$n"</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">./top_report.sh datasets/access.log 3</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Report for datasets/access.log (80 requests)
+
+== Top 3 client IPs ==
+     18 192.168.1.10
+     14 192.168.1.15
+     13 10.0.0.5
+
+== Top 3 URLs ==
+     10 /api/v1/users
+      8 /index.php
+      7 /images/logo.png
+
+== Top 3 status codes ==
+     55 200
+      9 403
+      8 404
+
+== Top 3 IPs by bytes sent ==
+418954 192.168.1.10
+276896 192.168.1.15
+174227 10.0.0.5</pre></div>
+<p><strong>Tricky parts.</strong> The awk program is built in double quotes so <code>$expr</code> (a Bash variable holding the text <code>$1</code>) is substituted before awk runs; the call sites pass <code>'$1'</code> in single quotes so Bash does not expand it there. <code>head -n "$n"</code> closing the pipe early is fine even with <code>pipefail</code> here because the upstream <code>sort</code> has already written all its output. The bytes section shows that <code>awk</code> can do the summing and <code>sort</code> just ranks the totals.</p>
+</div>
+
+<div class="usecase"><h3><span class="uc-tag">Use case 3</span> Which hosts are missing from an inventory? (comm)</h3>
+<p>The SSH inventory (<code>servers.txt</code>) and the monitoring inventory (<code>servers.json</code>) drift apart over time. <code>comm</code> on the two sorted hostname lists tells you exactly what is in one but not the other. The script exits 1 when hosts are missing, so cron or CI can alert on it.</p>
+<div class="code"><div class="code-head">bash · inv_diff.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# inv_diff.sh - compare the SSH inventory with the monitoring inventory
+# usage: ./inv_diff.sh [servers.txt] [servers.json]
+set -euo pipefail
+export LC_ALL=C                     # comm and sort must agree on order
+
+txt="${1:-datasets/servers.txt}"
+json="${2:-datasets/servers.json}"
+
+ssh_hosts=$(mktemp) mon_hosts=$(mktemp)
+trap 'rm -f "$ssh_hosts" "$mon_hosts"' EXIT
+
+grep -v '^#' "$txt" | awk 'NF { print $1 }' | sort -u &gt; "$ssh_hosts"
+jq -r '.servers[].hostname' "$json"            | sort -u &gt; "$mon_hosts"
+
+echo "In both inventories:"
+comm -12 "$ssh_hosts" "$mon_hosts" | sed 's/^/  /'
+echo "Monitored but missing from SSH inventory:"
+comm -13 "$ssh_hosts" "$mon_hosts" | sed 's/^/  /'
+echo "In SSH inventory but not monitored:"
+comm -23 "$ssh_hosts" "$mon_hosts" | sed 's/^/  /'
+missing=$(comm -13 "$ssh_hosts" "$mon_hosts" | wc -l)
+exit $(( missing &gt; 0 ? 1 : 0 ))</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">./inv_diff.sh; echo "exit=$?"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>In both inventories:
+  cache01
+  db01
+  mon01
+  web01
+  web02
+Monitored but missing from SSH inventory:
+  db02
+  lb01
+  web03
+In SSH inventory but not monitored:
+exit=1</pre></div>
+<p><strong>Why this design.</strong> <code>comm</code> requires both inputs sorted with the <em>same</em> collation, hence <code>export LC_ALL=C</code> at the top. Temporary files plus <code>trap … EXIT</code> keep things tidy; you could also use <code>comm -13 &lt;(…) &lt;(…)</code>. The three <code>comm</code> calls are intersection (<code>-12</code>), right-only (<code>-13</code>) and left-only (<code>-23</code>). Without <code>jq</code> installed, the hostnames could also come from <code>grep -o '"hostname": *"[^"]*"'</code>.</p>
+</div>
+
+<h2 id="gotchas">Gotchas</h2>
+<div class="table-wrap"><table>
+<tr><th>Problem</th><th>Cause and fix</th></tr>
+<tr><td><code>uniq -c</code> shows every count as 1</td><td>Input not sorted. Use <code>sort | uniq -c</code>.</td></tr>
+<tr><td>10 sorts before 9</td><td>Text compare. Add <code>-n</code> (or <code>-h</code> for 10K/2G, <code>-V</code> for versions).</td></tr>
+<tr><td><code>sort -k2</code> gives odd tie order</td><td>Key runs to end of line. Use <code>-k2,2</code>.</td></tr>
+<tr><td>Header line sorted into data</td><td><code>tail -n +2</code>, or <code>{ head -1 f; tail -n +2 f | sort; }</code>.</td></tr>
+<tr><td>CSV sorted on wrong column</td><td>Forgot <code>-t,</code>. Default separator is blanks.</td></tr>
+<tr><td>Quoted CSV fields with commas</td><td><code>sort -t,</code> cannot parse quotes. Use a real CSV tool or <code>awk</code> with FPAT (gawk).</td></tr>
+<tr><td>Different order on another machine</td><td>Locale. Set <code>LC_ALL=C</code> in scripts.</td></tr>
+<tr><td><code>comm</code> output wrong or warns "not in sorted order"</td><td>Inputs not sorted, or sorted under a different locale.</td></tr>
+<tr><td><code>sort f &gt; f</code> empties the file</td><td>Shell truncates first. Use <code>sort -o f f</code>.</td></tr>
+<tr><td>Count width differs</td><td>GNU <code>uniq -c</code> pads to 7 characters, BSD/macOS to 4. Use <code>awk '{print $1}'</code> rather than relying on columns.</td></tr>
+<tr><td><code>uniq -w</code> unknown option</td><td>GNU only. On BSD, cut the field first or use <code>awk '!seen[$1]++'</code>.</td></tr>
+</table></div>
+<div class="callout tip"><span class="ct">Tip</span><code>awk '!seen[$0]++' file</code> removes duplicates <em>without sorting</em>, keeping the first occurrence in original order. Use it when order matters.</div>
+
+<h2 id="practice">Practice exercises</h2>
+<details><summary>1. List the departments in employees.csv with their employee count, largest first.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">cut -d, -f3 datasets/employees.csv | tail -n +2 | sort | uniq -c | sort -rn</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>     10 Engineering
+      5 Support
+      5 Sales
+      3 Finance
+      2 HR</pre></div></details>
+<details><summary>2. Show the lowest and the highest paid employee using only sort, head/tail or sed.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">tail -n +2 datasets/employees.csv | sort -t, -k5,5n | sed -n '1p;$p'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>117,Sanjay Kapoor,HR,Delhi,38000,2017-04-22
+102,Priya Sharma,Engineering,Delhi,135000,2023-02-27</pre></div></details>
+<details><summary>3. Which IPs caused 4xx or 5xx responses, and how many each?</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk '$9 &gt;= 400 {print $1}' datasets/access.log | sort | uniq -c | sort -rn</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>      7 185.220.101.3
+      5 192.168.1.10
+      3 172.16.4.8
+      3 10.0.0.5
+      2 192.168.1.15
+      1 203.0.113.99
+      1 203.0.113.7
+      1 10.0.0.23</pre></div></details>
+<details><summary>4. Count requests per hour of day (hour is characters 14–15 of field 4), in hour order.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk '{print substr($4,14,2)}' datasets/access.log | sort | uniq -c</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>      7 08
+      5 09
+      8 10
+      6 11
+      8 12
+      8 13
+     11 14
+      7 15
+      7 16
+     10 17
+      3 18</pre></div>
+<p>The peak is 14:00. No final <code>sort -rn</code> because we want time order.</p></details>
+<details><summary>5. Print the filesystems from df.txt ordered by Avail, smallest first (human sizes), header kept on top.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">{ head -n 1 datasets/df.txt; tail -n +2 datasets/df.txt | sort -k4,4h; }</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Filesystem      Size  Used Avail Use% Mounted on
+tmpfs           3.9G  1.2M  3.9G   1% /run
+/dev/sda1        50G   41G  6.5G  87% /
+/dev/sdb1       500G  478G   22G  96% /backup
+/dev/sda2       200G  120G   70G  64% /var
+/dev/sdc1       100G   12G   83G  13% /home
+/dev/nvme0n1p1  1.0T  910G   90G  92% /data</pre></div></details>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="../labs/lab06-access-logs.html">Lab 06, Access log analysis</a> (frequency tables everywhere)</li>
+  <li><a href="../labs/lab07-email-alerts.html">Lab 07, Automated email alerts</a> (sorting df output by usage)</li>
+  <li><a href="../labs/lab09-pipes-redirection.html">Lab 09, Pipes &amp; redirection</a></li>
+  <li><a href="awk.html">awk</a> for computing the values you sort, <a href="cut-tr.html">cut &amp; tr</a> for extracting columns, <a href="grep.html">grep</a> for filtering first</li>
+  <li><a href="../reference/cheatsheet.html">One-page cheat sheet</a></li>
+</ul>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

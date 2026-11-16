@@ -1,0 +1,1465 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dataset library · CBCS Unit 4 Shell Wiki</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="datasets">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Reference / Dataset library</div>
+<h1>Dataset library</h1>
+<p class="lead">Every example in this wiki reads from the files in <code>datasets/</code>. This page describes each file: what it represents, its format and fields, which pages use it, and the full contents in a scrollable viewer. Open a terminal in the project folder and the commands on every page will give exactly the output shown.</p>
+<div class="meta-row"><span class="pill">18 files</span><span class="pill grey">1180 lines in total</span><span class="pill grey">Plain text · offline</span></div>
+
+<h2 id="get">Getting the files</h2>
+<p>The datasets ship with the wiki in the <code>datasets/</code> folder next to <code>index.html</code>; there is nothing to download. Run all commands from the project root so the relative paths work:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">cd CBCS-UNIT4-STUDY-GUIDE
+ls datasets/
+wc -l datasets/*            # line counts
+head -3 datasets/employees.csv</code></pre></div>
+<div class="callout tip"><span class="ct">Recreate or copy</span>Each viewer below has a <strong>Copy</strong> button. If you are working on a lab machine without the wiki, copy the contents and paste them into a file with a here-document, e.g. <code>cat &gt; employees.csv &lt;&lt;'EOF'</code> … <code>EOF</code> (the quoted <code>'EOF'</code> stops the shell from expanding <code>$</code> signs). Copy the whole folder to a lab VM with <code>scp -r datasets/ user@vm:~/</code>. Treat these files as read-only: if an exercise edits a file (for example <code>sed -i</code>), work on a copy (<code>cp datasets/app.conf /tmp/</code>).</div>
+<div class="callout note"><span class="ct">Safe data</span>All data is fictional. Internal hosts use private ranges (10.x, 172.16.x, 192.168.x) and the documentation ranges 198.51.100.0/24 and 203.0.113.0/24; the few public attacker IPs in the logs are well-known scanner and Tor addresses used only as realistic examples. Domains are example.com, and passwords and tokens are placeholders.</div>
+<h2 id="overview">Overview</h2>
+<div class="table-wrap"><table>
+<tr><th>File</th><th>Contents</th><th>Format</th><th>Lines</th><th>Used by</th></tr>
+<tr><td><a href="#ds-access-log"><code>access.log</code></a></td><td>Web server access log</td><td>log</td><td>80</td><td><a href="../labs/lab02-menus-colors.html">Lab 02</a>, <a href="../labs/lab06-access-logs.html">Lab 06</a>, <a href="../labs/lab09-pipes-redirection.html">Lab 09</a>, <a href="../tools/awk.html">awk</a>, <a href="../tools/cut-tr.html">cut, tr, paste, wc, head, tail, tee</a>, <a href="../tools/find-xargs.html">find &amp; xargs</a>, <a href="../tools/grep.html">grep</a>, <a href="../tools/sed.html">sed</a>, <a href="../tools/sort-uniq.html">sort &amp; uniq</a></td></tr>
+<tr><td><a href="#ds-app-conf"><code>app.conf</code></a></td><td>Application config file</td><td>config</td><td>22</td><td><a href="../labs/lab10-wordpress-lamp.html">Lab 10</a>, <a href="../labs/lab11-backup-retention.html">Lab 11</a>, <a href="../tools/awk.html">awk</a>, <a href="../tools/cut-tr.html">cut, tr, paste, wc, head, tail, tee</a>, <a href="../tools/grep.html">grep</a>, <a href="../tools/sed.html">sed</a></td></tr>
+<tr><td><a href="#ds-auth-log"><code>auth.log</code></a></td><td>SSH and sudo authentication log</td><td>log</td><td>45</td><td><a href="../labs/lab02-menus-colors.html">Lab 02</a>, <a href="../labs/lab03-remote-execution.html">Lab 03</a>, <a href="../labs/lab07-email-alerts.html">Lab 07</a>, <a href="../labs/lab09-pipes-redirection.html">Lab 09</a>, <a href="../tools/awk.html">awk</a>, <a href="../tools/find-xargs.html">find &amp; xargs</a>, <a href="../tools/grep.html">grep</a>, <a href="../tools/sort-uniq.html">sort &amp; uniq</a></td></tr>
+<tr><td><a href="#ds-backups-listing-txt"><code>backups_listing.txt</code></a></td><td>Backup directory listing</td><td>text</td><td>42</td><td><a href="../labs/lab11-backup-retention.html">Lab 11</a></td></tr>
+<tr><td><a href="#ds-cf-dns-records-json"><code>cf_dns_records.json</code></a></td><td>Cloudflare DNS records response</td><td>JSON</td><td>165</td><td><a href="../labs/lab05-cloudflare-api.html">Lab 05</a>, <a href="../tools/grep.html">grep</a>, <a href="../tools/jq.html">jq</a></td></tr>
+<tr><td><a href="#ds-cf-error-json"><code>cf_error.json</code></a></td><td>Cloudflare error response</td><td>JSON</td><td>11</td><td><a href="../labs/lab05-cloudflare-api.html">Lab 05</a></td></tr>
+<tr><td><a href="#ds-cf-zones-json"><code>cf_zones.json</code></a></td><td>Cloudflare zones response</td><td>JSON</td><td>47</td><td><a href="../labs/lab05-cloudflare-api.html">Lab 05</a></td></tr>
+<tr><td><a href="#ds-df-txt"><code>df.txt</code></a></td><td>Disk usage snapshot</td><td>text</td><td>7</td><td><a href="../labs/lab02-menus-colors.html">Lab 02</a>, <a href="../labs/lab07-email-alerts.html">Lab 07</a>, <a href="../labs/lab09-pipes-redirection.html">Lab 09</a>, <a href="../labs/lab11-backup-retention.html">Lab 11</a>, <a href="../labs/lab12-service-health.html">Lab 12</a>, <a href="../tools/awk.html">awk</a>, <a href="../tools/cut-tr.html">cut, tr, paste, wc, head, tail, tee</a>, <a href="../tools/sed.html">sed</a>, <a href="../tools/sort-uniq.html">sort &amp; uniq</a></td></tr>
+<tr><td><a href="#ds-employees-csv"><code>employees.csv</code></a></td><td>Employee records</td><td>CSV</td><td>26</td><td><a href="../labs/lab01-multi-function.html">Lab 01</a>, <a href="../labs/lab02-menus-colors.html">Lab 02</a>, <a href="../labs/lab08-password-generation.html">Lab 08</a>, <a href="../labs/lab09-pipes-redirection.html">Lab 09</a>, <a href="../tools/awk.html">awk</a>, <a href="../tools/cut-tr.html">cut, tr, paste, wc, head, tail, tee</a>, <a href="../tools/sed.html">sed</a>, <a href="../tools/sort-uniq.html">sort &amp; uniq</a></td></tr>
+<tr><td><a href="#ds-employees-v2-csv"><code>employees_v2.csv</code></a></td><td>Employee records, later version</td><td>CSV</td><td>27</td><td><a href="../labs/lab09-pipes-redirection.html">Lab 09</a></td></tr>
+<tr><td><a href="#ds-sales-csv"><code>sales.csv</code></a></td><td>Daily sales</td><td>CSV</td><td>31</td><td><a href="../labs/lab02-menus-colors.html">Lab 02</a>, <a href="../tools/awk.html">awk</a>, <a href="../tools/cut-tr.html">cut, tr, paste, wc, head, tail, tee</a></td></tr>
+<tr><td><a href="#ds-servers-json"><code>servers.json</code></a></td><td>Server inventory with metrics</td><td>JSON</td><td>118</td><td><a href="../labs/lab04-json-jq.html">Lab 04</a>, <a href="../labs/lab11-backup-retention.html">Lab 11</a>, <a href="../labs/lab12-service-health.html">Lab 12</a>, <a href="../tools/grep.html">grep</a>, <a href="../tools/jq.html">jq</a>, <a href="../tools/sort-uniq.html">sort &amp; uniq</a></td></tr>
+<tr><td><a href="#ds-servers-txt"><code>servers.txt</code></a></td><td>SSH host inventory</td><td>text</td><td>6</td><td><a href="../labs/lab01-multi-function.html">Lab 01</a>, <a href="../labs/lab02-menus-colors.html">Lab 02</a>, <a href="../labs/lab03-remote-execution.html">Lab 03</a>, <a href="../labs/lab09-pipes-redirection.html">Lab 09</a>, <a href="../labs/lab11-backup-retention.html">Lab 11</a>, <a href="../tools/cut-tr.html">cut, tr, paste, wc, head, tail, tee</a>, <a href="../tools/sort-uniq.html">sort &amp; uniq</a></td></tr>
+<tr><td><a href="#ds-services-txt"><code>services.txt</code></a></td><td>Service check definitions</td><td>text</td><td>9</td><td><a href="../labs/lab11-backup-retention.html">Lab 11</a>, <a href="../labs/lab12-service-health.html">Lab 12</a>, <a href="../tools/curl.html">curl</a></td></tr>
+<tr><td><a href="#ds-tags-txt"><code>tags.txt</code></a></td><td>Tag list with duplicates</td><td>text</td><td>50</td><td><a href="../labs/lab02-menus-colors.html">Lab 02</a>, <a href="../tools/cut-tr.html">cut, tr, paste, wc, head, tail, tee</a>, <a href="../tools/sort-uniq.html">sort &amp; uniq</a></td></tr>
+<tr><td><a href="#ds-users-json"><code>users.json</code></a></td><td>User accounts (JSON array)</td><td>JSON</td><td>199</td><td><a href="../labs/lab04-json-jq.html">Lab 04</a>, <a href="../tools/grep.html">grep</a>, <a href="../tools/jq.html">jq</a></td></tr>
+<tr><td><a href="#ds-wordlist-txt"><code>wordlist.txt</code></a></td><td>Word list for passphrases</td><td>text</td><td>256</td><td><a href="../labs/lab08-password-generation.html">Lab 08</a></td></tr>
+<tr><td><a href="#ds-wp-config-sample-php"><code>wp-config-sample.php</code></a></td><td>WordPress config template</td><td>PHP</td><td>39</td><td><a href="../labs/lab10-wordpress-lamp.html">Lab 10</a></td></tr>
+</table></div>
+<h2 id="files">Files</h2>
+<h3 id="ds-access-log"><code>access.log</code></h3>
+<p><strong>Web server access log.</strong> Apache/Nginx <em>combined</em> log format, one request per line, 16 Nov 2026, ten client IPs including a scanner (185.220.101.3) probing <code>/wp-login.php</code> and <code>/.env</code>.</p>
+<p><strong>Format:</strong> Space-separated; request, referrer and user agent are in double quotes · <strong>Lines:</strong> 80</p>
+<div class="table-wrap"><table>
+<tr><th>Field</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>$1</code></td><td>Client IP</td><td><code>192.168.1.10</code></td></tr>
+<tr><td><code>$2 $3</code></td><td>ident, user (always -)</td><td><code>- -</code></td></tr>
+<tr><td><code>$4 $5</code></td><td>Time stamp in [ ]</td><td><code>[16/Nov/2026:08:11:14 +0530]</code></td></tr>
+<tr><td><code>$6 $7 $8</code></td><td>Method, URL, protocol (&quot;$6 has a leading quote)</td><td><code>&quot;GET /api/v1/users HTTP/1.1&quot;</code></td></tr>
+<tr><td><code>$9</code></td><td>HTTP status</td><td><code>200</code></td></tr>
+<tr><td><code>$10</code></td><td>Response bytes</td><td><code>16949</code></td></tr>
+<tr><td><code>$11</code></td><td>Referrer</td><td><code>&quot;https://example.com/&quot;</code></td></tr>
+<tr><td><code>$12…</code></td><td>User agent</td><td><code>&quot;Mozilla/5.0 …&quot;</code></td></tr>
+</table></div>
+<p><strong>Used by:</strong> <a href="../labs/lab02-menus-colors.html">Interactive menus &amp; colors</a> · <a href="../labs/lab06-access-logs.html">Access log analysis</a> · <a href="../labs/lab09-pipes-redirection.html">Pipes &amp; redirection</a> · <a href="../tools/awk.html">awk, column processing</a> · <a href="../tools/cut-tr.html">cut, tr, paste, wc, head, tail, tee</a> · <a href="../tools/find-xargs.html">find &amp; xargs</a> · <a href="../tools/grep.html">grep, search text</a> · <a href="../tools/sed.html">sed, stream editor</a> · <a href="../tools/sort-uniq.html">sort &amp; uniq</a></p>
+<div class="code"><div class="code-head">bash · quick look</div><pre><code class="language-bash">awk '{print $1}' datasets/access.log | sort | uniq -c | sort -rn | head -3</code></pre></div>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/access.log</span></div><pre><code>192.168.1.10 - - [16/Nov/2026:08:11:14 +0530] "GET /api/v1/users HTTP/1.1" 200 16949 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:08:24:08 +0530] "GET /api/v1/users HTTP/1.1" 200 36641 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:08:25:00 +0530] "GET /index.php HTTP/1.1" 200 34018 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:08:34:54 +0530] "GET /js/app.js HTTP/1.1" 200 36613 "-" "curl/8.4.0"
+203.0.113.7 - - [16/Nov/2026:08:42:53 +0530] "GET /old-page HTTP/1.1" 301 0 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+10.0.0.5 - - [16/Nov/2026:08:55:07 +0530] "GET /about.html HTTP/1.1" 200 15010 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+10.0.0.5 - - [16/Nov/2026:08:57:01 +0530] "GET /blog/post-1 HTTP/1.1" 200 23441 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:09:11:07 +0530] "POST /wp-login.php HTTP/1.1" 200 25707 "https://www.google.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+203.0.113.7 - - [16/Nov/2026:09:25:36 +0530] "GET /.env HTTP/1.1" 404 365 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:09:37:57 +0530] "GET /js/app.js HTTP/1.1" 200 51563 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:09:52:52 +0530] "GET / HTTP/1.1" 200 19117 "https://www.google.com/" "curl/8.4.0"
+10.0.0.5 - - [16/Nov/2026:09:55:58 +0530] "GET /index.php HTTP/1.1" 200 18396 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:10:06:41 +0530] "GET /images/logo.png HTTP/1.1" 200 16943 "https://example.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.15 - - [16/Nov/2026:10:13:29 +0530] "GET /api/v1/report HTTP/1.1" 500 532 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:10:25:30 +0530] "POST /api/v1/orders HTTP/1.1" 200 3003 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.10 - - [16/Nov/2026:10:30:24 +0530] "GET /admin HTTP/1.1" 403 470 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:10:34:21 +0530] "GET /blog/post-2 HTTP/1.1" 200 43029 "-" "curl/8.4.0"
+192.168.1.10 - - [16/Nov/2026:10:39:12 +0530] "GET /api/v1/users HTTP/1.1" 200 36222 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+10.0.0.5 - - [16/Nov/2026:10:49:29 +0530] "GET /index.php HTTP/1.1" 200 9965 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+203.0.113.99 - - [16/Nov/2026:10:51:22 +0530] "GET /missing.html HTTP/1.1" 404 258 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:11:05:13 +0530] "GET /css/style.css HTTP/1.1" 200 26116 "https://example.com/" "curl/8.4.0"
+192.168.1.15 - - [16/Nov/2026:11:14:34 +0530] "GET /images/logo.png HTTP/1.1" 200 1652 "-" "python-requests/2.31.0"
+172.16.4.8 - - [16/Nov/2026:11:26:32 +0530] "GET /api/v1/users HTTP/1.1" 200 51270 "https://www.google.com/" "python-requests/2.31.0"
+192.168.1.15 - - [16/Nov/2026:11:28:46 +0530] "GET /index.php HTTP/1.1" 200 1112 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.99 - - [16/Nov/2026:11:37:38 +0530] "GET /images/logo.png HTTP/1.1" 200 7873 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:11:52:19 +0530] "GET /css/style.css HTTP/1.1" 200 10916 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+185.220.101.3 - - [16/Nov/2026:12:01:51 +0530] "POST /wp-login.php HTTP/1.1" 200 32921 "-" "sqlmap/1.7.11#stable"
+185.220.101.3 - - [16/Nov/2026:12:04:05 +0530] "GET /admin HTTP/1.1" 403 302 "-" "sqlmap/1.7.11#stable"
+172.16.4.8 - - [16/Nov/2026:12:08:31 +0530] "GET /api/v1/report HTTP/1.1" 500 223 "https://example.com/" "python-requests/2.31.0"
+192.168.1.10 - - [16/Nov/2026:12:22:46 +0530] "GET /api/v1/users HTTP/1.1" 200 51089 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+10.0.0.5 - - [16/Nov/2026:12:34:21 +0530] "GET /images/logo.png HTTP/1.1" 200 18270 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+185.220.101.3 - - [16/Nov/2026:12:38:17 +0530] "GET /.env HTTP/1.1" 404 545 "https://www.google.com/" "sqlmap/1.7.11#stable"
+185.220.101.3 - - [16/Nov/2026:12:45:25 +0530] "GET /xmlrpc.php HTTP/1.1" 403 411 "-" "sqlmap/1.7.11#stable"
+192.168.1.15 - - [16/Nov/2026:12:49:58 +0530] "GET /blog/post-1 HTTP/1.1" 200 39455 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:13:00:20 +0530] "GET / HTTP/1.1" 200 42259 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+172.16.4.8 - - [16/Nov/2026:13:01:49 +0530] "GET /missing.html HTTP/1.1" 404 216 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+203.0.113.7 - - [16/Nov/2026:13:06:54 +0530] "GET /index.php HTTP/1.1" 200 9571 "https://example.com/" "python-requests/2.31.0"
+203.0.113.99 - - [16/Nov/2026:13:11:22 +0530] "POST /api/v1/orders HTTP/1.1" 200 7252 "https://example.com/" "python-requests/2.31.0"
+10.0.0.5 - - [16/Nov/2026:13:17:44 +0530] "GET /wp-admin/ HTTP/1.1" 302 0 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:13:29:33 +0530] "GET /js/app.js HTTP/1.1" 200 4872 "https://www.google.com/" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:13:43:32 +0530] "GET /about.html HTTP/1.1" 200 13365 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:13:46:15 +0530] "GET /about.html HTTP/1.1" 200 17271 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+172.16.4.8 - - [16/Nov/2026:14:00:22 +0530] "GET /images/logo.png HTTP/1.1" 200 4215 "-" "python-requests/2.31.0"
+185.220.101.3 - - [16/Nov/2026:14:02:17 +0530] "GET /.env HTTP/1.1" 404 388 "https://example.com/" "sqlmap/1.7.11#stable"
+192.168.1.15 - - [16/Nov/2026:14:10:49 +0530] "GET /blog/post-2 HTTP/1.1" 200 4742 "https://example.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+185.220.101.3 - - [16/Nov/2026:14:11:11 +0530] "POST /xmlrpc.php HTTP/1.1" 403 536 "https://example.com/" "sqlmap/1.7.11#stable"
+192.168.1.10 - - [16/Nov/2026:14:14:09 +0530] "GET /index.php HTTP/1.1" 200 4732 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:14:27:14 +0530] "GET / HTTP/1.1" 200 32146 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+185.220.101.3 - - [16/Nov/2026:14:28:32 +0530] "GET /.env HTTP/1.1" 404 215 "-" "sqlmap/1.7.11#stable"
+172.16.4.8 - - [16/Nov/2026:14:40:23 +0530] "GET /blog/post-2 HTTP/1.1" 200 38234 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:14:51:17 +0530] "GET /js/app.js HTTP/1.1" 200 37942 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:14:56:04 +0530] "GET /api/v1/users HTTP/1.1" 200 16542 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+203.0.113.7 - - [16/Nov/2026:14:58:38 +0530] "GET /contact.html HTTP/1.1" 200 21620 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+203.0.113.7 - - [16/Nov/2026:15:06:47 +0530] "GET /css/style.css HTTP/1.1" 200 7452 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.15 - - [16/Nov/2026:15:15:45 +0530] "GET /api/v1/report HTTP/1.1" 500 215 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:15:20:56 +0530] "GET /missing.html HTTP/1.1" 404 540 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+45.33.32.156 - - [16/Nov/2026:15:32:39 +0530] "GET /contact.html HTTP/1.1" 200 44375 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:15:37:29 +0530] "GET / HTTP/1.1" 200 37156 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+203.0.113.7 - - [16/Nov/2026:15:42:37 +0530] "GET /api/v1/users HTTP/1.1" 200 14242 "https://www.google.com/" "python-requests/2.31.0"
+10.0.0.23 - - [16/Nov/2026:15:51:34 +0530] "GET /admin HTTP/1.1" 403 206 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.15 - - [16/Nov/2026:16:06:03 +0530] "GET / HTTP/1.1" 200 51436 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+198.51.100.42 - - [16/Nov/2026:16:09:08 +0530] "GET /images/logo.png HTTP/1.1" 200 28928 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:16:11:22 +0530] "GET /.env HTTP/1.1" 404 256 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:16:25:56 +0530] "GET /images/logo.png HTTP/1.1" 200 29066 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+10.0.0.5 - - [16/Nov/2026:16:31:31 +0530] "GET /api/v1/report HTTP/1.1" 500 200 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:16:43:29 +0530] "GET / HTTP/1.1" 200 37592 "-" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:16:47:51 +0530] "GET /xmlrpc.php HTTP/1.1" 403 391 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+185.220.101.3 - - [16/Nov/2026:17:00:45 +0530] "GET /xmlrpc.php HTTP/1.1" 403 556 "-" "sqlmap/1.7.11#stable"
+192.168.1.10 - - [16/Nov/2026:17:05:38 +0530] "GET /api/v1/users HTTP/1.1" 200 25970 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:17:09:45 +0530] "GET /admin HTTP/1.1" 403 359 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.10 - - [16/Nov/2026:17:13:53 +0530] "GET /index.php HTTP/1.1" 200 22412 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:17:27:24 +0530] "GET /js/app.js HTTP/1.1" 200 27093 "https://www.google.com/" "python-requests/2.31.0"
+192.168.1.10 - - [16/Nov/2026:17:28:12 +0530] "POST /xmlrpc.php HTTP/1.1" 403 315 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+10.0.0.5 - - [16/Nov/2026:17:38:42 +0530] "GET /api/v1/users HTTP/1.1" 200 21457 "-" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:17:45:36 +0530] "GET /index.php HTTP/1.1" 200 3808 "https://example.com/" "python-requests/2.31.0"
+10.0.0.23 - - [16/Nov/2026:17:45:57 +0530] "POST /api/v1/orders HTTP/1.1" 200 49524 "-" "python-requests/2.31.0"
+10.0.0.5 - - [16/Nov/2026:17:52:29 +0530] "GET /api/v1/report HTTP/1.1" 500 349 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+45.33.32.156 - - [16/Nov/2026:18:04:08 +0530] "GET /api/v1/users HTTP/1.1" 200 20581 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:18:15:50 +0530] "GET /blog/post-2 HTTP/1.1" 200 20276 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:18:19:26 +0530] "GET /api/v1/report HTTP/1.1" 500 526 "-" "python-requests/2.31.0"</code></pre></div>
+<h3 id="ds-app-conf"><code>app.conf</code></h3>
+<p><strong>Application config file.</strong> KEY=VALUE settings with comments, a commented-out option and blank lines. Practice for reading and editing config with grep and sed.</p>
+<p><strong>Format:</strong> KEY=VALUE lines, <code>#</code> comments · <strong>Lines:</strong> 22</p>
+<div class="table-wrap"><table>
+<tr><th>Field</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>APP_*</code></td><td>Name, environment, debug flag, port</td><td><code>APP_PORT=8080</code></td></tr>
+<tr><td><code>DB_*</code></td><td>Database host, port, name, user, password</td><td><code>DB_HOST=localhost</code></td></tr>
+<tr><td><code>LOG_*</code></td><td>Log level and file (#LOG_ROTATE disabled)</td><td><code>LOG_LEVEL=debug</code></td></tr>
+<tr><td><code>FEATURE_* / MAX_UPLOAD_MB</code></td><td>Feature switches and limits</td><td><code>FEATURE_CACHE=off</code></td></tr>
+</table></div>
+<p><strong>Used by:</strong> <a href="../labs/lab10-wordpress-lamp.html">WordPress on LAMP</a> · <a href="../labs/lab11-backup-retention.html">Backup &amp; retention</a> · <a href="../tools/awk.html">awk, column processing</a> · <a href="../tools/cut-tr.html">cut, tr, paste, wc, head, tail, tee</a> · <a href="../tools/grep.html">grep, search text</a> · <a href="../tools/sed.html">sed, stream editor</a></p>
+<div class="code"><div class="code-head">bash · quick look</div><pre><code class="language-bash">grep -v '^#' datasets/app.conf | grep -v '^$' | cut -d= -f1</code></pre></div>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/app.conf</span></div><pre><code># ===== Application configuration =====
+APP_NAME=inventory-api
+APP_ENV=development
+APP_DEBUG=true
+APP_PORT=8080
+
+# Database
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=inventory
+DB_USER=root
+DB_PASS=changeme
+
+# Logging
+LOG_LEVEL=debug
+LOG_FILE=/var/log/inventory/app.log
+#LOG_ROTATE=daily
+
+# Features
+FEATURE_CACHE=off
+FEATURE_EMAIL=on
+MAX_UPLOAD_MB=10</code></pre></div>
+<h3 id="ds-auth-log"><code>auth.log</code></h3>
+<p><strong>SSH and sudo authentication log.</strong> Syslog lines from <code>sshd</code> and <code>sudo</code> on host web01: failed passwords (brute force from a few IPs), accepted logins and sudo commands.</p>
+<p><strong>Format:</strong> Syslog: <code>Mon DD HH:MM:SS host process[pid]: message</code> · <strong>Lines:</strong> 45</p>
+<div class="table-wrap"><table>
+<tr><th>Field</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>$1 $2 $3</code></td><td>Date and time</td><td><code>Nov 16 01:21:30</code></td></tr>
+<tr><td><code>$4</code></td><td>Host</td><td><code>web01</code></td></tr>
+<tr><td><code>$5</code></td><td>Process[PID]</td><td><code>sshd[6030]:</code></td></tr>
+<tr><td><code>$6…</code></td><td>Message</td><td><code>Failed password for invalid user ubuntu from 185.220.101.3 port 58173 ssh2</code></td></tr>
+</table></div>
+<p><strong>Used by:</strong> <a href="../labs/lab02-menus-colors.html">Interactive menus &amp; colors</a> · <a href="../labs/lab03-remote-execution.html">Remote script execution</a> · <a href="../labs/lab07-email-alerts.html">Automated email alerts</a> · <a href="../labs/lab09-pipes-redirection.html">Pipes &amp; redirection</a> · <a href="../tools/awk.html">awk, column processing</a> · <a href="../tools/find-xargs.html">find &amp; xargs</a> · <a href="../tools/grep.html">grep, search text</a> · <a href="../tools/sort-uniq.html">sort &amp; uniq</a></p>
+<div class="code"><div class="code-head">bash · quick look</div><pre><code class="language-bash">grep -c 'Failed password' datasets/auth.log</code></pre></div>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/auth.log</span></div><pre><code>Nov 16 01:21:30 web01 sshd[6030]: Failed password for invalid user ubuntu from 185.220.101.3 port 58173 ssh2
+Nov 16 01:41:47 web01 sshd[6379]: Failed password for invalid user guest from 91.240.118.172 port 61010 ssh2
+Nov 16 01:48:04 web01 sshd[2489]: Failed password for root from 103.21.244.9 port 45392 ssh2
+Nov 16 02:11:31 web01 sshd[6185]: Failed password for invalid user admin from 45.33.32.156 port 46046 ssh2
+Nov 16 02:28:14 web01 sshd[2293]: Failed password for guest from 45.33.32.156 port 62399 ssh2
+Nov 16 02:42:22 web01 sshd[5097]: Failed password for root from 185.220.101.3 port 44341 ssh2
+Nov 16 02:48:52 web01 sshd[9586]: Failed password for root from 45.33.32.156 port 60450 ssh2
+Nov 16 03:12:09 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 03:32:58 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 03:48:34 web01 sshd[9370]: Failed password for admin from 91.240.118.172 port 61108 ssh2
+Nov 16 04:04:25 web01 sshd[5346]: Accepted publickey for sysadmin from 10.0.0.5 port 45679 ssh2
+Nov 16 04:14:17 web01 sshd[8306]: Failed password for invalid user admin from 103.21.244.9 port 50952 ssh2
+Nov 16 04:33:13 web01 sshd[2420]: Failed password for test from 45.33.32.156 port 44021 ssh2
+Nov 16 04:35:54 web01 sshd[7897]: Failed password for invalid user test from 91.240.118.172 port 57534 ssh2
+Nov 16 04:49:41 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 05:09:50 web01 sshd[7332]: Failed password for ubuntu from 103.21.244.9 port 57460 ssh2
+Nov 16 05:28:42 web01 sshd[4713]: Failed password for test from 103.21.244.9 port 55484 ssh2
+Nov 16 05:40:40 web01 sshd[7724]: Accepted publickey for deploy from 10.0.0.5 port 31767 ssh2
+Nov 16 05:54:36 web01 sshd[1544]: Failed password for admin from 91.240.118.172 port 41909 ssh2
+Nov 16 05:56:48 web01 sshd[5362]: Failed password for invalid user test from 45.33.32.156 port 54846 ssh2
+Nov 16 06:06:47 web01 sshd[8006]: Failed password for invalid user test from 185.220.101.3 port 33413 ssh2
+Nov 16 06:19:13 web01 sshd[4773]: Accepted publickey for deploy from 192.168.1.10 port 46205 ssh2
+Nov 16 06:26:31 web01 sshd[1433]: Accepted publickey for deploy from 192.168.1.10 port 61035 ssh2
+Nov 16 06:49:52 web01 sshd[2974]: Failed password for test from 45.33.32.156 port 54175 ssh2
+Nov 16 06:56:05 web01 sshd[2976]: Accepted publickey for sysadmin from 192.168.1.10 port 37084 ssh2
+Nov 16 07:16:20 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 07:36:29 web01 sshd[7249]: Failed password for root from 45.33.32.156 port 45915 ssh2
+Nov 16 07:40:27 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 08:01:26 web01 sshd[3083]: Accepted publickey for sysadmin from 192.168.1.10 port 64913 ssh2
+Nov 16 08:16:33 web01 sshd[7171]: Failed password for root from 103.21.244.9 port 62125 ssh2
+Nov 16 08:20:39 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 08:42:50 web01 sshd[8632]: Accepted publickey for deploy from 10.0.0.5 port 64193 ssh2
+Nov 16 09:05:32 web01 sshd[5525]: Accepted publickey for sysadmin from 10.0.0.5 port 58545 ssh2
+Nov 16 09:26:15 web01 sshd[5497]: Failed password for invalid user root from 45.33.32.156 port 59543 ssh2
+Nov 16 09:35:04 web01 sshd[8713]: Failed password for invalid user ubuntu from 91.240.118.172 port 51300 ssh2
+Nov 16 09:41:46 web01 sshd[9088]: Failed password for invalid user ubuntu from 103.21.244.9 port 48105 ssh2
+Nov 16 10:01:14 web01 sshd[1266]: Failed password for invalid user root from 45.33.32.156 port 56635 ssh2
+Nov 16 10:18:24 web01 sshd[5037]: Accepted publickey for sysadmin from 10.0.0.5 port 31130 ssh2
+Nov 16 10:22:04 web01 sshd[5920]: Failed password for ubuntu from 45.33.32.156 port 54184 ssh2
+Nov 16 10:38:43 web01 sshd[9798]: Failed password for ubuntu from 103.21.244.9 port 47754 ssh2
+Nov 16 10:49:40 web01 sshd[5218]: Failed password for invalid user ubuntu from 45.33.32.156 port 42133 ssh2
+Nov 16 10:56:42 web01 sshd[4645]: Accepted publickey for sysadmin from 10.0.0.5 port 36588 ssh2
+Nov 16 11:03:49 web01 sshd[5953]: Failed password for invalid user ubuntu from 45.33.32.156 port 38295 ssh2
+Nov 16 11:13:40 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 11:33:03 web01 sshd[5886]: Accepted publickey for sysadmin from 192.168.1.10 port 36723 ssh2</code></pre></div>
+<h3 id="ds-backups-listing-txt"><code>backups_listing.txt</code></h3>
+<p><strong>Backup directory listing.</strong> Output of <code>ls -l</code> on a backup directory: 41 daily WordPress archives (<code>wp_YYYY-MM-DD_0200.tar.gz</code>) from 7 Oct to 16 Nov 2026. Used to practise retention rules (keep N newest, delete older than X days) without real files.</p>
+<p><strong>Format:</strong> <code>ls -l</code> output (first line <code>total …</code>) · <strong>Lines:</strong> 42</p>
+<div class="table-wrap"><table>
+<tr><th>Field</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>$1</code></td><td>Permissions</td><td><code>-rw-r--r--</code></td></tr>
+<tr><td><code>$3 $4</code></td><td>Owner, group</td><td><code>backup backup</code></td></tr>
+<tr><td><code>$5</code></td><td>Size in bytes</td><td><code>49794834</code></td></tr>
+<tr><td><code>$6 $7 $8</code></td><td>Modification date / time</td><td><code>Oct 7 02:00</code></td></tr>
+<tr><td><code>$9</code></td><td>File name with date stamp</td><td><code>wp_2026-10-07_0200.tar.gz</code></td></tr>
+</table></div>
+<p><strong>Used by:</strong> <a href="../labs/lab11-backup-retention.html">Backup &amp; retention</a></p>
+<div class="code"><div class="code-head">bash · quick look</div><pre><code class="language-bash">awk 'NR&gt;1 {print $9}' datasets/backups_listing.txt | sort | tail -3</code></pre></div>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/backups_listing.txt</span></div><pre><code>total 2057947
+-rw-r--r-- 1 backup backup  49794834 Oct  7 02:00 wp_2026-10-07_0200.tar.gz
+-rw-r--r-- 1 backup backup  50875711 Oct  8 02:00 wp_2026-10-08_0200.tar.gz
+-rw-r--r-- 1 backup backup  50266155 Oct  9 02:00 wp_2026-10-09_0200.tar.gz
+-rw-r--r-- 1 backup backup  50330244 Oct 10 02:00 wp_2026-10-10_0200.tar.gz
+-rw-r--r-- 1 backup backup  50980081 Oct 11 02:00 wp_2026-10-11_0200.tar.gz
+-rw-r--r-- 1 backup backup  51827341 Oct 12 02:00 wp_2026-10-12_0200.tar.gz
+-rw-r--r-- 1 backup backup  48673013 Oct 13 02:00 wp_2026-10-13_0200.tar.gz
+-rw-r--r-- 1 backup backup  48809043 Oct 14 02:00 wp_2026-10-14_0200.tar.gz
+-rw-r--r-- 1 backup backup  51734200 Oct 15 02:00 wp_2026-10-15_0200.tar.gz
+-rw-r--r-- 1 backup backup  51610991 Oct 16 02:00 wp_2026-10-16_0200.tar.gz
+-rw-r--r-- 1 backup backup  53083839 Oct 17 02:00 wp_2026-10-17_0200.tar.gz
+-rw-r--r-- 1 backup backup  53130259 Oct 18 02:00 wp_2026-10-18_0200.tar.gz
+-rw-r--r-- 1 backup backup  49721738 Oct 19 02:00 wp_2026-10-19_0200.tar.gz
+-rw-r--r-- 1 backup backup  49129564 Oct 20 02:00 wp_2026-10-20_0200.tar.gz
+-rw-r--r-- 1 backup backup  52266294 Oct 21 02:00 wp_2026-10-21_0200.tar.gz
+-rw-r--r-- 1 backup backup  51245114 Oct 22 02:00 wp_2026-10-22_0200.tar.gz
+-rw-r--r-- 1 backup backup  50069463 Oct 23 02:00 wp_2026-10-23_0200.tar.gz
+-rw-r--r-- 1 backup backup  49820599 Oct 24 02:00 wp_2026-10-24_0200.tar.gz
+-rw-r--r-- 1 backup backup  53758888 Oct 25 02:00 wp_2026-10-25_0200.tar.gz
+-rw-r--r-- 1 backup backup  55236983 Oct 26 02:00 wp_2026-10-26_0200.tar.gz
+-rw-r--r-- 1 backup backup  54922175 Oct 27 02:00 wp_2026-10-27_0200.tar.gz
+-rw-r--r-- 1 backup backup  50131317 Oct 28 02:00 wp_2026-10-28_0200.tar.gz
+-rw-r--r-- 1 backup backup  54954883 Oct 29 02:00 wp_2026-10-29_0200.tar.gz
+-rw-r--r-- 1 backup backup  53463230 Oct 30 02:00 wp_2026-10-30_0200.tar.gz
+-rw-r--r-- 1 backup backup  54119996 Oct 31 02:00 wp_2026-10-31_0200.tar.gz
+-rw-r--r-- 1 backup backup  55985499 Nov  1 02:00 wp_2026-11-01_0200.tar.gz
+-rw-r--r-- 1 backup backup  55843714 Nov  2 02:00 wp_2026-11-02_0200.tar.gz
+-rw-r--r-- 1 backup backup      1024 Nov  3 02:00 wp_2026-11-03_0200.tar.gz
+-rw-r--r-- 1 backup backup  52361156 Nov  4 02:00 wp_2026-11-04_0200.tar.gz
+-rw-r--r-- 1 backup backup  56447180 Nov  5 02:00 wp_2026-11-05_0200.tar.gz
+-rw-r--r-- 1 backup backup  51525835 Nov  6 02:00 wp_2026-11-06_0200.tar.gz
+-rw-r--r-- 1 backup backup  56012383 Nov  7 02:00 wp_2026-11-07_0200.tar.gz
+-rw-r--r-- 1 backup backup  52289865 Nov  8 02:00 wp_2026-11-08_0200.tar.gz
+-rw-r--r-- 1 backup backup  52439550 Nov  9 02:00 wp_2026-11-09_0200.tar.gz
+-rw-r--r-- 1 backup backup  52419077 Nov 10 02:00 wp_2026-11-10_0200.tar.gz
+-rw-r--r-- 1 backup backup  53895582 Nov 11 02:00 wp_2026-11-11_0200.tar.gz
+-rw-r--r-- 1 backup backup  54509565 Nov 12 02:00 wp_2026-11-12_0200.tar.gz
+-rw-r--r-- 1 backup backup  57689961 Nov 13 02:00 wp_2026-11-13_0200.tar.gz
+-rw-r--r-- 1 backup backup  53092351 Nov 14 02:00 wp_2026-11-14_0200.tar.gz
+-rw-r--r-- 1 backup backup  56911764 Nov 15 02:00 wp_2026-11-15_0200.tar.gz
+-rw-r--r-- 1 backup backup  55937147 Nov 16 02:00 wp_2026-11-16_0200.tar.gz</code></pre></div>
+<h3 id="ds-cf-dns-records-json"><code>cf_dns_records.json</code></h3>
+<p><strong>Cloudflare DNS records response.</strong> A saved response of the Cloudflare API v4 <code>GET /zones/:id/dns_records</code> call for example.com, so Lab 05 can be practised offline.</p>
+<p><strong>Format:</strong> Cloudflare v4 envelope: <code>{result: [...], success, errors, messages, result_info}</code> · <strong>Lines:</strong> 165</p>
+<div class="table-wrap"><table>
+<tr><th>Field</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>.result[].id / .zone_id</code></td><td>Record and zone IDs (hex)</td><td><code>&quot;d918b3e5…&quot;</code></td></tr>
+<tr><td><code>.result[].name</code></td><td>FQDN</td><td><code>&quot;www.example.com&quot;</code></td></tr>
+<tr><td><code>.result[].type</code></td><td>A, AAAA, CNAME, MX, TXT …</td><td><code>&quot;A&quot;</code></td></tr>
+<tr><td><code>.result[].content</code></td><td>Value (IP, target …)</td><td><code>&quot;203.0.113.10&quot;</code></td></tr>
+<tr><td><code>.result[].proxied / .ttl</code></td><td>Boolean, seconds (1 = auto)</td><td><code>true, 1</code></td></tr>
+<tr><td><code>.result_info</code></td><td>Paging: page, per_page, count, total_count</td><td><code>{&quot;count&quot;:10,…}</code></td></tr>
+</table></div>
+<p><strong>Used by:</strong> <a href="../labs/lab05-cloudflare-api.html">Cloudflare API</a> · <a href="../tools/grep.html">grep, search text</a> · <a href="../tools/jq.html">jq, JSON processor</a></p>
+<div class="code"><div class="code-head">bash · quick look</div><pre><code class="language-bash">jq -r '.result[] | [.type, .name, .content] | @tsv' datasets/cf_dns_records.json</code></pre></div>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/cf_dns_records.json</span></div><pre><code>{
+  "result": [
+    {
+      "id": "d918b3e5f2f25eef1f45dbfdf7dc67e0",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "example.com",
+      "type": "A",
+      "content": "203.0.113.10",
+      "proxiable": true,
+      "proxied": true,
+      "ttl": 1,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-08-12T08:52:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "98de8ebba3b5cecea446be72364c911a",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "www.example.com",
+      "type": "A",
+      "content": "203.0.113.10",
+      "proxiable": true,
+      "proxied": true,
+      "ttl": 1,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-01-11T08:31:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "c9776598203c8c25fd235def3e5a87e3",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "api.example.com",
+      "type": "A",
+      "content": "203.0.113.20",
+      "proxiable": true,
+      "proxied": true,
+      "ttl": 1,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-04-12T08:58:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "3748967f961d33ba350843f08de08fc2",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "staging.example.com",
+      "type": "A",
+      "content": "198.51.100.5",
+      "proxiable": true,
+      "proxied": false,
+      "ttl": 300,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-06-14T08:48:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "fbe94499dbc080fd46fb7bf300b9d4a3",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "example.com",
+      "type": "AAAA",
+      "content": "2001:db8::10",
+      "proxiable": true,
+      "proxied": true,
+      "ttl": 1,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-03-14T08:44:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "1c24220e2cabd7e7cc6b66e5402adf9c",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "blog.example.com",
+      "type": "CNAME",
+      "content": "example.com",
+      "proxiable": true,
+      "proxied": true,
+      "ttl": 1,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-01-14T08:10:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "3ce915e7c9d6a63bca3c6f5f5bb5c40c",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "shop.example.com",
+      "type": "CNAME",
+      "content": "shops.myshopify.com",
+      "proxiable": true,
+      "proxied": false,
+      "ttl": 3600,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-01-15T08:26:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "6bc4123ebde13c1b20733f6d0d6a05b3",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "example.com",
+      "type": "MX",
+      "content": "mail.example.com",
+      "proxiable": false,
+      "proxied": false,
+      "ttl": 300,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-02-25T08:38:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z",
+      "priority": 10
+    },
+    {
+      "id": "97fa7f04836390075cae9610c72c1fe3",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "example.com",
+      "type": "TXT",
+      "content": "v=spf1 include:_spf.google.com ~all",
+      "proxiable": false,
+      "proxied": false,
+      "ttl": 300,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-08-26T08:24:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "ba2c98ce0b19f88e9d77a45ef206c269",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "vpn.example.com",
+      "type": "A",
+      "content": "198.51.100.77",
+      "proxiable": true,
+      "proxied": false,
+      "ttl": 3600,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-08-10T08:13:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    }
+  ],
+  "success": true,
+  "errors": [],
+  "messages": [],
+  "result_info": {
+    "page": 1,
+    "per_page": 100,
+    "count": 10,
+    "total_count": 10,
+    "total_pages": 1
+  }
+}</code></pre></div>
+<h3 id="ds-cf-error-json"><code>cf_error.json</code></h3>
+<p><strong>Cloudflare error response.</strong> What the API returns when a request fails (here: creating a duplicate record). Used to practise checking <code>.success</code> and printing <code>.errors[].message</code>.</p>
+<p><strong>Format:</strong> Cloudflare v4 envelope with <code>success: false</code> · <strong>Lines:</strong> 11</p>
+<div class="table-wrap"><table>
+<tr><th>Field</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>.success</code></td><td>false on failure</td><td><code>false</code></td></tr>
+<tr><td><code>.result</code></td><td>null on failure</td><td><code>null</code></td></tr>
+<tr><td><code>.errors[].code / .message</code></td><td>Error code and text</td><td><code>81058, &quot;An identical record already exists.&quot;</code></td></tr>
+</table></div>
+<p><strong>Used by:</strong> <a href="../labs/lab05-cloudflare-api.html">Cloudflare API</a></p>
+<div class="code"><div class="code-head">bash · quick look</div><pre><code class="language-bash">jq -r 'if .success then "ok" else .errors[].message end' datasets/cf_error.json</code></pre></div>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/cf_error.json</span></div><pre><code>{
+  "result": null,
+  "success": false,
+  "errors": [
+    {
+      "code": 81058,
+      "message": "An identical record already exists."
+    }
+  ],
+  "messages": []
+}</code></pre></div>
+<h3 id="ds-cf-zones-json"><code>cf_zones.json</code></h3>
+<p><strong>Cloudflare zones response.</strong> Saved response of <code>GET /zones</code>: three zones with their IDs, status, plan and name servers. Used to look up a zone ID by name.</p>
+<p><strong>Format:</strong> Cloudflare v4 envelope · <strong>Lines:</strong> 47</p>
+<div class="table-wrap"><table>
+<tr><th>Field</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>.result[].id</code></td><td>Zone ID</td><td><code>&quot;023e105f…&quot;</code></td></tr>
+<tr><td><code>.result[].name</code></td><td>Domain</td><td><code>&quot;example.com&quot;</code></td></tr>
+<tr><td><code>.result[].status / .paused / .type</code></td><td>Zone state</td><td></td></tr>
+<tr><td><code>.result[].name_servers</code></td><td>Array of assigned name servers</td><td></td></tr>
+<tr><td><code>.result[].plan / .account</code></td><td>Nested objects</td><td></td></tr>
+</table></div>
+<p><strong>Used by:</strong> <a href="../labs/lab05-cloudflare-api.html">Cloudflare API</a></p>
+<div class="code"><div class="code-head">bash · quick look</div><pre><code class="language-bash">jq -r '.result[] | "\(.id) \(.name)"' datasets/cf_zones.json</code></pre></div>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/cf_zones.json</span></div><pre><code>{
+  "result": [
+    {
+      "id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "name": "example.com",
+      "status": "active",
+      "paused": false,
+      "type": "full",
+      "name_servers": [
+        "ada.ns.cloudflare.com",
+        "bob.ns.cloudflare.com"
+      ],
+      "plan": { "name": "Free Website" },
+      "account": { "id": "0123456789abcdef0123456789abcdef", "name": "Student Lab Account" }
+    },
+    {
+      "id": "353c0d2a7183ac9dc8fae4cef5e301e3",
+      "name": "example.org",
+      "status": "active",
+      "paused": false,
+      "type": "full",
+      "name_servers": [
+        "ada.ns.cloudflare.com",
+        "bob.ns.cloudflare.com"
+      ],
+      "plan": { "name": "Pro Website" },
+      "account": { "id": "0123456789abcdef0123456789abcdef", "name": "Student Lab Account" }
+    },
+    {
+      "id": "7d1c4a1b2f9e43c3a2b8d6e5f4a3b2c1",
+      "name": "example.net",
+      "status": "pending",
+      "paused": false,
+      "type": "full",
+      "name_servers": [
+        "kim.ns.cloudflare.com",
+        "lee.ns.cloudflare.com"
+      ],
+      "plan": { "name": "Free Website" },
+      "account": { "id": "0123456789abcdef0123456789abcdef", "name": "Student Lab Account" }
+    }
+  ],
+  "result_info": { "page": 1, "per_page": 20, "count": 3, "total_count": 3, "total_pages": 1 },
+  "success": true,
+  "errors": [],
+  "messages": []
+}</code></pre></div>
+<h3 id="ds-df-txt"><code>df.txt</code></h3>
+<p><strong>Disk usage snapshot.</strong> Saved output of <code>df -h</code> with six filesystems, two of them above 90% used. Lets you test disk alerts without filling a disk.</p>
+<p><strong>Format:</strong> <code>df -h</code> text: header line + aligned columns, human sizes · <strong>Lines:</strong> 7</p>
+<div class="table-wrap"><table>
+<tr><th>Field</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>$1</code></td><td>Filesystem</td><td><code>/dev/sda1</code></td></tr>
+<tr><td><code>$2 $3 $4</code></td><td>Size, Used, Avail (K/M/G/T)</td><td><code>50G 41G 6.5G</code></td></tr>
+<tr><td><code>$5</code></td><td>Use% (with % sign)</td><td><code>87%</code></td></tr>
+<tr><td><code>$6</code></td><td>Mount point</td><td><code>/</code></td></tr>
+</table></div>
+<p><strong>Used by:</strong> <a href="../labs/lab02-menus-colors.html">Interactive menus &amp; colors</a> · <a href="../labs/lab07-email-alerts.html">Automated email alerts</a> · <a href="../labs/lab09-pipes-redirection.html">Pipes &amp; redirection</a> · <a href="../labs/lab11-backup-retention.html">Backup &amp; retention</a> · <a href="../labs/lab12-service-health.html">Service health monitoring</a> · <a href="../tools/awk.html">awk, column processing</a> · <a href="../tools/cut-tr.html">cut, tr, paste, wc, head, tail, tee</a> · <a href="../tools/sed.html">sed, stream editor</a> · <a href="../tools/sort-uniq.html">sort &amp; uniq</a></p>
+<div class="code"><div class="code-head">bash · quick look</div><pre><code class="language-bash">awk 'NR&gt;1 &amp;&amp; $5+0 &gt;= 90 {print $6, $5}' datasets/df.txt</code></pre></div>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/df.txt</span></div><pre><code>Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1        50G   41G  6.5G  87% /
+/dev/sda2       200G  120G   70G  64% /var
+/dev/sdb1       500G  478G   22G  96% /backup
+tmpfs           3.9G  1.2M  3.9G   1% /run
+/dev/sdc1       100G   12G   83G  13% /home
+/dev/nvme0n1p1  1.0T  910G   90G  92% /data</code></pre></div>
+<h3 id="ds-employees-csv"><code>employees.csv</code></h3>
+<p><strong>Employee records.</strong> 25 employees across 5 departments and 6 cities. Clean CSV, no quoting, one header line.</p>
+<p><strong>Format:</strong> CSV with header · <strong>Lines:</strong> 26</p>
+<div class="table-wrap"><table>
+<tr><th>Field</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>id</code></td><td>Employee number</td><td><code>101</code></td></tr>
+<tr><td><code>name</code></td><td>Full name</td><td><code>Aarav Kapoor</code></td></tr>
+<tr><td><code>department</code></td><td>Engineering, Sales, Finance, HR, Support</td><td><code>Engineering</code></td></tr>
+<tr><td><code>city</code></td><td>Office city</td><td><code>Delhi</code></td></tr>
+<tr><td><code>salary</code></td><td>Annual salary (INR, integer)</td><td><code>110000</code></td></tr>
+<tr><td><code>join_date</code></td><td>ISO date YYYY-MM-DD</td><td><code>2023-08-11</code></td></tr>
+</table></div>
+<p><strong>Used by:</strong> <a href="../labs/lab01-multi-function.html">Multi-function scripting</a> · <a href="../labs/lab02-menus-colors.html">Interactive menus &amp; colors</a> · <a href="../labs/lab08-password-generation.html">Password generation</a> · <a href="../labs/lab09-pipes-redirection.html">Pipes &amp; redirection</a> · <a href="../tools/awk.html">awk, column processing</a> · <a href="../tools/cut-tr.html">cut, tr, paste, wc, head, tail, tee</a> · <a href="../tools/sed.html">sed, stream editor</a> · <a href="../tools/sort-uniq.html">sort &amp; uniq</a></p>
+<div class="code"><div class="code-head">bash · quick look</div><pre><code class="language-bash">tail -n +2 datasets/employees.csv | sort -t, -k5,5nr | head -3</code></pre></div>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/employees.csv</span></div><pre><code>id,name,department,city,salary,join_date
+101,Aarav Kapoor,Engineering,Delhi,110000,2023-08-11
+102,Priya Sharma,Engineering,Delhi,135000,2023-02-27
+103,Rohan Mehta,Engineering,Mumbai,84000,2025-11-22
+104,Ananya Iyer,Engineering,Pune,131000,2025-05-03
+105,Vikram Verma,Sales,Hyderabad,93000,2022-10-20
+106,Sneha Joshi,Sales,Mumbai,73000,2023-05-28
+107,Arjun Nair,Finance,Hyderabad,94000,2016-10-24
+108,Kavya Gupta,Engineering,Chennai,93000,2020-11-03
+109,Rahul Gupta,Engineering,Pune,115000,2017-03-01
+110,Isha Das,Finance,Chennai,93000,2023-05-02
+111,Karan Nair,Sales,Chennai,63000,2023-02-22
+112,Meera Nair,Sales,Chennai,82000,2019-07-04
+113,Aditya Singh,Sales,Pune,62000,2018-02-02
+114,Pooja Nair,Engineering,Hyderabad,127000,2025-05-15
+115,Nikhil Das,Engineering,Chennai,99000,2022-05-17
+116,Riya Das,Support,Bengaluru,65000,2016-07-24
+117,Sanjay Kapoor,HR,Delhi,38000,2017-04-22
+118,Divya Singh,Engineering,Delhi,116000,2016-03-16
+119,Manish Nair,Support,Pune,64000,2022-11-27
+120,Neha Verma,Support,Mumbai,49000,2022-06-11
+121,Yash Iyer,Engineering,Delhi,106000,2023-05-22
+122,Tanvi Joshi,Finance,Bengaluru,84000,2017-06-09
+123,Harsh Verma,HR,Mumbai,92000,2024-01-22
+124,Simran Mehta,Support,Bengaluru,39000,2024-06-20
+125,Kunal Singh,Support,Mumbai,75000,2016-04-09</code></pre></div>
+<h3 id="ds-employees-v2-csv"><code>employees_v2.csv</code></h3>
+<p><strong>Employee records, later version.</strong> A modified copy of <code>employees.csv</code> (employee 117 left, 126 and 127 joined, 103 got a raise, 120 moved city) for practising <code>diff</code>, <code>comm</code> and change detection.</p>
+<p><strong>Format:</strong> CSV with header (same columns as employees.csv) · <strong>Lines:</strong> 27</p>
+<div class="table-wrap"><table>
+<tr><th>Field</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>id … join_date</code></td><td>Same six columns as employees.csv</td><td><code>103,Rohan Mehta,…,90000,…</code></td></tr>
+</table></div>
+<p><strong>Used by:</strong> <a href="../labs/lab09-pipes-redirection.html">Pipes &amp; redirection</a></p>
+<div class="code"><div class="code-head">bash · quick look</div><pre><code class="language-bash">diff datasets/employees.csv datasets/employees_v2.csv</code></pre></div>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/employees_v2.csv</span></div><pre><code>id,name,department,city,salary,join_date
+101,Aarav Kapoor,Engineering,Delhi,110000,2023-08-11
+102,Priya Sharma,Engineering,Delhi,135000,2023-02-27
+103,Rohan Mehta,Engineering,Mumbai,90000,2025-11-22
+104,Ananya Iyer,Engineering,Pune,131000,2025-05-03
+105,Vikram Verma,Sales,Hyderabad,93000,2022-10-20
+106,Sneha Joshi,Sales,Mumbai,73000,2023-05-28
+107,Arjun Nair,Finance,Hyderabad,94000,2016-10-24
+108,Kavya Gupta,Engineering,Chennai,93000,2020-11-03
+109,Rahul Gupta,Engineering,Pune,115000,2017-03-01
+110,Isha Das,Finance,Chennai,93000,2023-05-02
+111,Karan Nair,Sales,Chennai,63000,2023-02-22
+112,Meera Nair,Sales,Chennai,82000,2019-07-04
+113,Aditya Singh,Sales,Pune,62000,2018-02-02
+114,Pooja Nair,Engineering,Hyderabad,127000,2025-05-15
+115,Nikhil Das,Engineering,Chennai,99000,2022-05-17
+116,Riya Das,Support,Bengaluru,65000,2016-07-24
+118,Divya Singh,Engineering,Delhi,116000,2016-03-16
+119,Manish Nair,Support,Pune,64000,2022-11-27
+120,Neha Verma,Support,Pune,49000,2022-06-11
+121,Yash Iyer,Engineering,Delhi,106000,2023-05-22
+122,Tanvi Joshi,Finance,Bengaluru,84000,2017-06-09
+123,Harsh Verma,HR,Mumbai,92000,2024-01-22
+124,Simran Mehta,Support,Bengaluru,39000,2024-06-20
+125,Kunal Singh,Support,Mumbai,75000,2016-04-09
+126,Farhan Ali,Engineering,Bengaluru,98000,2026-11-02
+127,Lata Rao,Finance,Delhi,88000,2026-11-09</code></pre></div>
+<h3 id="ds-sales-csv"><code>sales.csv</code></h3>
+<p><strong>Daily sales.</strong> Sales lines for 1–10 Nov 2026 by region and product. Revenue is units × unit_price, a classic awk aggregation exercise.</p>
+<p><strong>Format:</strong> CSV with header · <strong>Lines:</strong> 31</p>
+<div class="table-wrap"><table>
+<tr><th>Field</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>date</code></td><td>ISO date</td><td><code>2026-11-01</code></td></tr>
+<tr><td><code>region</code></td><td>North, South, East, West</td><td><code>South</code></td></tr>
+<tr><td><code>product</code></td><td>Laptop, Monitor, Keyboard, Mouse, Headset</td><td><code>Headset</code></td></tr>
+<tr><td><code>units</code></td><td>Quantity sold</td><td><code>10</code></td></tr>
+<tr><td><code>unit_price</code></td><td>Price per unit (INR)</td><td><code>3500</code></td></tr>
+</table></div>
+<p><strong>Used by:</strong> <a href="../labs/lab02-menus-colors.html">Interactive menus &amp; colors</a> · <a href="../tools/awk.html">awk, column processing</a> · <a href="../tools/cut-tr.html">cut, tr, paste, wc, head, tail, tee</a></p>
+<div class="code"><div class="code-head">bash · quick look</div><pre><code class="language-bash">awk -F, 'NR&gt;1 {rev[$2]+=$4*$5} END {for (r in rev) print r, rev[r]}' datasets/sales.csv</code></pre></div>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/sales.csv</span></div><pre><code>date,region,product,units,unit_price
+2026-11-01,South,Headset,10,3500
+2026-11-01,West,Mouse,4,800
+2026-11-01,South,Laptop,6,55000
+2026-11-02,North,Keyboard,18,1500
+2026-11-02,North,Mouse,8,800
+2026-11-02,West,Laptop,4,55000
+2026-11-03,West,Monitor,10,12000
+2026-11-03,East,Headset,14,3500
+2026-11-03,West,Mouse,8,800
+2026-11-04,South,Mouse,13,800
+2026-11-04,South,Monitor,3,12000
+2026-11-04,West,Keyboard,11,1500
+2026-11-05,East,Headset,1,3500
+2026-11-05,East,Keyboard,19,1500
+2026-11-05,West,Headset,5,3500
+2026-11-06,West,Mouse,12,800
+2026-11-06,West,Keyboard,15,1500
+2026-11-06,South,Keyboard,8,1500
+2026-11-07,West,Headset,8,3500
+2026-11-07,North,Mouse,11,800
+2026-11-07,West,Mouse,13,800
+2026-11-08,West,Monitor,2,12000
+2026-11-08,East,Monitor,4,12000
+2026-11-08,North,Mouse,17,800
+2026-11-09,North,Mouse,5,800
+2026-11-09,South,Mouse,3,800
+2026-11-09,East,Mouse,11,800
+2026-11-10,West,Headset,3,3500
+2026-11-10,West,Keyboard,11,1500
+2026-11-10,North,Mouse,20,800</code></pre></div>
+<h3 id="ds-servers-json"><code>servers.json</code></h3>
+<p><strong>Server inventory with metrics.</strong> Eight servers in one data centre with role, OS, CPU/memory/disk usage, status and tags. Used for jq reports and health thresholds.</p>
+<p><strong>Format:</strong> JSON object: <code>{generated, datacenter, servers: [...]}</code> · <strong>Lines:</strong> 118</p>
+<div class="table-wrap"><table>
+<tr><th>Field</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>.generated / .datacenter</code></td><td>Snapshot time, location</td><td><code>&quot;blr-1&quot;</code></td></tr>
+<tr><td><code>.servers[].hostname / .ip</code></td><td>Strings</td><td><code>&quot;web01&quot;</code></td></tr>
+<tr><td><code>.servers[].role</code></td><td>web, database, cache, loadbalancer, monitoring</td><td><code>&quot;web&quot;</code></td></tr>
+<tr><td><code>.servers[].os</code></td><td>String</td><td><code>&quot;Ubuntu 22.04&quot;</code></td></tr>
+<tr><td><code>.servers[].cpu_pct / .mem_pct / .disk_pct</code></td><td>Numbers 0–100</td><td><code>52</code></td></tr>
+<tr><td><code>.servers[].status</code></td><td>running, degraded or stopped</td><td><code>&quot;running&quot;</code></td></tr>
+<tr><td><code>.servers[].tags</code></td><td>Array</td><td><code>[&quot;prod&quot;,&quot;critical&quot;]</code></td></tr>
+</table></div>
+<p><strong>Used by:</strong> <a href="../labs/lab04-json-jq.html">JSON with jq</a> · <a href="../labs/lab11-backup-retention.html">Backup &amp; retention</a> · <a href="../labs/lab12-service-health.html">Service health monitoring</a> · <a href="../tools/grep.html">grep, search text</a> · <a href="../tools/jq.html">jq, JSON processor</a> · <a href="../tools/sort-uniq.html">sort &amp; uniq</a></p>
+<div class="code"><div class="code-head">bash · quick look</div><pre><code class="language-bash">jq -r '.servers[] | select(.disk_pct &gt; 80) | .hostname' datasets/servers.json</code></pre></div>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/servers.json</span></div><pre><code>{
+  "generated": "2026-11-16T10:00:00Z",
+  "datacenter": "blr-1",
+  "servers": [
+    {
+      "hostname": "web01",
+      "ip": "10.0.1.11",
+      "role": "web",
+      "os": "Ubuntu 22.04",
+      "cpu_pct": 52,
+      "mem_pct": 53,
+      "disk_pct": 78,
+      "status": "running",
+      "tags": [
+        "prod",
+        "critical"
+      ]
+    },
+    {
+      "hostname": "web02",
+      "ip": "10.0.1.12",
+      "role": "web",
+      "os": "Ubuntu 22.04",
+      "cpu_pct": 8,
+      "mem_pct": 91,
+      "disk_pct": 71,
+      "status": "stopped",
+      "tags": [
+        "critical",
+        "prod"
+      ]
+    },
+    {
+      "hostname": "web03",
+      "ip": "10.0.1.13",
+      "role": "web",
+      "os": "Rocky 9",
+      "cpu_pct": 64,
+      "mem_pct": 58,
+      "disk_pct": 82,
+      "status": "running",
+      "tags": [
+        "critical",
+        "prod"
+      ]
+    },
+    {
+      "hostname": "db01",
+      "ip": "10.0.1.14",
+      "role": "database",
+      "os": "Ubuntu 24.04",
+      "cpu_pct": 43,
+      "mem_pct": 83,
+      "disk_pct": 44,
+      "status": "running",
+      "tags": [
+        "critical",
+        "internal"
+      ]
+    },
+    {
+      "hostname": "db02",
+      "ip": "10.0.1.15",
+      "role": "database",
+      "os": "Ubuntu 22.04",
+      "cpu_pct": 63,
+      "mem_pct": 67,
+      "disk_pct": 83,
+      "status": "stopped",
+      "tags": [
+        "critical",
+        "public"
+      ]
+    },
+    {
+      "hostname": "cache01",
+      "ip": "10.0.1.16",
+      "role": "cache",
+      "os": "Rocky 9",
+      "cpu_pct": 17,
+      "mem_pct": 82,
+      "disk_pct": 82,
+      "status": "running",
+      "tags": [
+        "prod",
+        "backup"
+      ]
+    },
+    {
+      "hostname": "lb01",
+      "ip": "10.0.1.17",
+      "role": "loadbalancer",
+      "os": "Ubuntu 24.04",
+      "cpu_pct": 61,
+      "mem_pct": 76,
+      "disk_pct": 60,
+      "status": "running",
+      "tags": [
+        "prod",
+        "backup"
+      ]
+    },
+    {
+      "hostname": "mon01",
+      "ip": "10.0.1.18",
+      "role": "monitoring",
+      "os": "Rocky 9",
+      "cpu_pct": 87,
+      "mem_pct": 65,
+      "disk_pct": 37,
+      "status": "degraded",
+      "tags": [
+        "backup",
+        "critical"
+      ]
+    }
+  ]
+}</code></pre></div>
+<h3 id="ds-servers-txt"><code>servers.txt</code></h3>
+<p><strong>SSH host inventory.</strong> Five hosts with IP, SSH user and role, aligned with spaces. A comment header line starts with <code>#</code>. Read in loops for remote execution.</p>
+<p><strong>Format:</strong> Whitespace-separated columns, <code>#</code> comment line · <strong>Lines:</strong> 6</p>
+<div class="table-wrap"><table>
+<tr><th>Field</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>1</code></td><td>hostname</td><td><code>web01</code></td></tr>
+<tr><td><code>2</code></td><td>IP address</td><td><code>10.0.1.11</code></td></tr>
+<tr><td><code>3</code></td><td>SSH user</td><td><code>deploy</code></td></tr>
+<tr><td><code>4</code></td><td>Role</td><td><code>web</code></td></tr>
+</table></div>
+<p><strong>Used by:</strong> <a href="../labs/lab01-multi-function.html">Multi-function scripting</a> · <a href="../labs/lab02-menus-colors.html">Interactive menus &amp; colors</a> · <a href="../labs/lab03-remote-execution.html">Remote script execution</a> · <a href="../labs/lab09-pipes-redirection.html">Pipes &amp; redirection</a> · <a href="../labs/lab11-backup-retention.html">Backup &amp; retention</a> · <a href="../tools/cut-tr.html">cut, tr, paste, wc, head, tail, tee</a> · <a href="../tools/sort-uniq.html">sort &amp; uniq</a></p>
+<div class="code"><div class="code-head">bash · quick look</div><pre><code class="language-bash">grep -v '^#' datasets/servers.txt | while read -r host ip user role; do echo "$user@$ip"; done</code></pre></div>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/servers.txt</span></div><pre><code># hostname        ip            user     role
+web01             10.0.1.11     deploy   web
+web02             10.0.1.12     deploy   web
+db01              10.0.1.14     dbadmin  database
+cache01           10.0.1.16     deploy   cache
+mon01             10.0.1.18     ops      monitoring</code></pre></div>
+<h3 id="ds-services-txt"><code>services.txt</code></h3>
+<p><strong>Service check definitions.</strong> What to monitor: systemd units, HTTP endpoints and TCP ports, each with the expected result. Drives the health-check scripts.</p>
+<p><strong>Format:</strong> Whitespace-separated columns, <code>#</code> comment line · <strong>Lines:</strong> 9</p>
+<div class="table-wrap"><table>
+<tr><th>Field</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>1</code></td><td>Service name</td><td><code>nginx</code></td></tr>
+<tr><td><code>2</code></td><td>Check type: systemd, http, port</td><td><code>http</code></td></tr>
+<tr><td><code>3</code></td><td>Target: unit name, URL or host:port</td><td><code>https://example.com</code></td></tr>
+<tr><td><code>4</code></td><td>Expected: active, HTTP code or open</td><td><code>200</code></td></tr>
+</table></div>
+<p><strong>Used by:</strong> <a href="../labs/lab11-backup-retention.html">Backup &amp; retention</a> · <a href="../labs/lab12-service-health.html">Service health monitoring</a> · <a href="../tools/curl.html">curl, HTTP from the shell</a></p>
+<div class="code"><div class="code-head">bash · quick look</div><pre><code class="language-bash">awk '$2 == "http" {print $1, $3}' datasets/services.txt</code></pre></div>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/services.txt</span></div><pre><code># service     type     target                        expect
+nginx         systemd  nginx                         active
+mysql         systemd  mysql                         active
+php-fpm       systemd  php8.3-fpm                    active
+redis         systemd  redis-server                  active
+website       http     https://example.com           200
+api-health    http     https://api.example.com/health 200
+ssh           port     127.0.0.1:22                  open
+mysql-port    port     127.0.0.1:3306                open</code></pre></div>
+<h3 id="ds-tags-txt"><code>tags.txt</code></h3>
+<p><strong>Tag list with duplicates.</strong> Fifty technology tags, one per line, nine distinct values. The classic input for <code>sort | uniq -c</code>.</p>
+<p><strong>Format:</strong> One word per line · <strong>Lines:</strong> 50</p>
+<div class="table-wrap"><table>
+<tr><th>Field</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>line</code></td><td>A tag: docker, linux, nginx, bash, mysql, git, python, redis, postgres</td><td><code>docker</code></td></tr>
+</table></div>
+<p><strong>Used by:</strong> <a href="../labs/lab02-menus-colors.html">Interactive menus &amp; colors</a> · <a href="../tools/cut-tr.html">cut, tr, paste, wc, head, tail, tee</a> · <a href="../tools/sort-uniq.html">sort &amp; uniq</a></p>
+<div class="code"><div class="code-head">bash · quick look</div><pre><code class="language-bash">sort datasets/tags.txt | uniq -c | sort -rn | head -3</code></pre></div>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/tags.txt</span></div><pre><code>postgres
+linux
+docker
+nginx
+bash
+docker
+git
+mysql
+nginx
+nginx
+bash
+python
+bash
+redis
+bash
+mysql
+docker
+docker
+linux
+nginx
+bash
+linux
+python
+linux
+docker
+linux
+docker
+linux
+docker
+bash
+mysql
+mysql
+mysql
+git
+bash
+docker
+nginx
+nginx
+docker
+linux
+redis
+nginx
+nginx
+git
+python
+bash
+docker
+linux
+git
+docker</code></pre></div>
+<h3 id="ds-users-json"><code>users.json</code></h3>
+<p><strong>User accounts (JSON array).</strong> Twelve user objects with nested address, a roles array, booleans and timestamps. The main input of the jq tutorial and Lab 04.</p>
+<p><strong>Format:</strong> JSON array of objects · <strong>Lines:</strong> 199</p>
+<div class="table-wrap"><table>
+<tr><th>Field</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>.id</code></td><td>Number</td><td><code>1</code></td></tr>
+<tr><td><code>.username / .name / .email</code></td><td>Strings</td><td><code>&quot;averma&quot;</code></td></tr>
+<tr><td><code>.active</code></td><td>Boolean</td><td><code>false</code></td></tr>
+<tr><td><code>.roles</code></td><td>Array of strings</td><td><code>[&quot;admin&quot;,&quot;editor&quot;]</code></td></tr>
+<tr><td><code>.address.city / .address.pincode</code></td><td>Nested object</td><td><code>&quot;Mumbai&quot;</code></td></tr>
+<tr><td><code>.last_login</code></td><td>ISO-8601 time stamp</td><td><code>&quot;2026-11-04T14:10:00Z&quot;</code></td></tr>
+<tr><td><code>.storage_mb</code></td><td>Number</td><td><code>2503</code></td></tr>
+</table></div>
+<p><strong>Used by:</strong> <a href="../labs/lab04-json-jq.html">JSON with jq</a> · <a href="../tools/grep.html">grep, search text</a> · <a href="../tools/jq.html">jq, JSON processor</a></p>
+<div class="code"><div class="code-head">bash · quick look</div><pre><code class="language-bash">jq -r '.[] | select(.active) | .username' datasets/users.json</code></pre></div>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/users.json</span></div><pre><code>[
+  {
+    "id": 1,
+    "username": "averma",
+    "name": "Aarav Verma",
+    "email": "aarav.verma@example.com",
+    "active": false,
+    "roles": [
+      "admin",
+      "editor"
+    ],
+    "address": {
+      "city": "Mumbai",
+      "pincode": "425807"
+    },
+    "last_login": "2026-11-04T14:10:00Z",
+    "storage_mb": 2503
+  },
+  {
+    "id": 2,
+    "username": "psharma",
+    "name": "Priya Sharma",
+    "email": "priya.sharma@example.com",
+    "active": false,
+    "roles": [
+      "viewer"
+    ],
+    "address": {
+      "city": "Delhi",
+      "pincode": "498263"
+    },
+    "last_login": "2026-11-14T04:15:00Z",
+    "storage_mb": 4401
+  },
+  {
+    "id": 3,
+    "username": "rmehta",
+    "name": "Rohan Mehta",
+    "email": "rohan.mehta@example.com",
+    "active": true,
+    "roles": [
+      "editor"
+    ],
+    "address": {
+      "city": "Pune",
+      "pincode": "420702"
+    },
+    "last_login": "2026-11-13T19:43:00Z",
+    "storage_mb": 2022
+  },
+  {
+    "id": 4,
+    "username": "adas",
+    "name": "Ananya Das",
+    "email": "ananya.das@example.com",
+    "active": true,
+    "roles": [
+      "editor"
+    ],
+    "address": {
+      "city": "Mumbai",
+      "pincode": "567223"
+    },
+    "last_login": "2026-11-09T14:16:00Z",
+    "storage_mb": 126
+  },
+  {
+    "id": 5,
+    "username": "vdas",
+    "name": "Vikram Das",
+    "email": "vikram.das@example.com",
+    "active": true,
+    "roles": [
+      "admin"
+    ],
+    "address": {
+      "city": "Mumbai",
+      "pincode": "490588"
+    },
+    "last_login": "2026-11-10T20:27:00Z",
+    "storage_mb": 2098
+  },
+  {
+    "id": 6,
+    "username": "sdas",
+    "name": "Sneha Das",
+    "email": "sneha.das@example.com",
+    "active": true,
+    "roles": [
+      "devops"
+    ],
+    "address": {
+      "city": "Mumbai",
+      "pincode": "427959"
+    },
+    "last_login": "2026-11-08T12:36:00Z",
+    "storage_mb": 2990
+  },
+  {
+    "id": 7,
+    "username": "akapoor",
+    "name": "Arjun Kapoor",
+    "email": "arjun.kapoor@example.com",
+    "active": true,
+    "roles": [
+      "admin",
+      "devops"
+    ],
+    "address": {
+      "city": "Delhi",
+      "pincode": "402123"
+    },
+    "last_login": "2026-11-02T19:47:00Z",
+    "storage_mb": 4119
+  },
+  {
+    "id": 8,
+    "username": "knair",
+    "name": "Kavya Nair",
+    "email": "kavya.nair@example.com",
+    "active": true,
+    "roles": [
+      "billing"
+    ],
+    "address": {
+      "city": "Delhi",
+      "pincode": "457411"
+    },
+    "last_login": "2026-11-07T19:16:00Z",
+    "storage_mb": 1170
+  },
+  {
+    "id": 9,
+    "username": "rsingh",
+    "name": "Rahul Singh",
+    "email": "rahul.singh@example.com",
+    "active": false,
+    "roles": [
+      "viewer"
+    ],
+    "address": {
+      "city": "Mumbai",
+      "pincode": "408747"
+    },
+    "last_login": "2026-11-12T23:08:00Z",
+    "storage_mb": 788
+  },
+  {
+    "id": 10,
+    "username": "inair",
+    "name": "Isha Nair",
+    "email": "isha.nair@example.com",
+    "active": true,
+    "roles": [
+      "billing",
+      "editor"
+    ],
+    "address": {
+      "city": "Pune",
+      "pincode": "541403"
+    },
+    "last_login": "2026-11-12T16:32:00Z",
+    "storage_mb": 2282
+  },
+  {
+    "id": 11,
+    "username": "kiyer",
+    "name": "Karan Iyer",
+    "email": "karan.iyer@example.com",
+    "active": true,
+    "roles": [
+      "billing",
+      "viewer"
+    ],
+    "address": {
+      "city": "Bengaluru",
+      "pincode": "522771"
+    },
+    "last_login": "2026-11-03T04:48:00Z",
+    "storage_mb": 1898
+  },
+  {
+    "id": 12,
+    "username": "msingh",
+    "name": "Meera Singh",
+    "email": "meera.singh@example.com",
+    "active": true,
+    "roles": [
+      "billing",
+      "viewer"
+    ],
+    "address": {
+      "city": "Bengaluru",
+      "pincode": "503436"
+    },
+    "last_login": "2026-11-01T08:34:00Z",
+    "storage_mb": 1062
+  }
+]</code></pre></div>
+<h3 id="ds-wordlist-txt"><code>wordlist.txt</code></h3>
+<p><strong>Word list for passphrases.</strong> 256 short lowercase English words, one per line, for generating diceware-style passphrases.</p>
+<p><strong>Format:</strong> One word per line · <strong>Lines:</strong> 256</p>
+<div class="table-wrap"><table>
+<tr><th>Field</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>line</code></td><td>A lowercase word</td><td><code>acorn</code></td></tr>
+</table></div>
+<p><strong>Used by:</strong> <a href="../labs/lab08-password-generation.html">Password generation</a></p>
+<div class="code"><div class="code-head">bash · quick look</div><pre><code class="language-bash">shuf -n 4 datasets/wordlist.txt | paste -sd- -</code></pre></div>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/wordlist.txt</span></div><pre><code>acorn
+actor
+adobe
+agent
+alarm
+album
+alley
+amber
+angle
+apple
+arena
+armor
+arrow
+aspen
+atlas
+attic
+audio
+award
+bacon
+badge
+baker
+bamboo
+banjo
+barge
+basil
+beach
+beard
+berry
+bison
+blade
+blaze
+bloom
+board
+boat
+bonus
+booth
+brain
+brass
+bread
+brick
+brook
+brush
+bubble
+bucket
+buddy
+bugle
+cabin
+cable
+cactus
+camel
+canoe
+canyon
+cargo
+carpet
+cedar
+chalk
+charm
+cherry
+chess
+chief
+cliff
+clock
+cloud
+clover
+coast
+cobra
+cocoa
+comet
+coral
+couch
+crater
+crayon
+crown
+cubic
+curry
+daisy
+dance
+delta
+denim
+desk
+dingo
+diver
+dock
+dolphin
+donut
+dragon
+drum
+eagle
+easel
+echo
+ember
+emerald
+engine
+falcon
+fancy
+feast
+fence
+fern
+ferry
+fiber
+field
+flame
+flute
+foam
+focus
+forest
+fossil
+fox
+frost
+fudge
+garden
+garlic
+gecko
+giant
+ginger
+glacier
+globe
+glove
+goat
+grape
+guitar
+hammer
+harbor
+hazel
+helmet
+heron
+hiker
+honey
+hornet
+hotel
+index
+ink
+island
+ivory
+jacket
+jaguar
+jelly
+jewel
+jigsaw
+jolly
+jungle
+kayak
+kernel
+kettle
+kiosk
+kitten
+koala
+ladder
+lagoon
+lake
+lentil
+lily
+lime
+linen
+lizard
+llama
+lobster
+locket
+lotus
+lunar
+mango
+maple
+marble
+meadow
+melon
+mermaid
+metro
+mint
+mirror
+monkey
+mosaic
+motor
+muffin
+nectar
+needle
+noodle
+nutmeg
+oasis
+ocean
+olive
+opal
+orbit
+otter
+oyster
+paddle
+panda
+papaya
+parrot
+peach
+pebble
+piano
+pickle
+pilot
+pixel
+planet
+plum
+polar
+pony
+poppy
+prism
+quartz
+quilt
+rabbit
+radar
+radio
+raven
+reef
+ribbon
+river
+robin
+ruby
+saddle
+salmon
+sandal
+satin
+scarf
+shell
+silver
+sketch
+sloth
+sonar
+spice
+spoon
+squid
+stamp
+storm
+sugar
+summit
+sunset
+swan
+tango
+temple
+thunder
+tiger
+toast
+tomato
+topaz
+torch
+tulip
+tundra
+umbrella
+unicorn
+valley
+velvet
+violin
+volcano
+waffle
+walnut
+walrus
+wander
+willow
+window
+yacht
+yogurt
+zebra
+zipper</code></pre></div>
+<h3 id="ds-wp-config-sample-php"><code>wp-config-sample.php</code></h3>
+<p><strong>WordPress config template.</strong> The stock <code>wp-config-sample.php</code> with placeholder values. The LAMP lab copies it to <code>wp-config.php</code> and fills in database credentials and salts with sed.</p>
+<p><strong>Format:</strong> PHP: <code>define( 'NAME', 'value' );</code> lines · <strong>Lines:</strong> 39</p>
+<div class="table-wrap"><table>
+<tr><th>Field</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>DB_NAME / DB_USER / DB_PASSWORD / DB_HOST</code></td><td>Database settings (placeholders)</td><td><code>&#x27;database_name_here&#x27;</code></td></tr>
+<tr><td><code>DB_CHARSET</code></td><td>Character set</td><td><code>&#x27;utf8&#x27;</code></td></tr>
+<tr><td><code>AUTH_KEY … NONCE_SALT</code></td><td>Eight secret keys/salts</td><td><code>&#x27;put your unique phrase here&#x27;</code></td></tr>
+<tr><td><code>$table_prefix</code></td><td>Table name prefix</td><td><code>&#x27;wp_&#x27;</code></td></tr>
+</table></div>
+<p><strong>Used by:</strong> <a href="../labs/lab10-wordpress-lamp.html">WordPress on LAMP</a></p>
+<div class="code"><div class="code-head">bash · quick look</div><pre><code class="language-bash">grep -o "define( '[A-Z_]*'" datasets/wp-config-sample.php | cut -d"'" -f2</code></pre></div>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/wp-config-sample.php</span></div><pre><code>&lt;?php
+/**
+ * The base configuration for WordPress (excerpt of wp-config-sample.php)
+ */
+
+// ** Database settings - You can get this info from your web host ** //
+/** The name of the database for WordPress */
+define( 'DB_NAME', 'database_name_here' );
+
+/** Database username */
+define( 'DB_USER', 'username_here' );
+
+/** Database password */
+define( 'DB_PASSWORD', 'password_here' );
+
+/** Database hostname */
+define( 'DB_HOST', 'localhost' );
+
+/** Database charset to use in creating database tables. */
+define( 'DB_CHARSET', 'utf8' );
+
+/**#@+
+ * Authentication unique keys and salts.
+ */
+define( 'AUTH_KEY',         'put your unique phrase here' );
+define( 'SECURE_AUTH_KEY',  'put your unique phrase here' );
+define( 'LOGGED_IN_KEY',    'put your unique phrase here' );
+define( 'NONCE_KEY',        'put your unique phrase here' );
+define( 'AUTH_SALT',        'put your unique phrase here' );
+define( 'SECURE_AUTH_SALT', 'put your unique phrase here' );
+define( 'LOGGED_IN_SALT',   'put your unique phrase here' );
+define( 'NONCE_SALT',       'put your unique phrase here' );
+/**#@-*/
+
+$table_prefix = 'wp_';
+
+define( 'WP_DEBUG', false );
+
+/* That's all, stop editing! Happy publishing. */</code></pre></div>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="../index.html">Home</a>: how to use the wiki</li>
+  <li><a href="cheatsheet.html">One-page cheat sheet</a></li>
+  <li>Text tools: <a href="../tools/grep.html">grep</a> · <a href="../tools/sed.html">sed</a> · <a href="../tools/awk.html">awk</a> · <a href="../tools/sort-uniq.html">sort &amp; uniq</a> · <a href="../tools/cut-tr.html">cut &amp; tr</a></li>
+  <li>JSON and HTTP: <a href="../tools/jq.html">jq</a> · <a href="../tools/curl.html">curl</a></li>
+</ul>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,885 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>grep: search text with patterns</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="grep">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Command tutorials / grep</div>
+<h1>grep: search text with patterns</h1>
+<p class="lead"><code>grep</code> prints the lines of its input that match a pattern. It is the fastest way to answer "where does this appear?", "how many times?" and "which files?", and with <code>-o</code> it becomes an extraction tool for IP addresses, e-mails and status codes. This page goes from plain-word searches to regular expressions, context lines, recursive search and using <code>grep -q</code> inside scripts.</p>
+<div class="meta-row"><span class="pill">BRE · ERE · PCRE</span><span class="pill">25+ options</span><span class="pill grey">Datasets: auth.log, access.log, app.conf</span><span class="pill grey">~60 min</span></div>
+
+<h2 id="syntax">Syntax and how it works</h2>
+<div class="code"><div class="code-head">syntax</div><pre><code class="language-bash">grep [OPTIONS] PATTERN [FILE...]
+grep [OPTIONS] -e PATTERN1 -e PATTERN2 [FILE...]
+grep [OPTIONS] -f PATTERNS_FILE [FILE...]
+command | grep [OPTIONS] PATTERN          # read from standard input</code></pre></div>
+
+<p><strong>Mental model:</strong> grep reads its input <em>one line at a time</em>, tests the line against the pattern, and prints the line if it matches. That is all. Every option only changes one of three things:</p>
+<ol class="steps">
+  <li><strong>How the pattern is interpreted</strong>: basic regex (default, <code>-G</code>), extended regex (<code>-E</code>), Perl regex (<code>-P</code>), or a fixed string (<code>-F</code>); case-insensitive (<code>-i</code>); whole word (<code>-w</code>) or whole line (<code>-x</code>).</li>
+  <li><strong>Which lines count as a "hit"</strong>: normally matching lines; with <code>-v</code> the non-matching ones.</li>
+  <li><strong>What is printed</strong>: the line (default), only the matched part (<code>-o</code>), a count (<code>-c</code>), file names (<code>-l</code>/<code>-L</code>), nothing at all (<code>-q</code>), plus decorations like line numbers (<code>-n</code>) and context (<code>-A</code>/<code>-B</code>/<code>-C</code>).</li>
+</ol>
+
+<h3 id="exit-status">Exit status: grep as a test</h3>
+<p>grep's exit code is what makes it useful in <code>if</code> statements:</p>
+<div class="table-wrap"><table>
+<tr><th>Exit code</th><th>Meaning</th><th>Typical use</th></tr>
+<tr><td><code>0</code></td><td>at least one line matched</td><td><code>if grep -q ... ; then</code></td></tr>
+<tr><td><code>1</code></td><td>no line matched</td><td>"not found" branch</td></tr>
+<tr><td><code>2</code></td><td>error (missing file, bad regex)</td><td>should abort the script</td></tr>
+</table></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -q 'Accepted publickey' datasets/auth.log; echo "exit=$?"
+grep -q 'Accepted password'  datasets/auth.log; echo "exit=$?"
+grep -q 'x' datasets/no-such-file.log;          echo "exit=$?"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>exit=0
+exit=1
+grep: datasets/no-such-file.log: No such file or directory
+exit=2</pre></div>
+<div class="callout exam"><span class="ct">Viva</span>"What does grep return when nothing matches?", exit status <strong>1</strong>, not an error. Only status 2 is an error. This matters with <code>set -e</code>: a grep that finds nothing will stop your script unless you write <code>grep ... || true</code>.</div>
+
+<h2 id="options">Options cheat table</h2>
+<div class="table-wrap"><table>
+<tr><th>Option</th><th>Long form</th><th>What it does</th></tr>
+<tr><td><code>-i</code></td><td><code>--ignore-case</code></td><td>case-insensitive match</td></tr>
+<tr><td><code>-v</code></td><td><code>--invert-match</code></td><td>print lines that do <em>not</em> match</td></tr>
+<tr><td><code>-c</code></td><td><code>--count</code></td><td>print the number of matching <em>lines</em> (per file)</td></tr>
+<tr><td><code>-n</code></td><td><code>--line-number</code></td><td>prefix each line with its line number</td></tr>
+<tr><td><code>-o</code></td><td><code>--only-matching</code></td><td>print only the matched text, one match per line</td></tr>
+<tr><td><code>-w</code></td><td><code>--word-regexp</code></td><td>match whole words only</td></tr>
+<tr><td><code>-x</code></td><td><code>--line-regexp</code></td><td>pattern must match the whole line</td></tr>
+<tr><td><code>-l</code></td><td><code>--files-with-matches</code></td><td>print only names of files that match</td></tr>
+<tr><td><code>-L</code></td><td><code>--files-without-match</code></td><td>print names of files with no match</td></tr>
+<tr><td><code>-h</code> / <code>-H</code></td><td><code>--no-filename</code> / <code>--with-filename</code></td><td>hide / force the <code>file:</code> prefix</td></tr>
+<tr><td><code>-r</code> / <code>-R</code></td><td><code>--recursive</code></td><td>search directories recursively (<code>-R</code> follows symlinks)</td></tr>
+<tr><td><code>--include=GLOB</code></td><td></td><td>with <code>-r</code>: only search files matching GLOB</td></tr>
+<tr><td><code>--exclude=GLOB</code>, <code>--exclude-dir=DIR</code></td><td></td><td>with <code>-r</code>: skip files / directories</td></tr>
+<tr><td><code>-E</code></td><td><code>--extended-regexp</code></td><td>ERE: <code>+ ? | () {}</code> without backslashes (old name: <code>egrep</code>)</td></tr>
+<tr><td><code>-F</code></td><td><code>--fixed-strings</code></td><td>no regex at all, every character is literal (old name: <code>fgrep</code>)</td></tr>
+<tr><td><code>-P</code></td><td><code>--perl-regexp</code></td><td>Perl-compatible regex: <code>\d</code>, lookahead, lazy <code>*?</code> (GNU grep only)</td></tr>
+<tr><td><code>-e PAT</code></td><td><code>--regexp=PAT</code></td><td>add a pattern (repeatable; also protects patterns starting with <code>-</code>)</td></tr>
+<tr><td><code>-f FILE</code></td><td><code>--file=FILE</code></td><td>read patterns from FILE, one per line</td></tr>
+<tr><td><code>-A N</code> / <code>-B N</code> / <code>-C N</code></td><td><code>--after/--before/--context</code></td><td>print N lines after / before / around each match</td></tr>
+<tr><td><code>-m N</code></td><td><code>--max-count=N</code></td><td>stop after N matching lines</td></tr>
+<tr><td><code>-q</code></td><td><code>--quiet</code></td><td>print nothing, only set the exit status</td></tr>
+<tr><td><code>-s</code></td><td><code>--no-messages</code></td><td>suppress "No such file" errors</td></tr>
+<tr><td><code>--color=auto</code></td><td></td><td>highlight matches in the terminal</td></tr>
+</table></div>
+
+<h2 id="regex">Regular expressions: BRE vs ERE vs PCRE</h2>
+<p>grep understands three regex dialects. They share the same core (<code>.</code>, <code>*</code>, <code>[...]</code>, <code>^</code>, <code>$</code>) and differ mainly in which characters need a backslash.</p>
+<div class="table-wrap"><table>
+<tr><th>Feature</th><th>BRE, <code>grep</code></th><th>ERE, <code>grep -E</code></th><th>PCRE, <code>grep -P</code></th></tr>
+<tr><td>one or more</td><td><code>a\+</code> (GNU extension)</td><td><code>a+</code></td><td><code>a+</code></td></tr>
+<tr><td>zero or one</td><td><code>a\?</code> (GNU extension)</td><td><code>a?</code></td><td><code>a?</code></td></tr>
+<tr><td>alternation</td><td><code>cat\|dog</code> (GNU extension)</td><td><code>cat|dog</code></td><td><code>cat|dog</code></td></tr>
+<tr><td>grouping</td><td><code>\(ab\)*</code></td><td><code>(ab)*</code></td><td><code>(ab)*</code>, <code>(?:ab)</code></td></tr>
+<tr><td>interval</td><td><code>a\{2,3\}</code></td><td><code>a{2,3}</code></td><td><code>a{2,3}</code></td></tr>
+<tr><td>back-reference</td><td><code>\(a\)\1</code></td><td><code>(a)\1</code></td><td><code>(a)\1</code></td></tr>
+<tr><td>digit</td><td><code>[0-9]</code>, <code>[[:digit:]]</code></td><td><code>[0-9]</code>, <code>[[:digit:]]</code></td><td><code>\d</code></td></tr>
+<tr><td>lookahead / lookbehind</td><td>-</td><td>-</td><td><code>(?=...)</code>, <code>(?&lt;=...)</code></td></tr>
+<tr><td>lazy quantifier</td><td>-</td><td>-</td><td><code>.*?</code></td></tr>
+<tr><td>literal <code>+ ? | ( ) { }</code></td><td>written plain</td><td>needs backslash</td><td>needs backslash</td></tr>
+</table></div>
+<p><strong>Rule of thumb:</strong> use <code>grep -E</code> for anything beyond a plain word. Use <code>-P</code> only when you need <code>\d</code>, lookarounds or lazy matching, and only on Linux (GNU grep). Use <code>-F</code> when the "pattern" is really a literal string full of dots and brackets (IP addresses, file paths, version numbers).</p>
+
+<h3 id="regex-cheat">Regex cheat table</h3>
+<div class="table-wrap"><table>
+<tr><th>Category</th><th>Syntax (ERE)</th><th>Matches</th><th>Example</th></tr>
+<tr><td rowspan="4">Anchors</td><td><code>^</code></td><td>start of line</td><td><code>^#</code>: comment lines</td></tr>
+<tr><td><code>$</code></td><td>end of line</td><td><code>ssh2$</code></td></tr>
+<tr><td><code>^$</code></td><td>an empty line</td><td><code>grep -v '^$'</code> removes blanks</td></tr>
+<tr><td><code>\b</code>, <code>\&lt;</code> <code>\&gt;</code></td><td>word boundary / word start / word end (GNU)</td><td><code>\broot\b</code></td></tr>
+<tr><td rowspan="5">Classes</td><td><code>.</code></td><td>any one character</td><td><code>v.1</code> matches <code>v01</code>, <code>v-1</code></td></tr>
+<tr><td><code>[abc]</code> / <code>[^abc]</code></td><td>one of / none of the listed characters</td><td><code>[^ ]+</code>: a run of non-spaces</td></tr>
+<tr><td><code>[a-z0-9]</code></td><td>a range</td><td><code>[A-Z_]+=</code>: a config key</td></tr>
+<tr><td><code>[[:digit:]] [[:alpha:]] [[:alnum:]] [[:space:]] [[:upper:]] [[:punct:]]</code></td><td>POSIX named classes (locale-safe)</td><td><code>[[:digit:]]{3}</code></td></tr>
+<tr><td><code>\w</code> <code>\s</code> <code>\W</code> <code>\S</code></td><td>word char / whitespace / their negations (GNU)</td><td><code>\w+@</code></td></tr>
+<tr><td rowspan="4">Quantifiers</td><td><code>*</code></td><td>0 or more of the previous item</td><td><code>ab*c</code> → ac, abc, abbc</td></tr>
+<tr><td><code>+</code></td><td>1 or more</td><td><code>[0-9]+</code></td></tr>
+<tr><td><code>?</code></td><td>0 or 1 (optional)</td><td><code>https?://</code></td></tr>
+<tr><td><code>{n}</code> <code>{n,}</code> <code>{n,m}</code></td><td>exactly n / at least n / n to m</td><td><code>[0-9]{1,3}</code></td></tr>
+<tr><td>Groups</td><td><code>( ... )</code></td><td>group items so a quantifier applies to all</td><td><code>([0-9]{1,3}\.){3}</code></td></tr>
+<tr><td>Alternation</td><td><code>a|b</code></td><td>either side</td><td><code>(GET|POST)</code></td></tr>
+<tr><td>Back-reference</td><td><code>\1</code> … <code>\9</code></td><td>the exact text captured by group N</td><td><code>(.)\1</code>: a doubled character</td></tr>
+<tr><td>Escape</td><td><code>\.</code> <code>\[</code> <code>\$</code></td><td>a literal special character</td><td><code>\.php</code></td></tr>
+</table></div>
+<div class="callout tip"><span class="ct">Tip</span>Always put the pattern in <strong>single quotes</strong>. Inside double quotes the shell expands <code>$</code>, <code>`</code> and <code>\</code> before grep ever sees them; without quotes, <code>*</code> and <code>[...]</code> may be expanded into file names.</div>
+
+<h2 id="datasets">Datasets used on this page</h2>
+<p>Run every example from the wiki's root folder so the paths <code>datasets/...</code> work. The outputs below are real output from these files.</p>
+<h3 id="ds-auth">auth.log: sshd and sudo events</h3>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/auth.log</span></div><pre><code>Nov 16 01:21:30 web01 sshd[6030]: Failed password for invalid user ubuntu from 185.220.101.3 port 58173 ssh2
+Nov 16 01:41:47 web01 sshd[6379]: Failed password for invalid user guest from 91.240.118.172 port 61010 ssh2
+Nov 16 01:48:04 web01 sshd[2489]: Failed password for root from 103.21.244.9 port 45392 ssh2
+Nov 16 02:11:31 web01 sshd[6185]: Failed password for invalid user admin from 45.33.32.156 port 46046 ssh2
+Nov 16 02:28:14 web01 sshd[2293]: Failed password for guest from 45.33.32.156 port 62399 ssh2
+Nov 16 02:42:22 web01 sshd[5097]: Failed password for root from 185.220.101.3 port 44341 ssh2
+Nov 16 02:48:52 web01 sshd[9586]: Failed password for root from 45.33.32.156 port 60450 ssh2
+Nov 16 03:12:09 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 03:32:58 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 03:48:34 web01 sshd[9370]: Failed password for admin from 91.240.118.172 port 61108 ssh2
+Nov 16 04:04:25 web01 sshd[5346]: Accepted publickey for sysadmin from 10.0.0.5 port 45679 ssh2
+Nov 16 04:14:17 web01 sshd[8306]: Failed password for invalid user admin from 103.21.244.9 port 50952 ssh2
+Nov 16 04:33:13 web01 sshd[2420]: Failed password for test from 45.33.32.156 port 44021 ssh2
+Nov 16 04:35:54 web01 sshd[7897]: Failed password for invalid user test from 91.240.118.172 port 57534 ssh2
+Nov 16 04:49:41 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 05:09:50 web01 sshd[7332]: Failed password for ubuntu from 103.21.244.9 port 57460 ssh2
+Nov 16 05:28:42 web01 sshd[4713]: Failed password for test from 103.21.244.9 port 55484 ssh2
+Nov 16 05:40:40 web01 sshd[7724]: Accepted publickey for deploy from 10.0.0.5 port 31767 ssh2
+Nov 16 05:54:36 web01 sshd[1544]: Failed password for admin from 91.240.118.172 port 41909 ssh2
+Nov 16 05:56:48 web01 sshd[5362]: Failed password for invalid user test from 45.33.32.156 port 54846 ssh2
+Nov 16 06:06:47 web01 sshd[8006]: Failed password for invalid user test from 185.220.101.3 port 33413 ssh2
+Nov 16 06:19:13 web01 sshd[4773]: Accepted publickey for deploy from 192.168.1.10 port 46205 ssh2
+Nov 16 06:26:31 web01 sshd[1433]: Accepted publickey for deploy from 192.168.1.10 port 61035 ssh2
+Nov 16 06:49:52 web01 sshd[2974]: Failed password for test from 45.33.32.156 port 54175 ssh2
+Nov 16 06:56:05 web01 sshd[2976]: Accepted publickey for sysadmin from 192.168.1.10 port 37084 ssh2
+Nov 16 07:16:20 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 07:36:29 web01 sshd[7249]: Failed password for root from 45.33.32.156 port 45915 ssh2
+Nov 16 07:40:27 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 08:01:26 web01 sshd[3083]: Accepted publickey for sysadmin from 192.168.1.10 port 64913 ssh2
+Nov 16 08:16:33 web01 sshd[7171]: Failed password for root from 103.21.244.9 port 62125 ssh2
+Nov 16 08:20:39 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 08:42:50 web01 sshd[8632]: Accepted publickey for deploy from 10.0.0.5 port 64193 ssh2
+Nov 16 09:05:32 web01 sshd[5525]: Accepted publickey for sysadmin from 10.0.0.5 port 58545 ssh2
+Nov 16 09:26:15 web01 sshd[5497]: Failed password for invalid user root from 45.33.32.156 port 59543 ssh2
+Nov 16 09:35:04 web01 sshd[8713]: Failed password for invalid user ubuntu from 91.240.118.172 port 51300 ssh2
+Nov 16 09:41:46 web01 sshd[9088]: Failed password for invalid user ubuntu from 103.21.244.9 port 48105 ssh2
+Nov 16 10:01:14 web01 sshd[1266]: Failed password for invalid user root from 45.33.32.156 port 56635 ssh2
+Nov 16 10:18:24 web01 sshd[5037]: Accepted publickey for sysadmin from 10.0.0.5 port 31130 ssh2
+Nov 16 10:22:04 web01 sshd[5920]: Failed password for ubuntu from 45.33.32.156 port 54184 ssh2
+Nov 16 10:38:43 web01 sshd[9798]: Failed password for ubuntu from 103.21.244.9 port 47754 ssh2
+Nov 16 10:49:40 web01 sshd[5218]: Failed password for invalid user ubuntu from 45.33.32.156 port 42133 ssh2
+Nov 16 10:56:42 web01 sshd[4645]: Accepted publickey for sysadmin from 10.0.0.5 port 36588 ssh2
+Nov 16 11:03:49 web01 sshd[5953]: Failed password for invalid user ubuntu from 45.33.32.156 port 38295 ssh2
+Nov 16 11:13:40 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 11:33:03 web01 sshd[5886]: Accepted publickey for sysadmin from 192.168.1.10 port 36723 ssh2</code></pre></div>
+<h3 id="ds-access">access.log: web server combined log</h3>
+<p>Fields: client IP, ident, user, [time], "request", status, bytes, "referer", "user-agent".</p>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/access.log</span></div><pre><code>192.168.1.10 - - [16/Nov/2026:08:11:14 +0530] "GET /api/v1/users HTTP/1.1" 200 16949 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:08:24:08 +0530] "GET /api/v1/users HTTP/1.1" 200 36641 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:08:25:00 +0530] "GET /index.php HTTP/1.1" 200 34018 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:08:34:54 +0530] "GET /js/app.js HTTP/1.1" 200 36613 "-" "curl/8.4.0"
+203.0.113.7 - - [16/Nov/2026:08:42:53 +0530] "GET /old-page HTTP/1.1" 301 0 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+10.0.0.5 - - [16/Nov/2026:08:55:07 +0530] "GET /about.html HTTP/1.1" 200 15010 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+10.0.0.5 - - [16/Nov/2026:08:57:01 +0530] "GET /blog/post-1 HTTP/1.1" 200 23441 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:09:11:07 +0530] "POST /wp-login.php HTTP/1.1" 200 25707 "https://www.google.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+203.0.113.7 - - [16/Nov/2026:09:25:36 +0530] "GET /.env HTTP/1.1" 404 365 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:09:37:57 +0530] "GET /js/app.js HTTP/1.1" 200 51563 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:09:52:52 +0530] "GET / HTTP/1.1" 200 19117 "https://www.google.com/" "curl/8.4.0"
+10.0.0.5 - - [16/Nov/2026:09:55:58 +0530] "GET /index.php HTTP/1.1" 200 18396 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:10:06:41 +0530] "GET /images/logo.png HTTP/1.1" 200 16943 "https://example.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.15 - - [16/Nov/2026:10:13:29 +0530] "GET /api/v1/report HTTP/1.1" 500 532 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:10:25:30 +0530] "POST /api/v1/orders HTTP/1.1" 200 3003 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.10 - - [16/Nov/2026:10:30:24 +0530] "GET /admin HTTP/1.1" 403 470 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:10:34:21 +0530] "GET /blog/post-2 HTTP/1.1" 200 43029 "-" "curl/8.4.0"
+192.168.1.10 - - [16/Nov/2026:10:39:12 +0530] "GET /api/v1/users HTTP/1.1" 200 36222 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+10.0.0.5 - - [16/Nov/2026:10:49:29 +0530] "GET /index.php HTTP/1.1" 200 9965 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+203.0.113.99 - - [16/Nov/2026:10:51:22 +0530] "GET /missing.html HTTP/1.1" 404 258 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:11:05:13 +0530] "GET /css/style.css HTTP/1.1" 200 26116 "https://example.com/" "curl/8.4.0"
+192.168.1.15 - - [16/Nov/2026:11:14:34 +0530] "GET /images/logo.png HTTP/1.1" 200 1652 "-" "python-requests/2.31.0"
+172.16.4.8 - - [16/Nov/2026:11:26:32 +0530] "GET /api/v1/users HTTP/1.1" 200 51270 "https://www.google.com/" "python-requests/2.31.0"
+192.168.1.15 - - [16/Nov/2026:11:28:46 +0530] "GET /index.php HTTP/1.1" 200 1112 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.99 - - [16/Nov/2026:11:37:38 +0530] "GET /images/logo.png HTTP/1.1" 200 7873 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:11:52:19 +0530] "GET /css/style.css HTTP/1.1" 200 10916 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+185.220.101.3 - - [16/Nov/2026:12:01:51 +0530] "POST /wp-login.php HTTP/1.1" 200 32921 "-" "sqlmap/1.7.11#stable"
+185.220.101.3 - - [16/Nov/2026:12:04:05 +0530] "GET /admin HTTP/1.1" 403 302 "-" "sqlmap/1.7.11#stable"
+172.16.4.8 - - [16/Nov/2026:12:08:31 +0530] "GET /api/v1/report HTTP/1.1" 500 223 "https://example.com/" "python-requests/2.31.0"
+192.168.1.10 - - [16/Nov/2026:12:22:46 +0530] "GET /api/v1/users HTTP/1.1" 200 51089 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+10.0.0.5 - - [16/Nov/2026:12:34:21 +0530] "GET /images/logo.png HTTP/1.1" 200 18270 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+185.220.101.3 - - [16/Nov/2026:12:38:17 +0530] "GET /.env HTTP/1.1" 404 545 "https://www.google.com/" "sqlmap/1.7.11#stable"
+185.220.101.3 - - [16/Nov/2026:12:45:25 +0530] "GET /xmlrpc.php HTTP/1.1" 403 411 "-" "sqlmap/1.7.11#stable"
+192.168.1.15 - - [16/Nov/2026:12:49:58 +0530] "GET /blog/post-1 HTTP/1.1" 200 39455 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:13:00:20 +0530] "GET / HTTP/1.1" 200 42259 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+172.16.4.8 - - [16/Nov/2026:13:01:49 +0530] "GET /missing.html HTTP/1.1" 404 216 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+203.0.113.7 - - [16/Nov/2026:13:06:54 +0530] "GET /index.php HTTP/1.1" 200 9571 "https://example.com/" "python-requests/2.31.0"
+203.0.113.99 - - [16/Nov/2026:13:11:22 +0530] "POST /api/v1/orders HTTP/1.1" 200 7252 "https://example.com/" "python-requests/2.31.0"
+10.0.0.5 - - [16/Nov/2026:13:17:44 +0530] "GET /wp-admin/ HTTP/1.1" 302 0 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:13:29:33 +0530] "GET /js/app.js HTTP/1.1" 200 4872 "https://www.google.com/" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:13:43:32 +0530] "GET /about.html HTTP/1.1" 200 13365 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:13:46:15 +0530] "GET /about.html HTTP/1.1" 200 17271 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+172.16.4.8 - - [16/Nov/2026:14:00:22 +0530] "GET /images/logo.png HTTP/1.1" 200 4215 "-" "python-requests/2.31.0"
+185.220.101.3 - - [16/Nov/2026:14:02:17 +0530] "GET /.env HTTP/1.1" 404 388 "https://example.com/" "sqlmap/1.7.11#stable"
+192.168.1.15 - - [16/Nov/2026:14:10:49 +0530] "GET /blog/post-2 HTTP/1.1" 200 4742 "https://example.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+185.220.101.3 - - [16/Nov/2026:14:11:11 +0530] "POST /xmlrpc.php HTTP/1.1" 403 536 "https://example.com/" "sqlmap/1.7.11#stable"
+192.168.1.10 - - [16/Nov/2026:14:14:09 +0530] "GET /index.php HTTP/1.1" 200 4732 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:14:27:14 +0530] "GET / HTTP/1.1" 200 32146 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+185.220.101.3 - - [16/Nov/2026:14:28:32 +0530] "GET /.env HTTP/1.1" 404 215 "-" "sqlmap/1.7.11#stable"
+172.16.4.8 - - [16/Nov/2026:14:40:23 +0530] "GET /blog/post-2 HTTP/1.1" 200 38234 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:14:51:17 +0530] "GET /js/app.js HTTP/1.1" 200 37942 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:14:56:04 +0530] "GET /api/v1/users HTTP/1.1" 200 16542 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+203.0.113.7 - - [16/Nov/2026:14:58:38 +0530] "GET /contact.html HTTP/1.1" 200 21620 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+203.0.113.7 - - [16/Nov/2026:15:06:47 +0530] "GET /css/style.css HTTP/1.1" 200 7452 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.15 - - [16/Nov/2026:15:15:45 +0530] "GET /api/v1/report HTTP/1.1" 500 215 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:15:20:56 +0530] "GET /missing.html HTTP/1.1" 404 540 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+45.33.32.156 - - [16/Nov/2026:15:32:39 +0530] "GET /contact.html HTTP/1.1" 200 44375 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:15:37:29 +0530] "GET / HTTP/1.1" 200 37156 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+203.0.113.7 - - [16/Nov/2026:15:42:37 +0530] "GET /api/v1/users HTTP/1.1" 200 14242 "https://www.google.com/" "python-requests/2.31.0"
+10.0.0.23 - - [16/Nov/2026:15:51:34 +0530] "GET /admin HTTP/1.1" 403 206 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.15 - - [16/Nov/2026:16:06:03 +0530] "GET / HTTP/1.1" 200 51436 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+198.51.100.42 - - [16/Nov/2026:16:09:08 +0530] "GET /images/logo.png HTTP/1.1" 200 28928 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:16:11:22 +0530] "GET /.env HTTP/1.1" 404 256 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:16:25:56 +0530] "GET /images/logo.png HTTP/1.1" 200 29066 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+10.0.0.5 - - [16/Nov/2026:16:31:31 +0530] "GET /api/v1/report HTTP/1.1" 500 200 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:16:43:29 +0530] "GET / HTTP/1.1" 200 37592 "-" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:16:47:51 +0530] "GET /xmlrpc.php HTTP/1.1" 403 391 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+185.220.101.3 - - [16/Nov/2026:17:00:45 +0530] "GET /xmlrpc.php HTTP/1.1" 403 556 "-" "sqlmap/1.7.11#stable"
+192.168.1.10 - - [16/Nov/2026:17:05:38 +0530] "GET /api/v1/users HTTP/1.1" 200 25970 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:17:09:45 +0530] "GET /admin HTTP/1.1" 403 359 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.10 - - [16/Nov/2026:17:13:53 +0530] "GET /index.php HTTP/1.1" 200 22412 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:17:27:24 +0530] "GET /js/app.js HTTP/1.1" 200 27093 "https://www.google.com/" "python-requests/2.31.0"
+192.168.1.10 - - [16/Nov/2026:17:28:12 +0530] "POST /xmlrpc.php HTTP/1.1" 403 315 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+10.0.0.5 - - [16/Nov/2026:17:38:42 +0530] "GET /api/v1/users HTTP/1.1" 200 21457 "-" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:17:45:36 +0530] "GET /index.php HTTP/1.1" 200 3808 "https://example.com/" "python-requests/2.31.0"
+10.0.0.23 - - [16/Nov/2026:17:45:57 +0530] "POST /api/v1/orders HTTP/1.1" 200 49524 "-" "python-requests/2.31.0"
+10.0.0.5 - - [16/Nov/2026:17:52:29 +0530] "GET /api/v1/report HTTP/1.1" 500 349 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+45.33.32.156 - - [16/Nov/2026:18:04:08 +0530] "GET /api/v1/users HTTP/1.1" 200 20581 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:18:15:50 +0530] "GET /blog/post-2 HTTP/1.1" 200 20276 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:18:19:26 +0530] "GET /api/v1/report HTTP/1.1" 500 526 "-" "python-requests/2.31.0"</code></pre></div>
+<h3 id="ds-conf">app.conf: KEY=VALUE configuration</h3>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/app.conf</span></div><pre><code># ===== Application configuration =====
+APP_NAME=inventory-api
+APP_ENV=development
+APP_DEBUG=true
+APP_PORT=8080
+
+# Database
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=inventory
+DB_USER=root
+DB_PASS=changeme
+
+# Logging
+LOG_LEVEL=debug
+LOG_FILE=/var/log/inventory/app.log
+#LOG_ROTATE=daily
+
+# Features
+FEATURE_CACHE=off
+FEATURE_EMAIL=on
+MAX_UPLOAD_MB=10</code></pre></div>
+
+<h2 id="basics">Basics</h2>
+
+<h3 id="b-simple">Plain search</h3>
+<p>Without any options, grep prints every line containing the text. The pattern is case-sensitive.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep 'Accepted' datasets/auth.log</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Nov 16 04:04:25 web01 sshd[5346]: Accepted publickey for sysadmin from 10.0.0.5 port 45679 ssh2
+Nov 16 05:40:40 web01 sshd[7724]: Accepted publickey for deploy from 10.0.0.5 port 31767 ssh2
+Nov 16 06:19:13 web01 sshd[4773]: Accepted publickey for deploy from 192.168.1.10 port 46205 ssh2
+Nov 16 06:26:31 web01 sshd[1433]: Accepted publickey for deploy from 192.168.1.10 port 61035 ssh2
+Nov 16 06:56:05 web01 sshd[2976]: Accepted publickey for sysadmin from 192.168.1.10 port 37084 ssh2
+Nov 16 08:01:26 web01 sshd[3083]: Accepted publickey for sysadmin from 192.168.1.10 port 64913 ssh2
+Nov 16 08:42:50 web01 sshd[8632]: Accepted publickey for deploy from 10.0.0.5 port 64193 ssh2
+Nov 16 09:05:32 web01 sshd[5525]: Accepted publickey for sysadmin from 10.0.0.5 port 58545 ssh2
+Nov 16 10:18:24 web01 sshd[5037]: Accepted publickey for sysadmin from 10.0.0.5 port 31130 ssh2
+Nov 16 10:56:42 web01 sshd[4645]: Accepted publickey for sysadmin from 10.0.0.5 port 36588 ssh2
+Nov 16 11:33:03 web01 sshd[5886]: Accepted publickey for sysadmin from 192.168.1.10 port 36723 ssh2</pre></div>
+
+<h3 id="b-i">-i: ignore case</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -i 'log_' datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>LOG_LEVEL=debug
+LOG_FILE=/var/log/inventory/app.log
+#LOG_ROTATE=daily</pre></div>
+<p>Without <code>-i</code>, <code>log_</code> would match nothing because the keys are upper case.</p>
+
+<h3 id="b-c">-c: count matching lines</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -c 'Failed password' datasets/auth.log
+grep -c ' 404 ' datasets/access.log</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>27
+8</pre></div>
+<div class="callout warn"><span class="ct">Careful</span><code>-c</code> counts <em>lines</em>, not occurrences. A line with three matches counts once. To count every occurrence use <code>grep -o PATTERN file | wc -l</code>.</div>
+
+<h3 id="b-n">-n: show line numbers</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -n 'DB_' datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>8:DB_HOST=localhost
+9:DB_PORT=3306
+10:DB_NAME=inventory
+11:DB_USER=root
+12:DB_PASS=changeme</pre></div>
+<p>Line numbers are handy before editing a file with <code>sed</code> by line address (e.g. <code>sed '11s/.*/DB_PASS=***/'</code>).</p>
+
+<h3 id="b-v">-v: invert the match</h3>
+<p>Show the config without comment lines and blank lines, the "effective" configuration:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -v '^#' datasets/app.conf | grep -v '^$'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>APP_NAME=inventory-api
+APP_ENV=development
+APP_DEBUG=true
+APP_PORT=8080
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=inventory
+DB_USER=root
+DB_PASS=changeme
+LOG_LEVEL=debug
+LOG_FILE=/var/log/inventory/app.log
+FEATURE_CACHE=off
+FEATURE_EMAIL=on
+MAX_UPLOAD_MB=10</pre></div>
+<p>The same thing in one grep with two <code>-e</code> patterns (a line is dropped if it matches either):</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -v -e '^#' -e '^$' datasets/app.conf | head -4</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>APP_NAME=inventory-api
+APP_ENV=development
+APP_DEBUG=true
+APP_PORT=8080</pre></div>
+
+<h3 id="b-w">-w: whole words only</h3>
+<p>The letters <code>on</code> appear inside other words (<code>configuration</code>, <code>FEATURE_EMAIL=on</code>). Compare:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -c 'on' datasets/app.conf
+grep -w 'on' datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>2
+FEATURE_EMAIL=on</pre></div>
+<p>A "word" is a run of letters, digits and underscores. <code>-w</code> requires that the match is not preceded or followed by such a character:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -c -w 'APP' datasets/app.conf
+grep -c 'APP' datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>0
+4</pre></div>
+<p><code>APP</code> occurs four times as a prefix (<code>APP_NAME</code> …), but never as a whole word, because <code>_</code> counts as a word character.</p>
+
+<h3 id="b-x">-x: whole line</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -x 'APP_DEBUG=true' datasets/app.conf
+grep -x 'APP_DEBUG' datasets/app.conf; echo "exit=$?"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>APP_DEBUG=true
+exit=1</pre></div>
+
+<h3 id="b-files">Several files: -H, -h, -l, -L</h3>
+<p>With more than one file, grep prefixes each line with its file name. <code>-h</code> hides it; <code>-H</code> forces it even for one file.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -c 'example.com' datasets/access.log datasets/users.json datasets/cf_dns_records.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>datasets/access.log:19
+datasets/users.json:12
+datasets/cf_dns_records.json:22</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -l 'example.com' datasets/access.log datasets/auth.log datasets/users.json datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>datasets/access.log
+datasets/users.json</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -L 'example.com' datasets/access.log datasets/auth.log datasets/users.json datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>datasets/auth.log
+datasets/servers.json</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -H 'APP_PORT' datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>datasets/app.conf:APP_PORT=8080</pre></div>
+
+<h2 id="intermediate">Intermediate: regex, extraction, context</h2>
+
+<h3 id="i-anchors">Anchors ^ and $</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep '^LOG' datasets/app.conf          # lines that START with LOG
+grep 'on$'  datasets/app.conf          # lines that END with on
+grep -c '^#' datasets/app.conf         # how many comment lines</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>LOG_LEVEL=debug
+LOG_FILE=/var/log/inventory/app.log
+FEATURE_EMAIL=on
+5</pre></div>
+
+<h3 id="i-classes">Bracket classes and the dot</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep '=[0-9][0-9]*$' datasets/app.conf     # keys whose value is a number (BRE)</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>APP_PORT=8080
+DB_PORT=3306
+MAX_UPLOAD_MB=10</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -E '=[[:digit:]]+$' datasets/app.conf # same thing, ERE + POSIX class</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>APP_PORT=8080
+DB_PORT=3306
+MAX_UPLOAD_MB=10</pre></div>
+<p>The dot matches any character, so <code>10.0.0.5</code> as a regex also matches <code>10a0b0c5</code>. Escape it (<code>10\.0\.0\.5</code>) or use <code>-F</code>.</p>
+
+<h3 id="i-alt">-E: alternation and grouping</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -E 'Accepted|sudo' datasets/auth.log | head -5</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Nov 16 03:12:09 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 03:32:58 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 04:04:25 web01 sshd[5346]: Accepted publickey for sysadmin from 10.0.0.5 port 45679 ssh2
+Nov 16 04:49:41 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 05:40:40 web01 sshd[7724]: Accepted publickey for deploy from 10.0.0.5 port 31767 ssh2</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -cE '" (403|404|500) ' datasets/access.log    # client + server errors</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>23</pre></div>
+<p>The same alternation in BRE needs backslashes, and only GNU grep supports <code>\|</code>:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -c '" \(403\|404\|500\) ' datasets/access.log</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>23</pre></div>
+
+<h3 id="i-quant">Quantifiers and intervals</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -E 'port 6[0-9]{4} ' datasets/auth.log | head -3     # ports 60000-69999</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Nov 16 01:41:47 web01 sshd[6379]: Failed password for invalid user guest from 91.240.118.172 port 61010 ssh2
+Nov 16 02:28:14 web01 sshd[2293]: Failed password for guest from 45.33.32.156 port 62399 ssh2
+Nov 16 02:48:52 web01 sshd[9586]: Failed password for root from 45.33.32.156 port 60450 ssh2</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -Ec '"[^"]*" [0-9]{3} 0 ' datasets/access.log         # responses with 0 bytes</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>2</pre></div>
+
+<h3 id="i-o">-o: print only what matched</h3>
+<p><code>-o</code> turns grep into an extractor. Each match is printed on its own line, which feeds perfectly into <code>sort | uniq -c</code>.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -o 'from [0-9.]*' datasets/auth.log | head -4</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>from 185.220.101.3
+from 91.240.118.172
+from 103.21.244.9
+from 45.33.32.156</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -oE '"(GET|POST) [^ ]+' datasets/access.log | sort | uniq -c | sort -rn | head -5</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>     10 "GET /api/v1/users
+      8 "GET /index.php
+      7 "GET /images/logo.png
+      6 "GET /api/v1/report
+      6 "GET /</pre></div>
+
+<h3 id="i-ips">Extracting IP addresses</h3>
+<p>A practical IPv4 pattern is "1–3 digits, dot" three times, then 1–3 digits:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' datasets/auth.log | sort -u</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>10.0.0.5
+103.21.244.9
+185.220.101.3
+192.168.1.10
+45.33.32.156
+91.240.118.172</pre></div>
+<p>Note that it is not a strict validator (it accepts <code>999.1.1.1</code>), but for extraction from logs it is exactly what you want. Count failed logins per attacking IP:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep 'Failed password' datasets/auth.log \
+  | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' \
+  | sort | uniq -c | sort -rn</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>     12 45.33.32.156
+      7 103.21.244.9
+      5 91.240.118.172
+      3 185.220.101.3</pre></div>
+
+<h3 id="i-emails">Extracting e-mail addresses</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -oE '[[:alnum:]._%+-]+@[[:alnum:].-]+\.[[:alpha:]]{2,}' datasets/users.json | head -5</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>aarav.verma@example.com
+priya.sharma@example.com
+rohan.mehta@example.com
+ananya.das@example.com
+vikram.das@example.com</pre></div>
+
+<h3 id="i-status">Extracting HTTP status codes</h3>
+<p>The status code is the 3-digit number right after the closing quote of the request. Anchor on <code>" </code> so you do not pick up numbers from the URL or byte count:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -oE '" [1-5][0-9]{2} ' datasets/access.log | tr -d '" ' | sort | uniq -c</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>     55 200
+      1 301
+      1 302
+      9 403
+      8 404
+      6 500</pre></div>
+
+<h3 id="i-e">-e and -f: several patterns</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -e 'DB_HOST' -e 'DB_PORT' datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>DB_HOST=localhost
+DB_PORT=3306</pre></div>
+<p>Keep a list of patterns in a file and pass it with <code>-f</code>, ideal for a watch-list of bad IPs or forbidden keys:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">printf '%s\n' '185.220.101.3' '45.33.32.156' &gt; blocklist.txt
+grep -c -F -f blocklist.txt datasets/access.log
+grep -F -f blocklist.txt datasets/access.log | head -3</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>10
+185.220.101.3 - - [16/Nov/2026:12:01:51 +0530] "POST /wp-login.php HTTP/1.1" 200 32921 "-" "sqlmap/1.7.11#stable"
+185.220.101.3 - - [16/Nov/2026:12:04:05 +0530] "GET /admin HTTP/1.1" 403 302 "-" "sqlmap/1.7.11#stable"
+185.220.101.3 - - [16/Nov/2026:12:38:17 +0530] "GET /.env HTTP/1.1" 404 545 "https://www.google.com/" "sqlmap/1.7.11#stable"</pre></div>
+<p><code>-e</code> is also how you search for a pattern that begins with a dash:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">echo "use --force carefully" | grep -e '--force'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>use --force carefully</pre></div>
+
+<h3 id="i-F">-F: fixed strings</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -c '10.0.0.5'    datasets/access.log    # regex: dots match anything
+grep -c -F '10.0.0.5' datasets/access.log    # literal: same here, but safer and faster
+grep -F '[16/Nov/2026:12:0' datasets/access.log | head -3</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>13
+13
+185.220.101.3 - - [16/Nov/2026:12:01:51 +0530] "POST /wp-login.php HTTP/1.1" 200 32921 "-" "sqlmap/1.7.11#stable"
+185.220.101.3 - - [16/Nov/2026:12:04:05 +0530] "GET /admin HTTP/1.1" 403 302 "-" "sqlmap/1.7.11#stable"
+172.16.4.8 - - [16/Nov/2026:12:08:31 +0530] "GET /api/v1/report HTTP/1.1" 500 223 "https://example.com/" "python-requests/2.31.0"</pre></div>
+<p>Without <code>-F</code>, the last pattern would be a broken bracket expression. <code>-F</code> is also the fastest mode for huge files.</p>
+
+<h3 id="i-context">-A, -B, -C: context lines</h3>
+<p>Logs are about sequence. Show what happened around an event:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -B 2 'Accepted publickey for sysadmin from 10.0.0.5 port 45679' datasets/auth.log</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Nov 16 03:32:58 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 03:48:34 web01 sshd[9370]: Failed password for admin from 91.240.118.172 port 61108 ssh2
+Nov 16 04:04:25 web01 sshd[5346]: Accepted publickey for sysadmin from 10.0.0.5 port 45679 ssh2</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -A 1 'COMMAND=' datasets/auth.log | head -7</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Nov 16 03:12:09 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 03:32:58 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 03:48:34 web01 sshd[9370]: Failed password for admin from 91.240.118.172 port 61108 ssh2
+--
+Nov 16 04:49:41 web01 sudo:  sysadmin : TTY=pts/0 ; PWD=/home/sysadmin ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 16 05:09:50 web01 sshd[7332]: Failed password for ubuntu from 103.21.244.9 port 57460 ssh2
+--</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -n -C 1 '/api/v1/report HTTP/1.1" 500 532' datasets/access.log</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>13-203.0.113.7 - - [16/Nov/2026:10:06:41 +0530] "GET /images/logo.png HTTP/1.1" 200 16943 "https://example.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+14:192.168.1.15 - - [16/Nov/2026:10:13:29 +0530] "GET /api/v1/report HTTP/1.1" 500 532 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+15-192.168.1.15 - - [16/Nov/2026:10:25:30 +0530] "POST /api/v1/orders HTTP/1.1" 200 3003 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"</pre></div>
+<p>Groups of context are separated by a line containing <code>--</code>. With <code>-n</code>, matching lines use <code>:</code> after the number and context lines use <code>-</code>.</p>
+
+<h3 id="i-m">-m: stop after N matches</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -m 3 'Failed' datasets/auth.log</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Nov 16 01:21:30 web01 sshd[6030]: Failed password for invalid user ubuntu from 185.220.101.3 port 58173 ssh2
+Nov 16 01:41:47 web01 sshd[6379]: Failed password for invalid user guest from 91.240.118.172 port 61010 ssh2
+Nov 16 01:48:04 web01 sshd[2489]: Failed password for root from 103.21.244.9 port 45392 ssh2</pre></div>
+<p>On a multi-gigabyte log, <code>-m 1</code> answers "does this happen at all, and when first?" without reading the rest of the file.</p>
+
+<h3 id="i-q">-q: silent test for scripts</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">if grep -q '^APP_ENV=production' datasets/app.conf; then
+  echo "production mode"
+else
+  echo "WARNING: APP_ENV is not production"
+fi</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>WARNING: APP_ENV is not production</pre></div>
+
+<h2 id="advanced">Advanced</h2>
+
+<h3 id="a-r">-r with --include / --exclude</h3>
+<p>Search a whole tree. Restrict by file name with <code>--include</code>; skip noise with <code>--exclude</code> and <code>--exclude-dir</code>. Quote the globs so the shell does not expand them. First build a small tree from the datasets:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">mkdir -p demo/logs demo/conf demo/data
+cp datasets/access.log datasets/auth.log demo/logs/
+cp datasets/app.conf demo/conf/
+cp datasets/users.json datasets/servers.json demo/data/
+grep -rl 'example.com' demo | sort</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>demo/data/users.json
+demo/logs/access.log</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -rc --include='*.json' 'example.com' demo | sort</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>demo/data/servers.json:0
+demo/data/users.json:12</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -rn --exclude-dir=logs 'root' demo</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>demo/conf/app.conf:11:DB_USER=root</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -rl --exclude='*.log' -i 'debug' demo</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>demo/conf/app.conf</pre></div>
+<div class="callout note"><span class="ct">Note</span>The order in which <code>-r</code> visits files depends on the filesystem, so pipe into <code>sort</code> when the order matters (or when comparing with a friend's output).</div>
+
+<h3 id="a-backref">Back-references</h3>
+<p>A back-reference <code>\1</code> matches the <em>same text</em> that group 1 matched. Classic uses are finding repeated words (a common typo) or repeated characters:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">printf 'the the cat\nno repeat here\nis is it\n' | grep -E '\b([a-z]+) \1\b'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>the the cat
+is is it</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -oE '([0-9])\1\1' datasets/access.log | sort | uniq -c    # triple digits like 000, 111</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>      1 111
+      1 222</pre></div>
+
+<h3 id="a-P">-P: Perl regex (GNU grep)</h3>
+<p>PCRE adds shorthand classes (<code>\d</code>), non-greedy quantifiers and <strong>lookarounds</strong>, assertions that check context without including it in the match. With <code>-o</code> this lets you print just the value you want:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -oP '(?&lt;=for )\w+(?= from)' datasets/auth.log | sort | uniq -c | sort -rn</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>      7 sysadmin
+      5 root
+      4 deploy
+      3 ubuntu
+      3 test
+      2 admin
+      1 guest</pre></div>
+<p><code>(?&lt;=for )</code> means "preceded by <em>for </em>", <code>(?= from)</code> means "followed by <em> from</em>". Only the user name is printed. Another one, the value of a config key, without the key:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -oP '^DB_\w+=\K.*' datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>localhost
+3306
+inventory
+root
+changeme</pre></div>
+<p><code>\K</code> "keeps" only what comes after it. Response sizes larger than 50 000 bytes using <code>\d</code>:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -oP '" 200 \K\d{5,}' datasets/access.log | sort -n | tail -3</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>51270
+51436
+51563</pre></div>
+<div class="callout warn"><span class="ct">macOS</span>The BSD grep shipped with macOS has no <code>-P</code>. Install GNU grep (<code>brew install grep</code>, then use <code>ggrep</code>) or rewrite the expression with <code>sed -E</code>/<code>awk</code>. In exams on Linux, <code>grep -oP</code> is fine.</div>
+
+<h3 id="a-combine">grep in pipelines</h3>
+<p>grep is usually one stage of a pipeline. Some useful patterns:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash"># requests per hour (field 4 = [16/Nov/2026:HH:MM:SS)
+grep -oE ':[0-9]{2}:[0-9]{2}:[0-9]{2} ' datasets/access.log | cut -c2-3 | sort | uniq -c | head -5</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>      7 08
+      5 09
+      8 10
+      6 11
+      8 12</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash"># which user agents did the 403-generating clients use?
+grep '" 403 ' datasets/access.log | grep -oE '"[^"]*"$' | sort | uniq -c | sort -rn</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>      4 "sqlmap/1.7.11#stable"
+      3 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+      1 "python-requests/2.31.0"
+      1 "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash"># count matches in a variable
+fails=$(grep -c 'Failed password' datasets/auth.log)
+echo "Failed SSH logins today: $fails"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Failed SSH logins today: 27</pre></div>
+
+<h3 id="a-count-occ">Counting occurrences vs lines</h3>
+<p>Some lines contain <code>google</code> twice (a Google referer <em>and</em> the Googlebot user agent), so the two counts differ:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -c 'google' datasets/access.log         # lines containing it
+grep -o 'google' datasets/access.log | wc -l  # every occurrence</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>30
+34</pre></div>
+
+<!-- ================= USE CASES ================= -->
+<h2 id="use-cases">Use cases</h2>
+
+<div class="usecase">
+<h3 id="uc1"><span class="uc-tag">Use case 1</span> Hunting failed SSH logins</h3>
+<p><strong>Scenario:</strong> your server's <code>/var/log/auth.log</code> is full of <code>Failed password</code> lines. You need a quick report: total failures, failures for <em>invalid</em> (non-existent) users vs real users, the attacking IPs, the most-tried user names, and whether any attacking IP ever logged in successfully. Everything below is grep with a little sort/uniq.</p>
+<div class="code"><div class="code-head">bash · ssh_report.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# ssh_report.sh - summarise failed SSH logins from an auth log
+set -euo pipefail
+
+log="${1:-/var/log/auth.log}"
+threshold="${2:-5}"          # flag IPs with at least this many failures
+
+if [[ ! -r "$log" ]]; then
+  echo "error: cannot read $log" &gt;&amp;2
+  exit 2
+fi
+
+ip_re='([0-9]{1,3}\.){3}[0-9]{1,3}'
+
+total=$(grep -c 'Failed password' "$log" || true)
+invalid=$(grep -c 'Failed password for invalid user' "$log" || true)
+echo "== SSH failed-login report for $log =="
+echo "Total failures      : $total"
+echo "  invalid users     : $invalid"
+echo "  existing accounts : $(( total - invalid ))"
+echo
+
+echo "-- Failures per source IP --"
+grep 'Failed password' "$log" | grep -oE "from $ip_re" | cut -d' ' -f2 \
+  | sort | uniq -c | sort -rn
+
+echo
+echo "-- Most targeted user names --"
+grep -oE 'Failed password for (invalid user )?[a-z]+' "$log" \
+  | awk '{print $NF}' | sort | uniq -c | sort -rn | head -5
+
+echo
+echo "-- IPs at or above threshold ($threshold) --"
+grep 'Failed password' "$log" | grep -oE "$ip_re" | sort | uniq -c \
+  | while read -r count ip; do
+      if (( count &gt;= threshold )); then
+        # did this attacker EVER get in?
+        if grep -q "Accepted .* from $ip " "$log"; then
+          echo "  $ip ($count failures) - ALSO HAS A SUCCESSFUL LOGIN!"
+        else
+          echo "  $ip ($count failures) - candidate for blocking"
+        fi
+      fi
+    done</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">./ssh_report.sh datasets/auth.log 5</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>== SSH failed-login report for datasets/auth.log ==
+Total failures      : 27
+  invalid users     : 13
+  existing accounts : 14
+
+-- Failures per source IP --
+     12 45.33.32.156
+      7 103.21.244.9
+      5 91.240.118.172
+      3 185.220.101.3
+
+-- Most targeted user names --
+      8 ubuntu
+      7 root
+      6 test
+      4 admin
+      2 guest
+
+-- IPs at or above threshold (5) --
+  103.21.244.9 (7 failures) - candidate for blocking
+  45.33.32.156 (12 failures) - candidate for blocking
+  91.240.118.172 (5 failures) - candidate for blocking</pre></div>
+<p><strong>How it works:</strong></p>
+<ul>
+  <li><code>grep -c ... || true</code>: <code>-c</code> prints 0 but exits 1 when nothing matches; <code>|| true</code> keeps <code>set -e</code> from killing the script.</li>
+  <li><code>grep -oE "from $ip_re"</code>: anchoring the IP on the word <em>from</em> guarantees we never extract a port or PID by mistake. The regex is kept in a variable so it is written once.</li>
+  <li><code>(invalid user )?</code>: an optional group, so both "for root" and "for invalid user root" yield the user name as the last word.</li>
+  <li><code>grep -q "Accepted .* from $ip "</code>: a silent test per IP; the trailing space stops <code>10.0.0.5</code> from also matching <code>10.0.0.55</code>.</li>
+</ul>
+<div class="callout tip"><span class="ct">Going further</span>Feed the "candidate for blocking" IPs into <code>sudo ufw deny from IP</code> or fail2ban. On systemd systems without <code>auth.log</code> use <code>journalctl -u ssh --since today | grep 'Failed password'</code>.</div>
+</div>
+
+<div class="usecase">
+<h3 id="uc2"><span class="uc-tag">Use case 2</span> Finding config keys and leaked secrets across a project</h3>
+<p><strong>Scenario:</strong> before pushing a project to GitHub you want to know (a) which files define database settings and (b) whether any file contains a hard-coded password, token or private key. The setup block builds a small sample tree so you can reproduce the output exactly.</p>
+<div class="code"><div class="code-head">bash · setup: a sample project tree</div><pre><code class="language-bash">mkdir -p proj/config proj/src proj/node_modules/lib
+printf 'DB_HOST=db.internal\nDB_USER=app\nDB_PASS=changeme\n' &gt; proj/config/prod.env
+printf 'DB_HOST=localhost\nDB_USER=dev\n# DB_PASS comes from vault\n' &gt; proj/config/dev.env
+printf 'import os\npassword = os.environ["DB_PASS"]\napi_key = "EXAMPLE_KEY_123"\n' &gt; proj/src/app.py
+printf 'echo deploying\ncurl -H "Authorization: Bearer $CF_API_TOKEN" https://api.example.com\n' &gt; proj/src/deploy.sh
+printf 'var secret = "ignore me";\n' &gt; proj/node_modules/lib/x.js
+find proj -type f | sort</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>proj/config/dev.env
+proj/config/prod.env
+proj/node_modules/lib/x.js
+proj/src/app.py
+proj/src/deploy.sh</pre></div>
+<p><strong>Step 1, which files define a key?</strong> <code>-r</code> searches the tree, <code>-l</code> lists files, <code>^</code> ensures the key is defined, not merely mentioned:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -rl '^DB_HOST=' proj | sort</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>proj/config/dev.env
+proj/config/prod.env</pre></div>
+<p><strong>Step 2, show every DB_ setting with file and line number, but ignore commented-out lines:</strong></p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -rnE '^DB_[A-Z]+=' proj | sort</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>proj/config/dev.env:1:DB_HOST=localhost
+proj/config/dev.env:2:DB_USER=dev
+proj/config/prod.env:1:DB_HOST=db.internal
+proj/config/prod.env:2:DB_USER=app
+proj/config/prod.env:3:DB_PASS=changeme</pre></div>
+<p><strong>Step 3, the secret scan.</strong> Case-insensitive, extended regex, recursive, skipping <code>node_modules</code>, and showing only the matching part so long lines do not flood the screen:</p>
+<div class="code"><div class="code-head">bash · scan_secrets.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# scan_secrets.sh - fail (exit 1) if likely secrets are hard-coded under DIR
+set -uo pipefail
+dir="${1:-.}"
+
+pattern='(pass(word)?|secret|api_?key|token)[[:space:]]*[=:][[:space:]]*["'"'"']?[A-Za-z0-9_]{6,}|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+
+hits=$(grep -rniE --exclude-dir=node_modules --exclude-dir=.git \
+            --include='*.env' --include='*.py' --include='*.sh' --include='*.conf' \
+            "$pattern" "$dir" | sort)
+
+if [[ -n "$hits" ]]; then
+  echo "Possible secrets found:"
+  printf '%s\n' "$hits"
+  exit 1
+fi
+echo "No secrets found."</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">./scan_secrets.sh proj; echo "exit=$?"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Possible secrets found:
+proj/config/prod.env:3:DB_PASS=changeme
+proj/src/app.py:3:api_key = "EXAMPLE_KEY_123"
+exit=1</pre></div>
+<p><strong>Why these results?</strong></p>
+<ul>
+  <li><code>prod.env:3</code> has a literal password value, a real finding.</li>
+  <li><code>app.py:3</code> has a hard-coded API key, a real finding. <code>app.py:2</code> is <em>not</em> reported: after <code>=</code> the regex needs at least six word characters in a row (<code>[A-Za-z0-9_]{6,}</code>), but <code>os</code> is followed by a dot, so the run is only two characters long.</li>
+  <li><code>dev.env</code> only mentions <code>DB_PASS</code> in a comment with no <code>=</code>, and <code>deploy.sh</code> reads <code>$CF_API_TOKEN</code> from the environment, both correctly ignored.</li>
+  <li><code>node_modules</code> is skipped by <code>--exclude-dir</code>.</li>
+</ul>
+<p>Because the script exits 1 on findings, it can be used as a Git pre-commit hook: <code>./scan_secrets.sh . || { echo "commit blocked"; exit 1; }</code>.</p>
+</div>
+
+<div class="usecase">
+<h3 id="uc3"><span class="uc-tag">Use case 3</span> Validating input formats with grep -qE</h3>
+<p><strong>Scenario:</strong> a provisioning script takes a user name, an e-mail, an IPv4 address and a port from the user. Validate each one before using it. <code>grep -qE</code> with <code>^...$</code> anchors is the standard trick: the whole string must match, and grep's exit status drives the <code>if</code>.</p>
+<div class="code"><div class="code-head">bash · validate.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# validate.sh - validate values with anchored extended regexes
+set -uo pipefail
+
+# matches VALUE against REGEX; returns grep's exit status
+matches() {
+  local value="$1" regex="$2"
+  printf '%s\n' "$value" | grep -qE "$regex"
+}
+
+valid_username() { matches "$1" '^[a-z_][a-z0-9_-]{2,15}$'; }
+valid_email()    { matches "$1" '^[[:alnum:]._%+-]+@[[:alnum:].-]+\.[[:alpha:]]{2,}$'; }
+valid_port()     { matches "$1" '^[0-9]{1,5}$' &amp;&amp; (( 10#$1 &gt;= 1 &amp;&amp; 10#$1 &lt;= 65535 )); }
+valid_ipv4() {
+  local octet='(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])'
+  matches "$1" "^($octet\.){3}$octet\$"
+}
+
+check() {
+  local kind="$1" value="$2"
+  if "valid_$kind" "$value"; then
+    printf '  %-9s %-28s OK\n' "$kind" "$value"
+  else
+    printf '  %-9s %-28s INVALID\n' "$kind" "$value"
+  fi
+}
+
+check username deploy
+check username 9lives
+check email    priya.sharma@example.com
+check email    priya@localhost
+check ipv4     192.168.1.10
+check ipv4     256.1.1.1
+check ipv4     10.0.0
+check port     8080
+check port     70000</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">bash validate.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>  username  deploy                       OK
+  username  9lives                       INVALID
+  email     priya.sharma@example.com     OK
+  email     priya@localhost              INVALID
+  ipv4      192.168.1.10                 OK
+  ipv4      256.1.1.1                    INVALID
+  ipv4      10.0.0                       INVALID
+  port      8080                         OK
+  port      70000                        INVALID</pre></div>
+<p><strong>Key points:</strong></p>
+<ul>
+  <li><strong>Anchors are essential.</strong> Without <code>^</code> and <code>$</code>, <code>[0-9]{1,5}</code> would accept <code>abc123xyz</code> because <em>part</em> of it matches.</li>
+  <li><code>printf '%s\n' "$value"</code> instead of <code>echo</code>: <code>echo</code> misbehaves with values like <code>-n</code> or <code>-e</code>.</li>
+  <li>The strict IPv4 regex builds an <em>octet</em> alternation (250–255 | 200–249 | 100–199 | 0–99) and repeats it, this is where regex groups pay off. It correctly rejects <code>256.1.1.1</code>.</li>
+  <li>The port check combines a regex (digits only) with arithmetic (range), because regexes are bad at numeric ranges. <code>10#$1</code> forces base 10 so <code>08080</code> is not read as octal.</li>
+  <li>In Bash alone you could write <code>[[ $v =~ regex ]]</code>; using grep keeps the same regex portable to <code>sh</code> scripts and makes the dialect (ERE) explicit.</li>
+</ul>
+</div>
+
+<h2 id="gotchas">Gotchas</h2>
+<div class="table-wrap"><table>
+<tr><th>Problem</th><th>Why it happens</th><th>Fix</th></tr>
+<tr><td><code>grep a+ file</code> finds nothing</td><td>In BRE, <code>+</code> is a literal plus</td><td><code>grep -E 'a+'</code> or <code>grep 'a\+'</code> (GNU)</td></tr>
+<tr><td><code>grep 1.2.3.4</code> matches <code>10203040</code></td><td><code>.</code> means any character</td><td><code>grep -F '1.2.3.4'</code> or escape <code>1\.2\.3\.4</code></td></tr>
+<tr><td>Script dies after grep under <code>set -e</code></td><td>"no match" is exit 1</td><td><code>grep ... || true</code>, or test it with <code>if</code></td></tr>
+<tr><td><code>grep -c</code> lower than expected</td><td>counts lines, not occurrences</td><td><code>grep -o ... | wc -l</code></td></tr>
+<tr><td><code>grep $var file</code> breaks on spaces</td><td>unquoted variable is word-split</td><td><code>grep -- "$var" file</code></td></tr>
+<tr><td>Pattern starting with <code>-</code> treated as an option</td><td>option parsing</td><td><code>grep -e '-x'</code> or <code>grep -- '-x'</code></td></tr>
+<tr><td><code>grep -P</code>: invalid option on macOS</td><td>BSD grep has no PCRE</td><td><code>brew install grep</code> → <code>ggrep -P</code>, or use <code>-E</code></td></tr>
+<tr><td><code>\d</code> does not work with <code>-E</code></td><td><code>\d</code> is Perl syntax</td><td><code>[0-9]</code> or <code>[[:digit:]]</code></td></tr>
+<tr><td><code>[a-z]</code> matches capitals in some locales</td><td>locale collation order</td><td><code>[[:lower:]]</code>, or <code>LC_ALL=C grep ...</code> (also faster)</td></tr>
+<tr><td>"Binary file matches"</td><td>file contains NUL bytes</td><td><code>grep -a</code> to treat as text</td></tr>
+<tr><td>Windows files: <code>'value$'</code> never matches</td><td>lines end with <code>\r</code></td><td><code>grep $'value\r$'</code> or <code>tr -d '\r'</code> first</td></tr>
+<tr><td><code>egrep</code>/<code>fgrep</code> print warnings</td><td>deprecated in GNU grep 3.8+</td><td>use <code>grep -E</code> / <code>grep -F</code></td></tr>
+</table></div>
+
+<h2 id="exercises">Practice exercises</h2>
+<p>All exercises use the datasets above. Try them first, then open the solution.</p>
+<details><summary>1. How many requests in access.log came from the 192.168.1.0/24 network?</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -c '^192\.168\.1\.' datasets/access.log</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>32</pre></div>
+<p>Anchor with <code>^</code> (the IP is the first field) and escape the dots.</p>
+</details>
+<details><summary>2. List the distinct user agents that requested <code>/.env</code> or <code>/xmlrpc.php</code>.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -E '"[A-Z]+ /(\.env|xmlrpc\.php) ' datasets/access.log | grep -oE '"[^"]*"$' | sort -u</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>"Googlebot/2.1 (+http://www.google.com/bot.html)"
+"Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+"sqlmap/1.7.11#stable"</pre></div>
+</details>
+<details><summary>3. Print the line number of every sudo event in auth.log next to the program that was run.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -n 'sudo:' datasets/auth.log | grep -oE '^[0-9]+|COMMAND=[^ ]+' | paste - -</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>8	COMMAND=/usr/bin/systemctl
+9	COMMAND=/usr/bin/systemctl
+15	COMMAND=/usr/bin/systemctl
+26	COMMAND=/usr/bin/systemctl
+28	COMMAND=/usr/bin/systemctl
+31	COMMAND=/usr/bin/systemctl
+44	COMMAND=/usr/bin/systemctl</pre></div>
+<p>The first <code>-o</code> alternative captures the line number added by <code>-n</code>, the second the command. <code>paste - -</code> joins pairs of lines.</p>
+</details>
+<details><summary>4. Show all non-comment, non-empty lines of app.conf whose value is <code>on</code>, <code>off</code>, <code>true</code> or <code>false</code>.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -E '^[^#].*=(on|off|true|false)$' datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>APP_DEBUG=true
+FEATURE_CACHE=off
+FEATURE_EMAIL=on</pre></div>
+</details>
+<details><summary>5. Which accounts successfully logged in with a public key, and how many times each?</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -oE 'Accepted publickey for [a-z]+' datasets/auth.log | awk '{print $4}' | sort | uniq -c</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>      4 deploy
+      7 sysadmin</pre></div>
+</details>
+<details><summary>6. Write a one-line check that prints "debug is ON" only if APP_DEBUG=true is set (exact line).</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -qx 'APP_DEBUG=true' datasets/app.conf &amp;&amp; echo "debug is ON"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>debug is ON</pre></div>
+</details>
+
+<h2 id="viva">Viva / exam questions</h2>
+<details><summary>What is the difference between <code>grep</code>, <code>grep -E</code> and <code>grep -F</code>?</summary><p>Plain <code>grep</code> uses basic regex (BRE), where <code>+ ? | ( ) { }</code> must be backslashed to be special. <code>-E</code> uses extended regex where they are special without a backslash. <code>-F</code> treats the pattern as a literal string with no special characters at all.</p></details>
+<details><summary>How do you count lines that do NOT contain a word?</summary><p><code>grep -vc word file</code>: <code>-v</code> inverts, <code>-c</code> counts.</p></details>
+<details><summary>What does <code>grep -o</code> do and why is it useful?</summary><p>It prints only the matched part of each line, one match per line. Combined with <code>sort | uniq -c</code> it builds frequency tables (IPs, status codes, user names).</p></details>
+<details><summary>Difference between <code>-l</code> and <code>-L</code>?</summary><p><code>-l</code> lists files that contain at least one match; <code>-L</code> lists files that contain none.</p></details>
+<details><summary>How would you search only <code>.php</code> files recursively?</summary><p><code>grep -r --include='*.php' PATTERN dir/</code></p></details>
+<details><summary>What does <code>^$</code> match?</summary><p>An empty line, start of line immediately followed by end of line. <code>grep -v '^$'</code> removes blank lines.</p></details>
+<details><summary>Why use <code>grep -q</code> in a script?</summary><p>It prints nothing and stops at the first match; only the exit status is used, which is exactly what an <code>if</code> needs.</p></details>
+<details><summary>What is a back-reference?</summary><p><code>\1</code> refers to the exact text matched by the first parenthesised group. <code>grep -E '(.)\1'</code> finds any doubled character.</p></details>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="sed.html">sed</a>: once grep has found the lines, sed edits them.</li>
+  <li><a href="awk.html">awk</a>: when you need fields and arithmetic, not just matching.</li>
+  <li><a href="sort-uniq.html">sort &amp; uniq</a>: turning <code>grep -o</code> output into counts.</li>
+  <li><a href="find-xargs.html">find &amp; xargs</a>: selecting files by name, age or size before grepping them.</li>
+  <li><a href="../labs/lab06-access-logs.html">Lab 06, Access log analysis</a> and <a href="../labs/lab07-email-alerts.html">Lab 07, Automated email alerts</a> use these patterns.</li>
+  <li><a href="../labs/lab09-pipes-redirection.html">Lab 09, Pipes &amp; redirection</a>: grep as a pipeline filter.</li>
+</ul>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

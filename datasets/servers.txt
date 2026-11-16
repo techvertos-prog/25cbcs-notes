@@ -1,0 +1,6 @@
+# hostname        ip            user     role
+web01             10.0.1.11     deploy   web
+web02             10.0.1.12     deploy   web
+db01              10.0.1.14     dbadmin  database
+cache01           10.0.1.16     deploy   cache
+mon01             10.0.1.18     ops      monitoring

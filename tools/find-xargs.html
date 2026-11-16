@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>find &amp; xargs · CBCS Unit 4 Shell Wiki</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="find-xargs">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Command tutorials / find &amp; xargs</div>
+<h1>find &amp; xargs: locate files and act on them</h1>
+<p class="lead"><code>find</code> walks a directory tree and selects files by name, type, size, age, permissions or owner, then prints them or runs a command on each. <code>xargs</code> turns a list on stdin into command-line arguments, in batches or in parallel. Together they power every cleanup, backup-retention and bulk-edit script.</p>
+<div class="meta-row">
+  <span class="pill">Commands: find, xargs</span><span class="pill grey">GNU findutils</span><span class="pill grey">~45 min</span><span class="pill grey">Used in Lab 11, Lab 07</span>
+</div>
+
+<h2 id="syntax">Syntax and mental model</h2>
+<div class="code"><div class="code-head">bash · syntax</div><pre><code class="language-bash">find [start-dir...] [tests and actions...]
+#     where to look   what to match and what to do (evaluated left to right per file)
+
+some-command-producing-names | xargs [options] command [initial-args]</code></pre></div>
+<p><strong>How find thinks.</strong> For every file under the start directory, find evaluates the expression left to right, like an <code>if</code> chain. Tests (<code>-name</code>, <code>-mtime</code>…) return true or false. Adjacent tests are joined with an implicit <strong>AND</strong> (<code>-a</code>); <code>-o</code> is OR, <code>!</code> or <code>-not</code> is NOT, and <code>\( … \)</code> groups. Evaluation stops at the first false in an AND chain. Actions (<code>-print</code>, <code>-exec</code>, <code>-delete</code>) are also expressions; if you give no action, find adds <code>-print</code> around the whole expression.</p>
+<p><strong>How xargs thinks.</strong> It reads whitespace- or newline-separated words (or NUL-separated with <code>-0</code>) and appends as many as fit to the command, running it as few times as possible. Options change batch size (<code>-n</code>), placement (<code>-I{}</code>) and parallelism (<code>-P</code>).</p>
+<div class="callout exam"><span class="ct">Viva</span><code>-exec cmd {} \;</code> runs <code>cmd</code> once per file. <code>-exec cmd {} +</code> and <code>xargs</code> run it once per <em>batch</em> of files, which is much faster for thousands of files.</div>
+
+<h2 id="options">Options cheat table</h2>
+<h3>find tests</h3>
+<div class="table-wrap"><table>
+<tr><th>Test</th><th>Matches</th><th>Example</th></tr>
+<tr><td><code>-name PAT</code> / <code>-iname PAT</code></td><td>Base name glob, case-sensitive / insensitive. Quote the pattern!</td><td><code>-name '*.log'</code></td></tr>
+<tr><td><code>-path PAT</code></td><td>Whole path glob</td><td><code>-path './logs/*'</code></td></tr>
+<tr><td><code>-type f|d|l</code></td><td>Regular file / directory / symlink</td><td><code>-type f</code></td></tr>
+<tr><td><code>-size +N / -N / N</code></td><td>Bigger / smaller / exactly, units <code>c k M G</code> (rounded up to the unit)</td><td><code>-size +100M</code></td></tr>
+<tr><td><code>-empty</code></td><td>Empty file or directory</td><td><code>-type d -empty</code></td></tr>
+<tr><td><code>-mtime +N / -N</code></td><td>Modified more than / less than N×24h ago</td><td><code>-mtime +30</code></td></tr>
+<tr><td><code>-mmin +N / -N</code></td><td>Same in minutes</td><td><code>-mmin -60</code></td></tr>
+<tr><td><code>-newer FILE</code></td><td>Modified more recently than FILE</td><td><code>-newer /tmp/stamp</code></td></tr>
+<tr><td><code>-perm MODE</code> / <code>-perm -MODE</code> / <code>-perm /MODE</code></td><td>Exactly / all bits set / any bit set</td><td><code>-perm -o+w</code></td></tr>
+<tr><td><code>-user U</code> / <code>-group G</code></td><td>Owner / group</td><td><code>-user www-data</code></td></tr>
+<tr><td><code>-maxdepth N</code> / <code>-mindepth N</code></td><td>Limit recursion depth (put first)</td><td><code>-maxdepth 1</code></td></tr>
+<tr><td><code>-prune</code></td><td>Do not descend into this directory</td><td><code>-name .git -prune -o …</code></td></tr>
+</table></div>
+<h3>find actions and xargs options</h3>
+<div class="table-wrap"><table>
+<tr><th>Item</th><th>Meaning</th></tr>
+<tr><td><code>-print</code> / <code>-print0</code></td><td>Print path + newline / path + NUL byte</td></tr>
+<tr><td><code>-ls</code></td><td><code>ls -dils</code>-style line per file</td></tr>
+<tr><td><code>-printf FMT</code></td><td>Custom output: <code>%p</code> path, <code>%f</code> name, <code>%s</code> bytes, <code>%TY-%Tm-%Td</code> date (GNU)</td></tr>
+<tr><td><code>-delete</code></td><td>Delete the file (implies <code>-depth</code>). Always test with <code>-print</code> first</td></tr>
+<tr><td><code>-exec cmd {} \;</code></td><td>Run cmd once per file</td></tr>
+<tr><td><code>-exec cmd {} +</code></td><td>Run cmd with many files at once</td></tr>
+<tr><td><code>-ok cmd {} \;</code></td><td>Like -exec but asks for confirmation</td></tr>
+<tr><td><code>xargs -0</code></td><td>Input is NUL-separated (pair with <code>-print0</code>)</td></tr>
+<tr><td><code>xargs -n N</code></td><td>At most N arguments per command</td></tr>
+<tr><td><code>xargs -I{}</code></td><td>Replace <code>{}</code> with each input line (one command per line)</td></tr>
+<tr><td><code>xargs -P N</code></td><td>Run up to N commands in parallel</td></tr>
+<tr><td><code>xargs -r</code></td><td>Do not run the command if input is empty (GNU; BSD does this by default)</td></tr>
+<tr><td><code>xargs -t</code></td><td>Print each command to stderr before running it</td></tr>
+</table></div>
+
+<h2 id="practice-tree">Practice tree (setup script)</h2>
+<p>find is about real files, so this page uses a throw-away tree with files of known ages and sizes. The script works on Linux and macOS: <code>touch -t</code> sets the modification time, and <code>ago()</code> computes "N days ago" with either GNU <code>date -d</code> or BSD <code>date -v</code>. Run it in a scratch directory, never in your home folder.</p>
+<div class="code"><div class="code-head">bash · make_practice_tree.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# make_practice_tree.sh - build a throw-away directory tree for find/xargs practice
+# usage: ./make_practice_tree.sh [dir]   (default dir: practice), then cd practice
+set -euo pipefail
+
+# "N days ago" as a touch -t timestamp (works with GNU date and BSD/macOS date)
+ago() { date -d "-$1 days" +%Y%m%d%H%M 2&gt;/dev/null || date -v-"$1"d +%Y%m%d%H%M; }
+# make FILE AGE_DAYS [SIZE_KB]: create file with given age and size
+mk() {
+  local f="$1" age="$2" kb="${3:-1}"
+  mkdir -p "$(dirname "$f")"
+  dd if=/dev/zero of="$f" bs=1024 count="$kb" 2&gt;/dev/null
+  touch -t "$(ago "$age")" "$f"
+}
+
+root="${1:-practice}"
+rm -rf "$root"; mkdir -p "$root"; cd "$root"
+
+mk logs/app.log                 0   40
+mk logs/app.log.1               2   120
+mk logs/error.LOG              10   8
+mk logs/app.log.2              45   300
+mk logs/app.log.3              60   500
+mk logs/old/archive.log.gz     90   1500
+mk backups/db-daily.sql         1   2048
+mk backups/db-monthly.sql      45   1024
+mk backups/site.tar.gz          5   300
+mk src/main.sh                  3
+mk src/util.sh                 20
+mk src/lib/helpers.sh          20
+mk src/README.md                3
+mk "src/My Notes.txt"           7
+mk src/.hidden.conf            30
+mk node_modules/pkg/index.js   15   64
+mkdir -p tmp/empty
+: &gt; tmp/cache.tmp                 # zero-byte file
+chmod 755 src/main.sh
+chmod 600 src/.hidden.conf
+chmod 777 "src/My Notes.txt"
+echo "practice tree ready in $PWD"</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">mkdir -p ~/scratch &amp;&amp; cd ~/scratch
+bash make_practice_tree.sh &amp;&amp; cd practice
+find . | sort</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>.
+./backups
+./backups/db-daily.sql
+./backups/db-monthly.sql
+./backups/site.tar.gz
+./logs
+./logs/app.log
+./logs/app.log.1
+./logs/app.log.2
+./logs/app.log.3
+./logs/error.LOG
+./logs/old
+./logs/old/archive.log.gz
+./node_modules
+./node_modules/pkg
+./node_modules/pkg/index.js
+./src
+./src/.hidden.conf
+./src/My Notes.txt
+./src/README.md
+./src/lib
+./src/lib/helpers.sh
+./src/main.sh
+./src/util.sh
+./tmp
+./tmp/cache.tmp
+./tmp/empty</pre></div>
+<div class="table-wrap"><table>
+<tr><th>File</th><th>Age (days)</th><th>Size</th><th>Note</th></tr>
+<tr><td><code>logs/app.log</code>, <code>app.log.1</code></td><td>0, 2</td><td>40K, 120K</td><td>current and yesterday's log</td></tr>
+<tr><td><code>logs/error.LOG</code></td><td>10</td><td>8K</td><td>upper-case extension</td></tr>
+<tr><td><code>logs/app.log.2</code>, <code>app.log.3</code></td><td>45, 60</td><td>300K, 500K</td><td>old rotated logs</td></tr>
+<tr><td><code>logs/old/archive.log.gz</code></td><td>90</td><td>1500K</td><td>nested, compressed</td></tr>
+<tr><td><code>backups/db-daily.sql</code>, <code>db-monthly.sql</code>, <code>site.tar.gz</code></td><td>1, 45, 5</td><td>2M, 1M, 300K</td><td>backup files</td></tr>
+<tr><td><code>src/*</code></td><td>3–30</td><td>1K</td><td><code>main.sh</code> 755, <code>.hidden.conf</code> 600, <code>My Notes.txt</code> 777 and has a space</td></tr>
+<tr><td><code>node_modules/</code></td><td>15</td><td>64K</td><td>a directory you usually want to skip</td></tr>
+<tr><td><code>tmp/cache.tmp</code>, <code>tmp/empty/</code></td><td>0</td><td>0</td><td>empty file and empty directory</td></tr>
+</table></div>
+<p>All outputs below come from running the commands inside <code>practice/</code>. find returns files in directory order, which is not alphabetical, so most examples end with <code>| sort</code>. Directories themselves are "0 days old" because creating files inside them updates their mtime.</p>
+
+<h2 id="basics">Basics: name and type</h2>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find . -name '*.log' | sort       # exact case
+find . -iname '*.log' | sort      # any case</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>./logs/app.log
+./logs/app.log
+./logs/error.LOG</pre></div>
+<p><code>-name '*.log'</code> only matches names that <em>end</em> in <code>.log</code>, so <code>app.log.1</code> is not included. Always quote the pattern: unquoted <code>*.log</code> is expanded by the shell first if a matching file exists in the current directory.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find . -type f -name '*.sh' | sort
+find . -maxdepth 1 -type d | sort           # top-level directories only
+find . -name '.*' -type f                   # hidden files</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>./src/lib/helpers.sh
+./src/main.sh
+./src/util.sh
+.
+./backups
+./logs
+./node_modules
+./src
+./tmp
+./src/.hidden.conf</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find logs -mindepth 1 -maxdepth 1 | sort      # direct children of logs, not logs itself</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>logs/app.log
+logs/app.log.1
+logs/app.log.2
+logs/app.log.3
+logs/error.LOG
+logs/old</pre></div>
+<p>Notice the paths start with whatever start directory you gave (<code>logs/</code> here, <code>./</code> above).</p>
+
+<h2 id="size-age">Size, age and emptiness</h2>
+<h3>-size</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find . -type f -size +1M | sort                 # bigger than 1 MiB
+find . -type f -size +100k -size -1024k | sort  # between 100 KiB and 1 MiB
+find . -type f -empty
+find . -type d -empty</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>./backups/db-daily.sql
+./logs/old/archive.log.gz
+./backups/site.tar.gz
+./logs/app.log.1
+./logs/app.log.2
+./logs/app.log.3
+./tmp/cache.tmp
+./tmp/empty</pre></div>
+<div class="callout warn"><span class="ct">Gotcha</span>Sizes are rounded <strong>up</strong> to the unit before comparing. <code>db-monthly.sql</code> is exactly 1 MiB, so it is not <code>+1M</code>. Worse, <code>-size -1M</code> means "rounds up to less than 1 MiB", i.e. only 0-byte files: <code>find . -size +100k -size -1M</code> prints nothing. Use a smaller unit (<code>-1024k</code>) for upper bounds.</div>
+
+<h3>-mtime, -mmin, -newer</h3>
+<p><code>-mtime N</code> counts age in whole 24-hour periods, dropping the fraction. <code>+30</code> means "more than 30 full days", <code>-7</code> means "less than 7 days".</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find . -type f -mtime +30 | sort         # older than 30 days</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>./backups/db-monthly.sql
+./logs/app.log.2
+./logs/app.log.3
+./logs/old/archive.log.gz</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find . -type f -mtime -7 | sort          # changed within the last week</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>./backups/db-daily.sql
+./backups/site.tar.gz
+./logs/app.log
+./logs/app.log.1
+./src/README.md
+./src/main.sh
+./tmp/cache.tmp</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find . -type f -mtime +7 -mtime -30 | sort   # between 8 and 29 days old</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>./logs/error.LOG
+./node_modules/pkg/index.js
+./src/lib/helpers.sh
+./src/util.sh</pre></div>
+<p><code>My Notes.txt</code> (7 days) is not <code>+7</code>, and <code>.hidden.conf</code> (30 days) is not <code>-30</code>: both bounds are strict.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find . -type f -mmin -60 | sort              # modified in the last hour
+find . -type f -newer src/util.sh | sort     # newer than a reference file</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>./logs/app.log
+./tmp/cache.tmp
+./backups/db-daily.sql
+./backups/site.tar.gz
+./logs/app.log
+./logs/app.log.1
+./logs/error.LOG
+./node_modules/pkg/index.js
+./src/My Notes.txt
+./src/README.md
+./src/main.sh
+./tmp/cache.tmp</pre></div>
+<p><code>-newer</code> is the trick for "what changed since the last run": <code>touch /var/tmp/last_backup</code> at the end of a job, then <code>find /srv -newer /var/tmp/last_backup</code> next time.</p>
+
+<h2 id="perm-user">Permissions and owner</h2>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find . -type f -perm 777              # exactly rwxrwxrwx
+find . -type f -perm -u+x | sort      # at least the owner-execute bit
+find . -type f -perm 600              # exactly rw-------
+find . -type f -user "$(whoami)" | wc -l</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>./src/My Notes.txt
+./src/My Notes.txt
+./src/main.sh
+./src/.hidden.conf
+17</pre></div>
+<p>Security audits use <code>find / -xdev -type f -perm -o+w</code> (world-writable files) and <code>find / -perm -4000</code> (setuid programs). <code>-perm /u+x,g+x</code> means "any of these bits".</p>
+
+<h2 id="logic">Operators, grouping and -prune</h2>
+<h3>AND, OR and why you need parentheses</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find . -name '*.log' -o -name '*.sql' | sort</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>./backups/db-daily.sql
+./backups/db-monthly.sql
+./logs/app.log</pre></div>
+<p>AND binds tighter than OR. Compare these two:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find . -type f -name '*.log' -o -name '*.gz' -mtime +30 | sort         # WRONG grouping
+echo ---
+find . -type f \( -name '*.log' -o -name '*.gz' \) -mtime +30 | sort   # right</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>./logs/app.log
+./logs/old/archive.log.gz
+---
+./logs/old/archive.log.gz</pre></div>
+<p>The first reads as <code>(f AND *.log) OR (*.gz AND +30)</code>, so the brand-new <code>app.log</code> sneaks in. Parentheses must be escaped (<code>\(</code> <code>\)</code>) and separated by spaces, because they are separate arguments to find. In a <code>-delete</code> command this mistake deletes the wrong files.</p>
+<h3>NOT</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find . -type f -path './logs/*' ! -name '*.log' | sort    # everything in logs except *.log</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>./logs/app.log.1
+./logs/app.log.2
+./logs/app.log.3
+./logs/error.LOG
+./logs/old/archive.log.gz</pre></div>
+<h3>-prune: skip a directory entirely</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find . -name node_modules -prune -o -type f -print | sort</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>./backups/db-daily.sql
+./backups/db-monthly.sql
+./backups/site.tar.gz
+./logs/app.log
+./logs/app.log.1
+./logs/app.log.2
+./logs/app.log.3
+./logs/error.LOG
+./logs/old/archive.log.gz
+./src/.hidden.conf
+./src/My Notes.txt
+./src/README.md
+./src/lib/helpers.sh
+./src/main.sh
+./src/util.sh
+./tmp/cache.tmp</pre></div>
+<p>Read it as: "if the name is node_modules, prune it (and do nothing else); otherwise, if it is a file, print it". The explicit <code>-print</code> matters: without it find adds an implicit <code>-print</code> to the whole expression and prints <code>./node_modules</code> itself too. Unlike <code>! -path './node_modules/*'</code>, prune never enters the directory, which is much faster on big trees such as <code>.git</code>.</p>
+
+<h2 id="actions">Actions: -print0, -exec, -delete, -ls</h2>
+<h3>-exec with \; versus +</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find . -type f -name '*.sh' -exec echo run: {} \;    # one echo per file
+find . -type f -name '*.sh' -exec echo run: {} +     # one echo for all files</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>run: ./src/main.sh
+run: ./src/util.sh
+run: ./src/lib/helpers.sh
+run: ./src/main.sh ./src/util.sh ./src/lib/helpers.sh</pre></div>
+<p><code>{}</code> is replaced by the path. <code>\;</code> (escaped so the shell does not eat it) ends the command. With <code>+</code>, <code>{}</code> must be the last thing before <code>+</code>. (The order of files depends on the directory layout on disk and may differ on your machine.)</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find backups -type f -exec du -k {} + | sort -rn      # sizes in KB, biggest first
+find . -type f -name '*.sql' -printf '%s %p\n'        # GNU: custom format, bytes + path</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>2048	backups/db-daily.sql
+1024	backups/db-monthly.sql
+300	backups/site.tar.gz
+1048576 ./backups/db-monthly.sql
+2097152 ./backups/db-daily.sql</pre></div>
+<h3>-ls</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find src -maxdepth 1 -type f -ls</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre> 44806629      4 -rwxr-xr-x   1 student  student      1024 Nov 13 23:34 src/main.sh
+ 44806635      4 -rw-------   1 student  student      1024 Oct 17 23:34 src/.hidden.conf
+ 44806633      4 -rw-r--r--   1 student  student      1024 Nov 13 23:34 src/README.md
+ 44806634      4 -rwxrwxrwx   1 student  student      1024 Nov  9 23:34 src/My Notes.txt
+ 44806630      4 -rw-r--r--   1 student  student      1024 Oct 27 23:34 src/util.sh</pre></div>
+<p>Columns: inode, blocks, permissions, links, owner, group, bytes, date, path. Inode numbers, owner and dates will differ on your machine.</p>
+<h3>-delete (dry-run first!)</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find . -type f -name '*.log*' -mtime +30 -print           # 1. look
+find . -type f -name '*.log*' -mtime +30 -print -delete   # 2. same expression + -delete</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>./logs/app.log.2
+./logs/app.log.3
+./logs/old/archive.log.gz
+./logs/app.log.2
+./logs/app.log.3
+./logs/old/archive.log.gz</pre></div>
+<div class="callout warn"><span class="ct">Danger</span><code>-delete</code> must come <strong>after</strong> the tests. <code>find . -delete -name '*.tmp'</code> deletes <em>everything</em>, because actions are evaluated in order and <code>-delete</code> runs before <code>-name</code> is checked. Always run the command with <code>-print</code> first, then swap or add <code>-delete</code> without changing anything else.</div>
+<p>(Run <code>bash make_practice_tree.sh</code> again to restore the tree after deleting.)</p>
+
+<h2 id="xargs">xargs</h2>
+<h3>Batching</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">printf '%s\n' a b c d e f | xargs          # default command is echo, one batch
+printf '%s\n' a b c d e f | xargs -n 2     # at most 2 args per run</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>a b c d e f
+a b
+c d
+e f</pre></div>
+<h3>Why -print0 | xargs -0</h3>
+<p>By default xargs splits on any whitespace, and also treats quotes and backslashes specially. A file called <code>My Notes.txt</code> becomes two arguments:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find . -type f -name '*.txt' | xargs wc -c                # broken
+find . -type f -name '*.txt' -print0 | xargs -0 wc -c     # safe</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>wc: ./src/My: No such file or directory
+wc: Notes.txt: No such file or directory
+0 total
+1024 ./src/My Notes.txt</pre></div>
+<p>A NUL byte is the only character that cannot appear in a Unix path, so <code>-print0</code> + <code>-0</code> is safe for spaces, quotes and even newlines in names. Other tools speak NUL too: <code>sort -z</code>, <code>grep -z</code>, <code>tar --null -T -</code>.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find logs -type f -print0 | sort -z | xargs -0 -n 2 echo batch:</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>batch: logs/app.log logs/app.log.1
+batch: logs/app.log.2 logs/app.log.3
+batch: logs/error.LOG logs/old/archive.log.gz</pre></div>
+<h3>-I{}: put the argument anywhere</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find src -name '*.sh' | sort | xargs -t -I{} cp {} {}.bak     # -t echoes each command
+find . -name '*.bak' -print -delete | sort                     # clean up again</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>cp src/lib/helpers.sh src/lib/helpers.sh.bak
+cp src/main.sh src/main.sh.bak
+cp src/util.sh src/util.sh.bak
+./src/lib/helpers.sh.bak
+./src/main.sh.bak
+./src/util.sh.bak</pre></div>
+<p><code>-I{}</code> implies one command per input line and treats the whole line as one argument (leading blanks are stripped), so it is space-safe for names without newlines.</p>
+<h3>-r: do nothing on empty input</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">printf '' | xargs echo "ran anyway:"       # GNU runs echo once with no file args
+printf '' | xargs -r echo "ran anyway:"    # -r: skip when there is no input</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>ran anyway:</pre></div>
+<p>This matters for commands like <code>xargs rm</code> (prints a "missing operand" error) or <code>xargs grep pattern</code> (would wait for stdin). BSD/macOS xargs already skips empty input.</p>
+<h3>-P: parallel jobs</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find backups -type f -print0 | xargs -0 -P 3 -n 1 sha256sum | sort -k2</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>5647f05ec18958947d32874eeb788fa396a05d0bab7c1b71f112ceb7e9b31eee  backups/db-daily.sql
+30e14955ebf1352266dc2ff8067e68104607e750abb9d3b36582b8af909fcb58  backups/db-monthly.sql
+7818f5542a0404157573be6cffc0e0c8e68ce3c0f5d17d07ccdd9313fb700baf  backups/site.tar.gz</pre></div>
+<p>Three <code>sha256sum</code> processes run at once. Their output arrives in whatever order they finish, hence the <code>sort</code>. (The hashes are identical on every machine because the practice files are just zero bytes.)</p>
+<h3>xargs vs -exec +</h3>
+<div class="table-wrap"><table>
+<tr><th>Need</th><th>Use</th></tr>
+<tr><td>Simple: run a command on all matches</td><td><code>find … -exec cmd {} +</code> (no pipe, always space-safe)</td></tr>
+<tr><td>Parallel execution</td><td><code>find … -print0 | xargs -0 -P N cmd</code></td></tr>
+<tr><td>Filter the list between find and the command (sort, grep, head)</td><td><code>find … -print0 | sort -z | xargs -0 cmd</code></td></tr>
+<tr><td>Input not from find (a file of names, a command's output)</td><td><code>xargs -a list.txt cmd</code> or <code>cat list | xargs cmd</code></td></tr>
+<tr><td>Shell logic per file (variables, <code>${f%.x}</code>)</td><td><code>-exec sh -c 'for f do …; done' sh {} +</code></td></tr>
+</table></div>
+
+<h2 id="usecases">Use cases</h2>
+
+<div class="usecase"><h3><span class="uc-tag">Use case 1</span> Clean up old logs safely (dry run first)</h3>
+<p>A retention policy says log files older than 30 days must go. The script selects files in exactly one function, shows what it would delete and how much space that frees, and only deletes when called with <code>--delete</code>. This is the pattern used in <a href="../labs/lab11-backup-retention.html">Lab 11</a>.</p>
+<div class="code"><div class="code-head">bash · clean_old_logs.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# clean_old_logs.sh - delete log files older than N days; DRY RUN unless --delete
+# usage: ./clean_old_logs.sh [--delete] DIR [DAYS]
+set -euo pipefail
+
+mode="dry-run"
+if [[ "${1:-}" == "--delete" ]]; then mode="delete"; shift; fi
+dir="${1:?usage: $0 [--delete] DIR [DAYS]}"
+days="${2:-30}"
+[[ -d "$dir" ]] || { echo "error: $dir is not a directory" &gt;&amp;2; exit 1; }
+[[ "$days" =~ ^[0-9]+$ ]] || { echo "error: DAYS must be a number" &gt;&amp;2; exit 2; }
+
+# the selection, defined ONCE so dry-run and delete can never disagree
+select_files() {
+  find "$dir" -type f \( -name '*.log' -o -name '*.log.[0-9]*' -o -name '*.log.gz' \) \
+       -mtime +"$days" -print0
+}
+
+count=$(( $(select_files | tr -cd '\0' | wc -c) ))   # count NUL terminators
+if (( count == 0 )); then echo "nothing older than $days days in $dir"; exit 0; fi
+
+echo "[$mode] $count file(s) older than $days days in $dir:"
+select_files | sort -z | xargs -0 du -k | awk '{kb+=$1; print "  " $2} END {print "  total: " kb " KB"}'
+
+if [[ "$mode" == "delete" ]]; then
+  select_files | xargs -0 rm -f --
+  echo "deleted."
+else
+  echo "dry run only - re-run with --delete to remove them"
+fi</code></pre></div>
+<div class="code"><div class="code-head">bash · run it (inside practice/)</div><pre><code class="language-bash">./clean_old_logs.sh logs 30            # dry run
+./clean_old_logs.sh --delete logs 30   # for real
+./clean_old_logs.sh logs 30            # run again: nothing left
+find logs -type f | sort</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>[dry-run] 3 file(s) older than 30 days in logs:
+  logs/app.log.2
+  logs/app.log.3
+  logs/old/archive.log.gz
+  total: 2300 KB
+dry run only - re-run with --delete to remove them
+[delete] 3 file(s) older than 30 days in logs:
+  logs/app.log.2
+  logs/app.log.3
+  logs/old/archive.log.gz
+  total: 2300 KB
+deleted.
+nothing older than 30 days in logs
+logs/app.log
+logs/app.log.1
+logs/error.LOG</pre></div>
+<p><strong>Key points.</strong> The <code>\( … -o … \)</code> group keeps <code>-mtime</code> applying to all three name patterns. Counting NUL bytes with <code>tr -cd '\0' | wc -c</code> counts files correctly even if a name contains a newline. <code>rm -f --</code>: the <code>--</code> ends option parsing so a file named <code>-rf</code> cannot be taken as an option. In cron, run it as <code>0 3 * * * /opt/scripts/clean_old_logs.sh --delete /var/log/myapp 30</code>.</p>
+</div>
+
+<div class="usecase"><h3><span class="uc-tag">Use case 2</span> Bulk rename and compress files</h3>
+<p>An application writes <code>error.LOG</code> with an upper-case extension and never compresses its rotated logs. Fix both in one pass: rename with shell parameter expansion inside <code>-exec sh -c</code>, and gzip rotated logs four at a time with <code>xargs -P</code>.</p>
+<div class="code"><div class="code-head">bash · tidy_logs.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# tidy_logs.sh - bulk-rename *.LOG to *.log, then gzip rotated logs in parallel
+# usage: ./tidy_logs.sh DIR
+set -euo pipefail
+dir="${1:?usage: $0 DIR}"
+
+# 1. bulk rename: one sh process receives many files via {} +
+find "$dir" -type f -name '*.LOG' -exec sh -c '
+  for f do
+    mv -v -- "$f" "${f%.LOG}.log"
+  done' sh {} +
+
+# 2. compress rotated logs (app.log.1, app.log.2 ...) that are not yet gzipped,
+#    4 gzip processes at a time, 1 file each
+find "$dir" -type f -name '*.log.[0-9]*' ! -name '*.gz' -print0 |
+  xargs -0 -r -P 4 -n 1 gzip -9
+
+# 3. show the result
+find "$dir" -type f | sort</code></pre></div>
+<div class="code"><div class="code-head">bash · run it (fresh practice tree)</div><pre><code class="language-bash">bash make_practice_tree.sh &gt;/dev/null &amp;&amp; cd practice
+../tidy_logs.sh logs</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>renamed 'logs/error.LOG' -&gt; 'logs/error.log'
+logs/app.log
+logs/app.log.1.gz
+logs/app.log.2.gz
+logs/app.log.3.gz
+logs/error.log
+logs/old/archive.log.gz</pre></div>
+<p><strong>How it works.</strong> In <code>sh -c '…' sh {} +</code> the first word after the script (<code>sh</code>) becomes <code>$0</code>, and the file names become <code>$1 $2 …</code>, which <code>for f do</code> loops over. Using positional arguments, rather than pasting <code>{}</code> into the script text, is what keeps odd file names safe. <code>${f%.LOG}</code> strips the suffix. The <code>! -name '*.gz'</code> test prevents gzipping <code>archive.log.gz</code> again. <code>gzip</code> keeps the original timestamp, so later age-based cleanup still works.</p>
+</div>
+
+<div class="usecase"><h3><span class="uc-tag">Use case 3</span> Parallel checksums and search across many files</h3>
+<p>Before copying backups off-site you want a SHA-256 manifest you can verify on the other side. On a server with many large files, hashing in parallel uses all CPU cores. The same find/xargs pattern also searches many files at once.</p>
+<div class="code"><div class="code-head">bash · checksum_manifest.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# checksum_manifest.sh - parallel SHA-256 manifest of a directory, then verify it
+# usage: ./checksum_manifest.sh DIR [MANIFEST]
+set -euo pipefail
+export LC_ALL=C
+dir="${1:?usage: $0 DIR [MANIFEST]}"
+manifest="${2:-SHA256SUMS}"
+jobs=$(nproc 2&gt;/dev/null || echo 4)          # one sha256sum per CPU core
+
+# -P runs several sha256sum at once; -n 4 hands each one 4 files.
+# Parallel output arrives in random order, so sort by file name (field 2).
+find "$dir" -type f -print0 |
+  xargs -0 -r -P "$jobs" -n 4 sha256sum |
+  sort -k2 &gt; "$manifest"
+
+echo "$(wc -l &lt; "$manifest") files hashed with $jobs parallel jobs -&gt; $manifest"
+
+# verification: sha256sum -c re-reads every file and compares
+if sha256sum --quiet -c "$manifest"; then
+  echo "verify: all OK"
+else
+  echo "verify: MISMATCH found" &gt;&amp;2
+  exit 1
+fi</code></pre></div>
+<div class="code"><div class="code-head">bash · run it (inside practice/)</div><pre><code class="language-bash">../checksum_manifest.sh backups backups.sha256
+cat backups.sha256
+echo corrupt &gt;&gt; backups/site.tar.gz          # simulate damage
+sha256sum --quiet -c backups.sha256; echo "exit=$?"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>3 files hashed with 4 parallel jobs -&gt; backups.sha256
+verify: all OK
+5647f05ec18958947d32874eeb788fa396a05d0bab7c1b71f112ceb7e9b31eee  backups/db-daily.sql
+30e14955ebf1352266dc2ff8067e68104607e750abb9d3b36582b8af909fcb58  backups/db-monthly.sql
+7818f5542a0404157573be6cffc0e0c8e68ce3c0f5d17d07ccdd9313fb700baf  backups/site.tar.gz
+backups/site.tar.gz: FAILED
+sha256sum: WARNING: 1 computed checksum did NOT match
+exit=1</pre></div>
+<p>The job count comes from <code>nproc</code> and will match your CPU. <code>--quiet</code> prints only failures. Copy <code>backups.sha256</code> along with the files and run <code>sha256sum -c</code> on the remote side.</p>
+<p><strong>Searching many files.</strong> From the project root, which dataset files mention the attacker IP <code>45.33.32.156</code>, and how often?</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find datasets -type f -print0 | xargs -0 grep -l '45\.33\.32\.156' | sort
+find datasets -type f -print0 | xargs -0 -P 4 grep -c '45\.33\.32\.156' | grep -v ':0$' | sort</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>datasets/access.log
+datasets/auth.log
+datasets/access.log:2
+datasets/auth.log:12</pre></div>
+<p><code>grep -l</code> lists matching files; <code>grep -c</code> counts per file and <code>grep -v ':0$'</code> hides files with no hits. Dots are escaped because in a regex <code>.</code> matches any character. (Plain <code>grep -rl</code> also works; the find version lets you add <code>-mtime</code>, <code>-size</code> or <code>-prune</code> filters and run in parallel.)</p>
+</div>
+
+<h2 id="gotchas">Gotchas</h2>
+<div class="table-wrap"><table>
+<tr><th>Problem</th><th>Cause and fix</th></tr>
+<tr><td><code>find: paths must precede expression</code></td><td>Unquoted <code>-name *.log</code> was expanded by the shell. Quote it: <code>-name '*.log'</code>.</td></tr>
+<tr><td>Wrong files matched with <code>-o</code></td><td>AND binds tighter than OR. Group with <code>\( … \)</code>.</td></tr>
+<tr><td>Everything deleted</td><td><code>-delete</code> placed before the tests. Tests first, action last; dry-run with <code>-print</code>.</td></tr>
+<tr><td><code>-size -1M</code> matches nothing</td><td>Rounding up to whole units. Use <code>-size -1024k</code>.</td></tr>
+<tr><td><code>-mtime 1</code> misses a file from 30 hours ago... or not</td><td>Age is truncated to whole days: 30 h is day 1. Use <code>-mmin</code> for precision.</td></tr>
+<tr><td>xargs breaks on spaces / quotes ("unmatched single quote")</td><td>Use <code>-print0 | xargs -0</code>.</td></tr>
+<tr><td><code>-exec … {} \;</code> is slow</td><td>One process per file. Use <code>{} +</code> or xargs.</td></tr>
+<tr><td><code>missing argument to `-exec'</code></td><td>Forgot <code>\;</code> or <code>+</code>, or did not escape <code>;</code>.</td></tr>
+<tr><td>"Permission denied" noise</td><td><code>find / … 2&gt;/dev/null</code>, and add <code>-xdev</code> to stay on one filesystem.</td></tr>
+<tr><td>-maxdepth warning</td><td>GNU wants global options like <code>-maxdepth</code> before tests.</td></tr>
+<tr><td>BSD/macOS differences</td><td>No <code>-printf</code>; <code>find</code> needs a start dir (<code>find .</code>); xargs <code>-r</code> is default; use <code>-perm +mode</code> on old BSD instead of <code>/mode</code>.</td></tr>
+</table></div>
+
+<h2 id="practice">Practice exercises</h2>
+<p>Run these inside a fresh <code>practice/</code> tree.</p>
+<details><summary>1. List all files bigger than 1 MiB OR older than 50 days, excluding directories.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find . -type f \( -size +1M -o -mtime +50 \) | sort</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>./backups/db-daily.sql
+./logs/app.log.3
+./logs/old/archive.log.gz</pre></div></details>
+<details><summary>2. Find all shell scripts that are NOT executable and make them executable in one chmod call.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find . -type f -name '*.sh' ! -perm -u+x -print -exec chmod u+x {} + | sort</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>./src/lib/helpers.sh
+./src/util.sh</pre></div></details>
+<details><summary>3. Delete empty files and empty directories under tmp (show what you delete).</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find tmp -mindepth 1 -empty -print -delete | sort</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>tmp/cache.tmp
+tmp/empty</pre></div>
+<p><code>-mindepth 1</code> protects <code>tmp</code> itself, which becomes empty after its contents go.</p></details>
+<details><summary>4. Total size in KB of all .sql files, using find + xargs + awk.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find . -type f -name '*.sql' -print0 | xargs -0 du -k | awk '{s+=$1} END {print s " KB"}'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>3072 KB</pre></div></details>
+<details><summary>5. Copy every file changed in the last 7 days (skipping node_modules) into a directory ../recent, keeping names.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">mkdir -p ../recent
+find . -name node_modules -prune -o -type f -mtime -7 -print0 | xargs -0 -r cp -t ../recent
+ls ../recent</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>README.md
+app.log
+app.log.1
+cache.tmp
+db-daily.sql
+main.sh
+site.tar.gz</pre></div>
+<p><code>cp -t DIR</code> (GNU) puts the target first so xargs can append the files at the end. On macOS use <code>xargs -0 -J % cp % ../recent</code>.</p></details>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="../labs/lab11-backup-retention.html">Lab 11, Backup &amp; retention</a> (<code>find -mtime</code> rotation)</li>
+  <li><a href="../labs/lab07-email-alerts.html">Lab 07, Automated email alerts</a> and <a href="../labs/lab09-pipes-redirection.html">Lab 09, Pipes &amp; redirection</a></li>
+  <li><a href="grep.html">grep</a> (<code>grep -r</code>, <code>-l</code>, <code>-z</code>), <a href="sort-uniq.html">sort</a> (<code>sort -z</code>), <a href="cut-tr.html">cut &amp; tr</a></li>
+  <li><a href="../reference/cheatsheet.html">One-page cheat sheet</a></li>
+</ul>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

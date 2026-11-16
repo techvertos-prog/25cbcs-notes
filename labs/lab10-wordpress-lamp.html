@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 10 · WordPress on LAMP</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="lab10">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Labs / Lab 10</div>
+<h1>Lab 10: Automated WordPress on LAMP</h1>
+<p class="lead">Write a Bash script that installs a complete WordPress website on Ubuntu: the Apache web server, the MySQL database, PHP, and the WordPress files. Instead of typing twenty commands by hand, you run one script.</p>
+<div class="meta-row">
+  <span class="pill">Commands: apt, systemctl, mysql, wget, tar, sed</span><span class="pill grey">Difficulty: beginner</span><span class="pill grey">~45 min</span><span class="pill grey">Ubuntu 24.04</span>
+</div>
+
+<h2 id="aim">Aim and objectives</h2>
+<ul>
+  <li>Understand what LAMP means: <strong>L</strong>inux, <strong>A</strong>pache, <strong>M</strong>ySQL, <strong>P</strong>HP.</li>
+  <li>Install packages from a script with <code>apt install -y</code>.</li>
+  <li>Create a database and a user by sending SQL to <code>mysql</code> with a <strong>heredoc</strong>.</li>
+  <li>Download and unpack WordPress with <code>wget</code> and <code>tar</code>.</li>
+  <li>Edit the WordPress config file automatically with <code>sed</code>.</li>
+</ul>
+
+<h2 id="prereq">Prerequisites</h2>
+<ul>
+  <li>An Ubuntu 24.04 virtual machine (VirtualBox or a cloud VM) where you can use <code>sudo</code>, with internet access. Do not practise on your own laptop's operating system.</li>
+  <li>Basic Bash: variables, <code>if</code>, <code>for</code>. The <code>sed</code> examples in this lab also run on any computer using the files in <code>datasets/</code>.</li>
+</ul>
+
+<h2 id="start-here">Start here: simple scripts</h2>
+<p>Five small scripts, each doing one step. Use case 1 later joins them into one installer.</p>
+
+<h3 id="s1">1. Check that you are root</h3>
+<p>Installing software needs administrator (root) rights. A good install script checks this first.</p>
+<div class="code"><div class="code-head">bash · check_root.sh</div><pre><code class="language-bash">#!/bin/bash
+# check_root.sh: installing software needs root, so check first
+
+if [ "$(id -u)" -ne 0 ]; then        # id -u prints 0 for root
+    echo "Please run this script with sudo"
+    exit 1                           # stop with an error code
+fi
+echo "OK, running as root"</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">chmod +x check_root.sh
+./check_root.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Please run this script with sudo</pre></div>
+<p>That was run as a normal user. With <code>sudo ./check_root.sh</code> it prints <code>OK, running as root</code>.</p>
+<ul>
+  <li><code>id -u</code> prints your user ID number. Root is always <code>0</code>.</li>
+  <li><code>$( … )</code> runs a command and puts its output in that place.</li>
+  <li><code>-ne</code> means "not equal" for numbers. <code>exit 1</code> stops the script and reports an error.</li>
+</ul>
+
+<h3 id="s2">2. Install the apache2 package</h3>
+<div class="code"><div class="code-head">bash · install_apache.sh</div><pre><code class="language-bash">#!/bin/bash
+# install_apache.sh: install and start the Apache web server
+
+echo "Updating package list..."
+apt update -y                        # refresh the list of packages
+
+echo "Installing apache2..."
+apt install -y apache2               # -y answers "yes" automatically
+
+systemctl enable --now apache2       # start now and at every boot
+systemctl is-active apache2          # prints "active" if it is running</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">chmod +x install_apache.sh
+sudo ./install_apache.sh</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>Updating package list...
+...
+Installing apache2...
+...
+active</pre></div>
+<ul>
+  <li><code>apt install -y</code>: the <code>-y</code> answers "yes" to the question "Do you want to continue?", so the script never stops to wait for you.</li>
+  <li><code>systemctl enable --now apache2</code> starts Apache now and also every time the machine boots.</li>
+  <li>Open <code>http://localhost/</code> (or the VM's IP) in a browser: you should see the "Apache2 Default Page".</li>
+</ul>
+
+<h3 id="s3">3. Build SQL with a heredoc</h3>
+<p>A <strong>heredoc</strong> (<code>&lt;&lt;SQL … SQL</code>) feeds several lines of text into a command. Here we send it to <code>cat</code> so you can see the text, with the variables already filled in.</p>
+<div class="code"><div class="code-head">bash · show_sql.sh</div><pre><code class="language-bash">#!/bin/bash
+# show_sql.sh: build SQL commands with a heredoc and print them
+
+DB_NAME="wordpress"
+DB_USER="wpuser"
+DB_PASS="Lab10Pass"
+
+cat &lt;&lt;SQL
+CREATE DATABASE $DB_NAME;
+CREATE USER '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';
+GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost';
+FLUSH PRIVILEGES;
+SQL</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">bash show_sql.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>CREATE DATABASE wordpress;
+CREATE USER 'wpuser'@'localhost' IDENTIFIED BY 'Lab10Pass';
+GRANT ALL PRIVILEGES ON wordpress.* TO 'wpuser'@'localhost';
+FLUSH PRIVILEGES;</pre></div>
+<ul>
+  <li>Everything between <code>&lt;&lt;SQL</code> and the line <code>SQL</code> becomes the input of <code>cat</code>.</li>
+  <li><code>$DB_NAME</code>, <code>$DB_USER</code> and <code>$DB_PASS</code> are replaced by their values.</li>
+  <li>The end word (<code>SQL</code>) must be alone on its line, with no spaces before it.</li>
+</ul>
+
+<h3 id="s4">4. Create the database</h3>
+<p>Same heredoc, but now the input goes to <code>mysql</code>, which runs the SQL.</p>
+<div class="code"><div class="code-head">bash · create_db.sh</div><pre><code class="language-bash">#!/bin/bash
+# create_db.sh: the same heredoc, but sent to mysql instead of the screen
+
+DB_NAME="wordpress"
+DB_USER="wpuser"
+DB_PASS="Lab10Pass"
+
+mysql &lt;&lt;SQL
+CREATE DATABASE $DB_NAME;
+CREATE USER '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';
+GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost';
+FLUSH PRIVILEGES;
+SQL
+echo "Database $DB_NAME and user $DB_USER created"</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">sudo bash create_db.sh
+sudo mysql -e "SHOW DATABASES;"</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>Database wordpress and user wpuser created
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| mysql              |
+| performance_schema |
+| sys                |
+| wordpress          |
++--------------------+</pre></div>
+<ul>
+  <li>On Ubuntu, the Linux root user can open <code>mysql</code> without a password, so <code>sudo</code> is enough.</li>
+  <li>The new user <code>wpuser</code> gets rights on the <code>wordpress</code> database only. WordPress never needs the MySQL root account.</li>
+  <li>Running it a second time fails with "database exists". Use case 1 adds <code>IF NOT EXISTS</code> to avoid that.</li>
+</ul>
+
+<h3 id="s5">5. Download and unpack WordPress</h3>
+<div class="code"><div class="code-head">bash · get_wordpress.sh</div><pre><code class="language-bash">#!/bin/bash
+# get_wordpress.sh: download WordPress and unpack it into the web folder
+
+cd /tmp                                            # work in a temporary folder
+wget -q https://wordpress.org/latest.tar.gz        # -q = quiet download
+tar -xzf latest.tar.gz                             # creates the folder "wordpress"
+cp -r wordpress/* /var/www/html/                   # copy the files to Apache's folder
+rm /var/www/html/index.html                        # remove Apache's default page
+chown -R www-data:www-data /var/www/html           # Apache runs as user www-data
+echo "WordPress files copied to /var/www/html"</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">sudo bash get_wordpress.sh
+ls /var/www/html | head -5</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>WordPress files copied to /var/www/html
+index.php
+license.txt
+readme.html
+wp-activate.php
+wp-admin</pre></div>
+<ul>
+  <li><code>wget</code> downloads a file from a URL. <code>latest.tar.gz</code> always holds the newest WordPress.</li>
+  <li><code>tar -xzf</code>: e<strong>x</strong>tract, g<strong>z</strong>ip-compressed, <strong>f</strong>ile name follows.</li>
+  <li><code>/var/www/html</code> is the folder Apache serves by default. Apache runs as the user <code>www-data</code>, so that user must own the files (<code>chown</code>).</li>
+</ul>
+
+<h2 id="concepts">Concepts</h2>
+
+<h3 id="architecture">How a WordPress page is served</h3>
+<p>The browser talks only to Apache. Apache gives <code>.php</code> files to PHP, and the WordPress PHP code reads its posts from MySQL using the database name, user and password written in <code>wp-config.php</code>.</p>
+<figure style="margin:1rem 0">
+<svg viewBox="0 0 720 210" role="img" aria-label="Browser sends HTTP to Apache on port 80, Apache passes PHP to mod_php running WordPress, WordPress queries MySQL on localhost:3306, files live in /var/www" style="width:100%;height:auto;max-width:720px;color:var(--text);font-family:var(--sans)">
+  <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+  <g fill="none" stroke="currentColor" stroke-width="1.5">
+    <rect x="10" y="60" width="120" height="60" rx="8"/>
+    <rect x="200" y="40" width="150" height="100" rx="8" style="stroke:var(--accent)"/>
+    <rect x="420" y="40" width="140" height="100" rx="8" style="stroke:var(--accent)"/>
+    <rect x="610" y="60" width="100" height="60" rx="8"/>
+    <rect x="200" y="160" width="360" height="40" rx="8" stroke-dasharray="5 4"/>
+    <line x1="130" y1="90" x2="198" y2="90" marker-end="url(#ah)"/>
+    <line x1="350" y1="90" x2="418" y2="90" marker-end="url(#ah)"/>
+    <line x1="560" y1="90" x2="608" y2="90" marker-end="url(#ah)"/>
+    <line x1="275" y1="140" x2="275" y2="158" marker-end="url(#ah)"/>
+    <line x1="490" y1="140" x2="490" y2="158" marker-end="url(#ah)"/>
+  </g>
+  <g fill="currentColor" font-size="13" text-anchor="middle">
+    <text x="70" y="88" font-weight="600">Browser</text><text x="70" y="106" font-size="11">client</text>
+    <text x="164" y="80" font-size="11">HTTP :80</text>
+    <text x="275" y="72" font-weight="600">Apache2</text><text x="275" y="92" font-size="11">vhost: ServerName</text><text x="275" y="108" font-size="11">mod_rewrite</text><text x="275" y="124" font-size="11">mod_php</text>
+    <text x="385" y="80" font-size="11">.php</text>
+    <text x="490" y="72" font-weight="600">PHP 8.3</text><text x="490" y="92" font-size="11">WordPress code</text><text x="490" y="108" font-size="11">reads wp-config.php</text>
+    <text x="584" y="80" font-size="11">SQL</text>
+    <text x="660" y="88" font-weight="600">MySQL 8</text><text x="660" y="106" font-size="11">localhost:3306</text>
+    <text x="380" y="185" font-size="12">WordPress files in /var/www/html, owned by www-data</text>
+  </g>
+</svg>
+<figcaption style="font-size:.85rem;color:var(--muted)">LAMP request path. Apache and PHP run as the <code>www-data</code> user, which is why the document root is owned by <code>www-data</code>.</figcaption>
+</figure>
+
+<div class="table-wrap"><table>
+<tr><th>Part</th><th>Package</th><th>Job</th></tr>
+<tr><td>Web server</td><td><code>apache2</code></td><td>answers browser requests on port 80</td></tr>
+<tr><td>Database</td><td><code>mysql-server</code></td><td>stores posts, users and settings</td></tr>
+<tr><td>PHP</td><td><code>php</code>, <code>libapache2-mod-php</code>, <code>php-mysql</code></td><td>runs the WordPress code; <code>php-mysql</code> lets PHP talk to MySQL</td></tr>
+<tr><td>WordPress</td><td>download from wordpress.org</td><td>the website software itself</td></tr>
+</table></div>
+
+<h3 id="commands">Commands used in this lab</h3>
+<div class="table-wrap"><table>
+<tr><th>Command</th><th>What it does</th></tr>
+<tr><td><code>apt update</code></td><td>refresh the list of available packages</td></tr>
+<tr><td><code>apt install -y pkg</code></td><td>install a package without asking</td></tr>
+<tr><td><code>systemctl enable --now svc</code></td><td>start a service now and at every boot</td></tr>
+<tr><td><code>systemctl restart svc</code></td><td>restart a service (after a change)</td></tr>
+<tr><td><code>systemctl is-active svc</code></td><td>print <code>active</code> if the service is running</td></tr>
+<tr><td><code>mysql &lt;&lt;SQL … SQL</code></td><td>run SQL commands from a heredoc</td></tr>
+<tr><td><code>wget URL</code></td><td>download a file</td></tr>
+<tr><td><code>tar -xzf file.tar.gz</code></td><td>unpack a <code>.tar.gz</code> archive</td></tr>
+<tr><td><code>chown -R user:group dir</code></td><td>change the owner of a folder and everything in it</td></tr>
+<tr><td><code>sed -i "s/old/new/" file</code></td><td>replace text inside a file (Linux)</td></tr>
+<tr><td><code>sudo ufw allow 'Apache Full'</code></td><td>open ports 80 and 443 in the firewall, if ufw is on</td></tr>
+</table></div>
+
+<h3 id="permissions">Owner and permissions</h3>
+<div class="table-wrap"><table>
+<tr><th>Setting</th><th>Meaning</th></tr>
+<tr><td>owner <code>www-data</code></td><td>Apache (and PHP) run as this user, so WordPress can save uploads and updates</td></tr>
+<tr><td><code>755</code> on folders</td><td>owner can change; everyone can read and open</td></tr>
+<tr><td><code>644</code> on files</td><td>owner can change; everyone can read</td></tr>
+</table></div>
+<div class="callout warn"><span class="ct">Never chmod 777</span>777 means anyone on the machine can change your website's code. If uploads fail, fix the owner with <code>chown -R www-data:www-data /var/www/html</code> instead.</div>
+
+<h3 id="sed">Editing wp-config.php with sed</h3>
+<p>WordPress ships a sample config file with placeholders like <code>database_name_here</code>. Our script copies it to <code>wp-config.php</code> and replaces each placeholder with <code>sed</code>. You can practise on these two files on any computer.</p>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/wp-config-sample.php</span></div><pre><code>&lt;?php
+/**
+ * The base configuration for WordPress (excerpt of wp-config-sample.php)
+ */
+
+// ** Database settings - You can get this info from your web host ** //
+/** The name of the database for WordPress */
+define( 'DB_NAME', 'database_name_here' );
+
+/** Database username */
+define( 'DB_USER', 'username_here' );
+
+/** Database password */
+define( 'DB_PASSWORD', 'password_here' );
+
+/** Database hostname */
+define( 'DB_HOST', 'localhost' );
+
+/** Database charset to use in creating database tables. */
+define( 'DB_CHARSET', 'utf8' );
+
+/**#@+
+ * Authentication unique keys and salts.
+ */
+define( 'AUTH_KEY',         'put your unique phrase here' );
+define( 'SECURE_AUTH_KEY',  'put your unique phrase here' );
+define( 'LOGGED_IN_KEY',    'put your unique phrase here' );
+define( 'NONCE_KEY',        'put your unique phrase here' );
+define( 'AUTH_SALT',        'put your unique phrase here' );
+define( 'SECURE_AUTH_SALT', 'put your unique phrase here' );
+define( 'LOGGED_IN_SALT',   'put your unique phrase here' );
+define( 'NONCE_SALT',       'put your unique phrase here' );
+/**#@-*/
+
+$table_prefix = 'wp_';
+
+define( 'WP_DEBUG', false );
+
+/* That's all, stop editing! Happy publishing. */</code></pre></div>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/app.conf</span></div><pre><code># ===== Application configuration =====
+APP_NAME=inventory-api
+APP_ENV=development
+APP_DEBUG=true
+APP_PORT=8080
+
+# Database
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=inventory
+DB_USER=root
+DB_PASS=changeme
+
+# Logging
+LOG_LEVEL=debug
+LOG_FILE=/var/log/inventory/app.log
+#LOG_ROTATE=daily
+
+# Features
+FEATURE_CACHE=off
+FEATURE_EMAIL=on
+MAX_UPLOAD_MB=10</code></pre></div>
+
+<p><strong>Replace one placeholder:</strong> <code>s/old/new/</code> means "substitute old with new".</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed "s/database_name_here/wordpress/" datasets/wp-config-sample.php | grep DB_NAME</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>define( 'DB_NAME', 'wordpress' );</pre></div>
+<p><strong>Replace three at once:</strong> each <code>-e</code> adds one more substitution.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -e "s/database_name_here/wordpress/" \
+    -e "s/username_here/wpuser/" \
+    -e "s/password_here/Lab10Pass/" datasets/wp-config-sample.php | grep "DB_"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>define( 'DB_NAME', 'wordpress' );
+define( 'DB_USER', 'wpuser' );
+define( 'DB_PASSWORD', 'Lab10Pass' );
+define( 'DB_HOST', 'localhost' );
+define( 'DB_CHARSET', 'utf8' );</pre></div>
+<p><strong>Change a <code>KEY=value</code> line:</strong> <code>^</code> means "start of line" and <code>.*</code> means "the rest of the line".</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed "s/^APP_ENV=.*/APP_ENV=production/" datasets/app.conf | grep APP_ENV</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>APP_ENV=production</pre></div>
+<div class="callout warn"><span class="ct">Linux vs macOS</span>The commands above print the result and leave the file unchanged. To change the file itself on Linux, add <code>-i</code>: <code>sed -i "s/old/new/" file</code>. On macOS you must write <code>sed -i '' "s/old/new/" file</code>.</div>
+<div class="callout note"><span class="ct">Secret keys</span>The sample file also has eight lines saying <code>put your unique phrase here</code>. They are secret keys for login cookies. For a lab site they can stay, but for a real site replace them with the lines from <code>https://api.wordpress.org/secret-key/1.1/salt/</code> (open it in a browser: it gives new random keys every time).</div>
+
+<h2 id="usecases">Use cases</h2>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 1</span> One script that installs WordPress</h3>
+<p><strong>Goal.</strong> Put the five start-here steps into one script, so a fresh Ubuntu VM becomes a WordPress site with one command. Each step prints a message, so you can see where it is.</p>
+<div class="code"><div class="code-head">bash · install_wordpress.sh</div><pre><code class="language-bash">#!/bin/bash
+# install_wordpress.sh: install WordPress on Ubuntu (Apache + MySQL + PHP)
+# usage: sudo ./install_wordpress.sh
+
+DB_NAME="wordpress"
+DB_USER="wpuser"
+DB_PASS="Lab10Pass"                  # change this for a real site
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Please run with sudo"
+    exit 1
+fi
+
+echo "Step 1: installing Apache, MySQL and PHP..."
+apt update -y
+apt install -y apache2 mysql-server php libapache2-mod-php php-mysql
+
+echo "Step 2: creating the database..."
+mysql &lt;&lt;SQL
+CREATE DATABASE IF NOT EXISTS $DB_NAME;
+CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';
+GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost';
+FLUSH PRIVILEGES;
+SQL
+
+echo "Step 3: downloading WordPress..."
+cd /tmp
+wget -q https://wordpress.org/latest.tar.gz
+tar -xzf latest.tar.gz
+cp -r wordpress/* /var/www/html/
+rm -f /var/www/html/index.html
+
+echo "Step 4: writing wp-config.php..."
+cd /var/www/html
+cp wp-config-sample.php wp-config.php
+sed -i "s/database_name_here/$DB_NAME/" wp-config.php
+sed -i "s/username_here/$DB_USER/" wp-config.php
+sed -i "s/password_here/$DB_PASS/" wp-config.php
+
+echo "Step 5: setting the owner and restarting Apache..."
+chown -R www-data:www-data /var/www/html
+systemctl restart apache2
+
+echo "Done! Open http://localhost/ in a browser to finish the setup."</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">chmod +x install_wordpress.sh
+sudo ./install_wordpress.sh</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>Step 1: installing Apache, MySQL and PHP...
+...
+Step 2: creating the database...
+Step 3: downloading WordPress...
+Step 4: writing wp-config.php...
+Step 5: setting the owner and restarting Apache...
+Done! Open http://localhost/ in a browser to finish the setup.</pre></div>
+<p>Now open the site in a browser: WordPress asks for a site title and an admin password, and the site is ready.</p>
+<p><strong>How it works</strong></p>
+<ul>
+  <li>The three variables at the top are used in two places (the SQL and <code>wp-config.php</code>), so they always match.</li>
+  <li><code>IF NOT EXISTS</code> means the script does not fail if you run it a second time.</li>
+  <li><code>libapache2-mod-php</code> lets Apache run PHP; <code>php-mysql</code> lets PHP connect to MySQL. Without them WordPress cannot work.</li>
+  <li>Step 4 uses <code>sed -i</code> (edit in place), exactly like the practice commands above.</li>
+  <li><code>rm -f</code> removes Apache's default <code>index.html</code>, otherwise Apache would show it instead of WordPress. <code>-f</code> means no error if it is already gone.</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 2</span> Fill in wp-config.php from arguments</h3>
+<p><strong>Goal.</strong> A small tool you can run anywhere: give it the database name, user and password, and it writes a ready <code>wp-config.php</code>. It also checks that you gave exactly three arguments.</p>
+<div class="code"><div class="code-head">bash · configure_wp.sh</div><pre><code class="language-bash">#!/bin/bash
+# configure_wp.sh: fill in the database settings of a WordPress config file
+# usage: ./configure_wp.sh DB_NAME DB_USER DB_PASS
+
+if [ $# -ne 3 ]; then                    # $# = number of arguments
+    echo "usage: $0 DB_NAME DB_USER DB_PASS"
+    exit 1
+fi
+
+sample="datasets/wp-config-sample.php"   # the file we start from
+output="wp-config.php"                   # the file we create
+
+sed -e "s/database_name_here/$1/" \
+    -e "s/username_here/$2/" \
+    -e "s/password_here/$3/" "$sample" &gt; "$output"
+
+echo "Created $output. Database settings:"
+grep "DB_" "$output"</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">chmod +x configure_wp.sh
+./configure_wp.sh
+./configure_wp.sh wordpress wpuser Lab10Pass</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>usage: ./configure_wp.sh DB_NAME DB_USER DB_PASS
+Created wp-config.php. Database settings:
+define( 'DB_NAME', 'wordpress' );
+define( 'DB_USER', 'wpuser' );
+define( 'DB_PASSWORD', 'Lab10Pass' );
+define( 'DB_HOST', 'localhost' );
+define( 'DB_CHARSET', 'utf8' );</pre></div>
+<p><strong>How it works</strong></p>
+<ul>
+  <li><code>$#</code> is the number of arguments. If it is not 3, the script prints how to use it and stops.</li>
+  <li><code>$1</code>, <code>$2</code>, <code>$3</code> are the first, second and third arguments.</li>
+  <li><code>&gt; "$output"</code> saves sed's result into a new file, so the sample file is never changed.</li>
+  <li><code>grep "DB_"</code> shows the lines we care about, as a quick check.</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 3</span> Check that the site works</h3>
+<p><strong>Goal.</strong> After the install, check the important parts in one go: are Apache and MySQL running, does the config file exist, and does the web server answer?</p>
+<div class="code"><div class="code-head">bash · check_site.sh</div><pre><code class="language-bash">#!/bin/bash
+# check_site.sh: quick health check after installing WordPress
+
+for service in apache2 mysql; do
+    status=$(systemctl is-active $service)     # active / inactive / failed
+    echo "$service: $status"
+done
+
+if [ -f /var/www/html/wp-config.php ]; then
+    echo "wp-config.php: found"
+else
+    echo "wp-config.php: MISSING"
+fi
+
+code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/)
+echo "Web page HTTP code: $code"              # 200 or 302 is good</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">bash check_site.sh</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>apache2: active
+mysql: active
+wp-config.php: found
+Web page HTTP code: 302</pre></div>
+<p><strong>How it works</strong></p>
+<ul>
+  <li>The <code>for</code> loop runs <code>systemctl is-active</code> for both services and prints the answer.</li>
+  <li><code>[ -f file ]</code> is true if the file exists.</li>
+  <li><code>curl -s -o /dev/null -w "%{http_code}"</code> asks for the page, throws the page away and prints only the HTTP status code.</li>
+  <li><code>302</code> is normal for a new install: WordPress redirects you to its setup page. <code>200</code> is also good.</li>
+</ul>
+</div>
+
+<details><summary>Optional: going further (your own domain with a virtual host)</summary>
+<p>Use cases 1 to 3 use Apache's default site in <code>/var/www/html</code>. To host a site under a name such as <code>blog.example.com</code>, create a <strong>virtual host</strong> file with a heredoc and enable it:</p>
+<div class="code"><div class="code-head">bash · add_vhost.sh</div><pre><code class="language-bash">#!/bin/bash
+# add_vhost.sh: serve /var/www/html under a domain name
+# usage: sudo ./add_vhost.sh blog.example.com
+domain=$1
+
+cat &gt; /etc/apache2/sites-available/$domain.conf &lt;&lt;CONF
+&lt;VirtualHost *:80&gt;
+    ServerName $domain
+    DocumentRoot /var/www/html
+    &lt;Directory /var/www/html&gt;
+        AllowOverride All
+    &lt;/Directory&gt;
+&lt;/VirtualHost&gt;
+CONF
+
+a2ensite $domain.conf          # enable the new site
+a2enmod rewrite                # needed for WordPress "pretty" links
+apache2ctl configtest          # check for mistakes: should print "Syntax OK"
+systemctl restart apache2</code></pre></div>
+<p><code>a2ensite</code> links the file from <code>sites-available</code> into <code>sites-enabled</code>; only enabled sites are loaded. Always run <code>apache2ctl configtest</code> before restarting.</p>
+</details>
+
+<h2 id="mistakes">Common mistakes</h2>
+<div class="table-wrap"><table>
+<tr><th>Problem</th><th>Cause</th><th>Fix</th></tr>
+<tr><td><code>Permission denied</code> when running <code>./install_wordpress.sh</code></td><td>file is not executable</td><td><code>chmod +x install_wordpress.sh</code>, or run <code>bash install_wordpress.sh</code></td></tr>
+<tr><td><code>E: Could not open lock file</code></td><td>apt run without root</td><td>run the script with <code>sudo</code></td></tr>
+<tr><td><code>[: missing `]'</code></td><td>no spaces inside the brackets: <code>["$x" -ne 0]</code></td><td>write <code>[ "$x" -ne 0 ]</code> with spaces</td></tr>
+<tr><td>Heredoc never ends, script fails at the bottom</td><td>end word indented or misspelled</td><td>put <code>SQL</code> alone at the start of its line</td></tr>
+<tr><td><code>/bin/bash^M: bad interpreter</code></td><td>file saved with Windows (CRLF) line endings</td><td><code>sed -i 's/\r$//' file.sh</code> or save as LF in your editor</td></tr>
+<tr><td>"Error establishing a database connection"</td><td>wrong name/user/password in <code>wp-config.php</code></td><td>compare <code>grep DB_ wp-config.php</code> with the values in the script</td></tr>
+<tr><td>Browser downloads <code>index.php</code> instead of showing the site</td><td><code>libapache2-mod-php</code> missing</td><td>install it and <code>systemctl restart apache2</code></td></tr>
+<tr><td>Apache's default page still shows</td><td><code>index.html</code> still in <code>/var/www/html</code></td><td><code>sudo rm /var/www/html/index.html</code></td></tr>
+<tr><td><code>ERROR 1045: Access denied for user 'root'</code></td><td>ran <code>mysql</code> without sudo</td><td><code>sudo mysql</code></td></tr>
+</table></div>
+
+<h2 id="exercises">Practice exercises</h2>
+<ol class="steps">
+<li><strong>Change the port.</strong> Using <code>datasets/app.conf</code>, change <code>APP_PORT</code> to <code>9090</code> and show only that line.
+<details><summary>Solution</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed "s/^APP_PORT=.*/APP_PORT=9090/" datasets/app.conf | grep APP_PORT</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>APP_PORT=9090</pre></div>
+</details></li>
+<li><strong>Turn on debug mode.</strong> In the WordPress sample, change <code>false</code> to <code>true</code> on the <code>WP_DEBUG</code> line only.
+<details><summary>Solution</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed "/WP_DEBUG/s/false/true/" datasets/wp-config-sample.php | grep WP_DEBUG</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>define( 'WP_DEBUG', true );</pre></div>
+<p><code>/WP_DEBUG/</code> in front of <code>s</code> means "only on lines containing WP_DEBUG".</p></details></li>
+<li><strong>Ask for the password.</strong> Change <code>show_sql.sh</code> so it asks the user to type the database password instead of having it in the script.
+<details><summary>Solution</summary>
+<div class="code"><div class="code-head">bash · ask_password.sh</div><pre><code class="language-bash">#!/bin/bash
+DB_NAME="wordpress"
+DB_USER="wpuser"
+read -s -p "Database password: " DB_PASS     # -s hides what you type
+echo
+echo "CREATE USER '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';"</code></pre></div>
+</details></li>
+<li><strong>Is PHP installed?</strong> Write a script that prints "PHP found" with the version, or "PHP missing".
+<details><summary>Solution</summary>
+<div class="code"><div class="code-head">bash · check_php.sh</div><pre><code class="language-bash">#!/bin/bash
+if command -v php &gt; /dev/null; then      # command -v finds a program
+    echo "PHP found: $(php -v | head -1)"
+else
+    echo "PHP missing"
+fi</code></pre></div>
+</details></li>
+</ol>
+
+<h2 id="viva">Viva / exam questions</h2>
+<details><summary>What does LAMP stand for?</summary><p>Linux (operating system), Apache (web server), MySQL (database), PHP (programming language WordPress is written in).</p></details>
+<details><summary>Why do we use <code>-y</code> with <code>apt install</code> in a script?</summary><p>It answers "yes" automatically. Without it, apt waits for the user to type Y and the script would stop.</p></details>
+<details><summary>What is a heredoc?</summary><p>A way to give several lines of text as input to a command: <code>command &lt;&lt;WORD</code>, then the lines, then <code>WORD</code> alone on a line. We use it to send SQL to <code>mysql</code>.</p></details>
+<details><summary>Why does the script check for root?</summary><p>Installing packages, writing to <code>/var/www</code> and managing services need root rights. Checking first gives a clear message instead of many confusing errors.</p></details>
+<details><summary>What is in <code>wp-config.php</code>?</summary><p>The database name, user, password and host that WordPress uses to connect to MySQL, plus secret keys and other settings.</p></details>
+<details><summary>What does <code>sed "s/old/new/" file</code> do? What does <code>-i</code> add?</summary><p>It prints the file with the first "old" on each line replaced by "new". With <code>-i</code> it changes the file itself instead of printing.</p></details>
+<details><summary>Why must the WordPress files be owned by <code>www-data</code>?</summary><p>Apache and PHP run as the user <code>www-data</code>. WordPress needs to write files (uploads, updates), which only works if that user owns them.</p></details>
+<details><summary>What does <code>systemctl enable --now apache2</code> do?</summary><p><code>enable</code> makes Apache start at boot; <code>--now</code> also starts it immediately.</p></details>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="../tools/sed.html">sed: stream editor</a></li>
+  <li><a href="../tools/curl.html">curl: HTTP from the shell</a></li>
+  <li><a href="lab01-multi-function.html">Lab 01: Multi-function scripting</a>, <a href="lab09-pipes-redirection.html">Lab 09: Pipes &amp; redirection</a> (heredocs)</li>
+  <li><a href="lab11-backup-retention.html">Lab 11: Backup &amp; retention</a> (back up this site), <a href="lab12-service-health.html">Lab 12: Service health monitoring</a> (watch it)</li>
+</ul>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

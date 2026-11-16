@@ -1,0 +1,949 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>awk: column processing</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="awk">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Command tutorials / awk</div>
+<h1>awk: column processing and reports</h1>
+<p class="lead"><code>awk</code> is a small programming language built for one job: read text line by line, split each line into fields, and act on the lines that match a pattern. It replaces <code>cut | grep | sort | uniq</code> chains with one readable program, and it can count, sum, average and group, which is why every report in the labs (salaries per department, revenue per region, hits per IP) is written in awk.</p>
+<div class="meta-row"><span class="pill">pattern { action }</span><span class="pill">fields · arrays · printf</span><span class="pill">reports &amp; joins</span><span class="pill grey">Datasets: employees.csv, sales.csv, access.log, df.txt</span><span class="pill grey">~90 min</span></div>
+
+<h2 id="syntax">Syntax and program structure</h2>
+<div class="code"><div class="code-head">syntax</div><pre><code class="language-bash">awk [-F SEP] [-v var=value] 'PROGRAM' [FILE...]
+awk [-F SEP] [-v var=value] -f program.awk [FILE...]
+
+# PROGRAM is a list of   pattern { action }   rules:
+awk '
+  BEGIN        { ... }     # runs once, before the first line is read
+  /regex/      { ... }     # runs for every line matching regex
+  $3 &gt; 100     { ... }     # runs for every line where field 3 &gt; 100
+               { ... }     # no pattern: runs for EVERY line
+  END          { ... }     # runs once, after the last line
+' file</code></pre></div>
+<p>Either half of a rule may be missing:</p>
+<ul>
+  <li><strong>Pattern without action</strong>: <code>awk '$5 &gt; 90'</code> prints matching lines (the default action is <code>{ print }</code>).</li>
+  <li><strong>Action without pattern</strong>: <code>awk '{ print $1 }'</code> runs on every line.</li>
+</ul>
+
+<h2 id="model">How it works</h2>
+<ol class="steps">
+  <li>Run the <code>BEGIN</code> block (set separators, print headers, initialise variables).</li>
+  <li>Read one <strong>record</strong> (normally one line, separated by <code>RS</code>) into <code>$0</code>.</li>
+  <li>Split it into <strong>fields</strong> <code>$1</code>, <code>$2</code> … <code>$NF</code> using the field separator <code>FS</code> (default: runs of spaces/tabs). Set <code>NR</code> (record number) and <code>NF</code> (number of fields).</li>
+  <li>Test every rule's pattern in order; run the action of each rule that matches.</li>
+  <li>Repeat from step 2 until input ends, then run <code>END</code> (print totals).</li>
+</ol>
+<div class="output"><div class="out-head">mental model</div><pre>"102,Priya Sharma,Engineering,Delhi,135000,2023-02-27"     (FS=",")
+   $1    $2            $3        $4     $5      $6         NF=6, $NF = $6</pre></div>
+<p>Variables need no declaration: an unused variable is <code>""</code> as a string and <code>0</code> as a number. Strings that look like numbers are compared and added as numbers. That is why <code>sum += $5</code> just works.</p>
+
+<h2 id="cheat">Cheat tables</h2>
+<h3 id="cheat-vars">Built-in variables</h3>
+<div class="table-wrap"><table>
+<tr><th>Variable</th><th>Meaning</th><th>Default</th></tr>
+<tr><td><code>$0</code></td><td>the whole current record</td><td></td></tr>
+<tr><td><code>$1 … $NF</code></td><td>fields; <code>$NF</code> is the last, <code>$(NF-1)</code> the one before</td><td></td></tr>
+<tr><td><code>NR</code></td><td>number of records read so far (across all files)</td><td></td></tr>
+<tr><td><code>FNR</code></td><td>record number within the current file</td><td></td></tr>
+<tr><td><code>NF</code></td><td>number of fields in the current record</td><td></td></tr>
+<tr><td><code>FS</code></td><td>input field separator (regex allowed)</td><td>space = runs of blanks</td></tr>
+<tr><td><code>OFS</code></td><td>output field separator, used by <code>print a, b</code></td><td>single space</td></tr>
+<tr><td><code>RS</code></td><td>input record separator; <code>RS=""</code> = paragraph mode</td><td>newline</td></tr>
+<tr><td><code>ORS</code></td><td>output record separator, appended by <code>print</code></td><td>newline</td></tr>
+<tr><td><code>FILENAME</code></td><td>name of the current input file</td><td></td></tr>
+<tr><td><code>RSTART</code>, <code>RLENGTH</code></td><td>set by <code>match()</code></td><td></td></tr>
+<tr><td><code>ENVIRON</code></td><td>array of environment variables: <code>ENVIRON["HOME"]</code></td><td></td></tr>
+</table></div>
+<h3 id="cheat-opts">Options</h3>
+<div class="table-wrap"><table>
+<tr><th>Option</th><th>Meaning</th></tr>
+<tr><td><code>-F ','</code></td><td>set FS (same as <code>BEGIN{FS=","}</code>); <code>-F'[,;]'</code> takes a regex</td></tr>
+<tr><td><code>-v name=value</code></td><td>define a variable before <code>BEGIN</code> runs (repeatable), the safe way to pass shell values</td></tr>
+<tr><td><code>-f file.awk</code></td><td>read the program from a file</td></tr>
+<tr><td><code>--</code></td><td>end of options</td></tr>
+</table></div>
+<h3 id="cheat-funcs">Functions</h3>
+<div class="table-wrap"><table>
+<tr><th>Function</th><th>Returns / does</th></tr>
+<tr><td><code>length(s)</code></td><td>length of string s (of <code>$0</code> if omitted); <code>length(arr)</code> = number of elements</td></tr>
+<tr><td><code>substr(s, start, len)</code></td><td>substring, 1-based</td></tr>
+<tr><td><code>index(s, t)</code></td><td>position of t in s, 0 if absent</td></tr>
+<tr><td><code>split(s, arr, sep)</code></td><td>split s into arr[1..n], returns n</td></tr>
+<tr><td><code>sub(re, repl, target)</code></td><td>replace first match in target (default <code>$0</code>), returns 0/1</td></tr>
+<tr><td><code>gsub(re, repl, target)</code></td><td>replace all matches, returns count</td></tr>
+<tr><td><code>match(s, re)</code></td><td>position of re in s; sets <code>RSTART</code>, <code>RLENGTH</code></td></tr>
+<tr><td><code>toupper(s)</code>, <code>tolower(s)</code></td><td>case conversion</td></tr>
+<tr><td><code>sprintf(fmt, ...)</code></td><td>like printf but returns the string</td></tr>
+<tr><td><code>int(x)</code>, <code>sqrt(x)</code>, <code>exp</code>, <code>log</code>, <code>sin</code>, <code>cos</code>, <code>atan2</code></td><td>maths</td></tr>
+<tr><td><code>rand()</code>, <code>srand(seed)</code></td><td>random number 0 ≤ r &lt; 1</td></tr>
+<tr><td><code>system(cmd)</code></td><td>run a shell command, returns its exit status</td></tr>
+<tr><td><code>"cmd" | getline var</code></td><td>read a line of a command's output</td></tr>
+</table></div>
+
+<h2 id="datasets">Datasets used on this page</h2>
+<p>Run the examples from the wiki's root folder. All outputs below are real.</p>
+<h3 id="ds-emp">employees.csv</h3>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/employees.csv</span></div><pre><code>id,name,department,city,salary,join_date
+101,Aarav Kapoor,Engineering,Delhi,110000,2023-08-11
+102,Priya Sharma,Engineering,Delhi,135000,2023-02-27
+103,Rohan Mehta,Engineering,Mumbai,84000,2025-11-22
+104,Ananya Iyer,Engineering,Pune,131000,2025-05-03
+105,Vikram Verma,Sales,Hyderabad,93000,2022-10-20
+106,Sneha Joshi,Sales,Mumbai,73000,2023-05-28
+107,Arjun Nair,Finance,Hyderabad,94000,2016-10-24
+108,Kavya Gupta,Engineering,Chennai,93000,2020-11-03
+109,Rahul Gupta,Engineering,Pune,115000,2017-03-01
+110,Isha Das,Finance,Chennai,93000,2023-05-02
+111,Karan Nair,Sales,Chennai,63000,2023-02-22
+112,Meera Nair,Sales,Chennai,82000,2019-07-04
+113,Aditya Singh,Sales,Pune,62000,2018-02-02
+114,Pooja Nair,Engineering,Hyderabad,127000,2025-05-15
+115,Nikhil Das,Engineering,Chennai,99000,2022-05-17
+116,Riya Das,Support,Bengaluru,65000,2016-07-24
+117,Sanjay Kapoor,HR,Delhi,38000,2017-04-22
+118,Divya Singh,Engineering,Delhi,116000,2016-03-16
+119,Manish Nair,Support,Pune,64000,2022-11-27
+120,Neha Verma,Support,Mumbai,49000,2022-06-11
+121,Yash Iyer,Engineering,Delhi,106000,2023-05-22
+122,Tanvi Joshi,Finance,Bengaluru,84000,2017-06-09
+123,Harsh Verma,HR,Mumbai,92000,2024-01-22
+124,Simran Mehta,Support,Bengaluru,39000,2024-06-20
+125,Kunal Singh,Support,Mumbai,75000,2016-04-09</code></pre></div>
+<h3 id="ds-sales">sales.csv</h3>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/sales.csv</span></div><pre><code>date,region,product,units,unit_price
+2026-11-01,South,Headset,10,3500
+2026-11-01,West,Mouse,4,800
+2026-11-01,South,Laptop,6,55000
+2026-11-02,North,Keyboard,18,1500
+2026-11-02,North,Mouse,8,800
+2026-11-02,West,Laptop,4,55000
+2026-11-03,West,Monitor,10,12000
+2026-11-03,East,Headset,14,3500
+2026-11-03,West,Mouse,8,800
+2026-11-04,South,Mouse,13,800
+2026-11-04,South,Monitor,3,12000
+2026-11-04,West,Keyboard,11,1500
+2026-11-05,East,Headset,1,3500
+2026-11-05,East,Keyboard,19,1500
+2026-11-05,West,Headset,5,3500
+2026-11-06,West,Mouse,12,800
+2026-11-06,West,Keyboard,15,1500
+2026-11-06,South,Keyboard,8,1500
+2026-11-07,West,Headset,8,3500
+2026-11-07,North,Mouse,11,800
+2026-11-07,West,Mouse,13,800
+2026-11-08,West,Monitor,2,12000
+2026-11-08,East,Monitor,4,12000
+2026-11-08,North,Mouse,17,800
+2026-11-09,North,Mouse,5,800
+2026-11-09,South,Mouse,3,800
+2026-11-09,East,Mouse,11,800
+2026-11-10,West,Headset,3,3500
+2026-11-10,West,Keyboard,11,1500
+2026-11-10,North,Mouse,20,800</code></pre></div>
+<h3 id="ds-df">df.txt: a <code>df -h</code> snapshot</h3>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/df.txt</span></div><pre><code>Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1        50G   41G  6.5G  87% /
+/dev/sda2       200G  120G   70G  64% /var
+/dev/sdb1       500G  478G   22G  96% /backup
+tmpfs           3.9G  1.2M  3.9G   1% /run
+/dev/sdc1       100G   12G   83G  13% /home
+/dev/nvme0n1p1  1.0T  910G   90G  92% /data</code></pre></div>
+<h3 id="ds-access">access.log</h3>
+<p>With the default FS, the fields are: <code>$1</code> IP, <code>$4</code> <code>[date:time</code>, <code>$6</code> <code>"METHOD</code>, <code>$7</code> path, <code>$9</code> status, <code>$10</code> bytes.</p>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/access.log</span></div><pre><code>192.168.1.10 - - [16/Nov/2026:08:11:14 +0530] "GET /api/v1/users HTTP/1.1" 200 16949 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:08:24:08 +0530] "GET /api/v1/users HTTP/1.1" 200 36641 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:08:25:00 +0530] "GET /index.php HTTP/1.1" 200 34018 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:08:34:54 +0530] "GET /js/app.js HTTP/1.1" 200 36613 "-" "curl/8.4.0"
+203.0.113.7 - - [16/Nov/2026:08:42:53 +0530] "GET /old-page HTTP/1.1" 301 0 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+10.0.0.5 - - [16/Nov/2026:08:55:07 +0530] "GET /about.html HTTP/1.1" 200 15010 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+10.0.0.5 - - [16/Nov/2026:08:57:01 +0530] "GET /blog/post-1 HTTP/1.1" 200 23441 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:09:11:07 +0530] "POST /wp-login.php HTTP/1.1" 200 25707 "https://www.google.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+203.0.113.7 - - [16/Nov/2026:09:25:36 +0530] "GET /.env HTTP/1.1" 404 365 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:09:37:57 +0530] "GET /js/app.js HTTP/1.1" 200 51563 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:09:52:52 +0530] "GET / HTTP/1.1" 200 19117 "https://www.google.com/" "curl/8.4.0"
+10.0.0.5 - - [16/Nov/2026:09:55:58 +0530] "GET /index.php HTTP/1.1" 200 18396 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:10:06:41 +0530] "GET /images/logo.png HTTP/1.1" 200 16943 "https://example.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.15 - - [16/Nov/2026:10:13:29 +0530] "GET /api/v1/report HTTP/1.1" 500 532 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:10:25:30 +0530] "POST /api/v1/orders HTTP/1.1" 200 3003 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.10 - - [16/Nov/2026:10:30:24 +0530] "GET /admin HTTP/1.1" 403 470 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:10:34:21 +0530] "GET /blog/post-2 HTTP/1.1" 200 43029 "-" "curl/8.4.0"
+192.168.1.10 - - [16/Nov/2026:10:39:12 +0530] "GET /api/v1/users HTTP/1.1" 200 36222 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+10.0.0.5 - - [16/Nov/2026:10:49:29 +0530] "GET /index.php HTTP/1.1" 200 9965 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+203.0.113.99 - - [16/Nov/2026:10:51:22 +0530] "GET /missing.html HTTP/1.1" 404 258 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:11:05:13 +0530] "GET /css/style.css HTTP/1.1" 200 26116 "https://example.com/" "curl/8.4.0"
+192.168.1.15 - - [16/Nov/2026:11:14:34 +0530] "GET /images/logo.png HTTP/1.1" 200 1652 "-" "python-requests/2.31.0"
+172.16.4.8 - - [16/Nov/2026:11:26:32 +0530] "GET /api/v1/users HTTP/1.1" 200 51270 "https://www.google.com/" "python-requests/2.31.0"
+192.168.1.15 - - [16/Nov/2026:11:28:46 +0530] "GET /index.php HTTP/1.1" 200 1112 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.99 - - [16/Nov/2026:11:37:38 +0530] "GET /images/logo.png HTTP/1.1" 200 7873 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:11:52:19 +0530] "GET /css/style.css HTTP/1.1" 200 10916 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+185.220.101.3 - - [16/Nov/2026:12:01:51 +0530] "POST /wp-login.php HTTP/1.1" 200 32921 "-" "sqlmap/1.7.11#stable"
+185.220.101.3 - - [16/Nov/2026:12:04:05 +0530] "GET /admin HTTP/1.1" 403 302 "-" "sqlmap/1.7.11#stable"
+172.16.4.8 - - [16/Nov/2026:12:08:31 +0530] "GET /api/v1/report HTTP/1.1" 500 223 "https://example.com/" "python-requests/2.31.0"
+192.168.1.10 - - [16/Nov/2026:12:22:46 +0530] "GET /api/v1/users HTTP/1.1" 200 51089 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+10.0.0.5 - - [16/Nov/2026:12:34:21 +0530] "GET /images/logo.png HTTP/1.1" 200 18270 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+185.220.101.3 - - [16/Nov/2026:12:38:17 +0530] "GET /.env HTTP/1.1" 404 545 "https://www.google.com/" "sqlmap/1.7.11#stable"
+185.220.101.3 - - [16/Nov/2026:12:45:25 +0530] "GET /xmlrpc.php HTTP/1.1" 403 411 "-" "sqlmap/1.7.11#stable"
+192.168.1.15 - - [16/Nov/2026:12:49:58 +0530] "GET /blog/post-1 HTTP/1.1" 200 39455 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:13:00:20 +0530] "GET / HTTP/1.1" 200 42259 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+172.16.4.8 - - [16/Nov/2026:13:01:49 +0530] "GET /missing.html HTTP/1.1" 404 216 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+203.0.113.7 - - [16/Nov/2026:13:06:54 +0530] "GET /index.php HTTP/1.1" 200 9571 "https://example.com/" "python-requests/2.31.0"
+203.0.113.99 - - [16/Nov/2026:13:11:22 +0530] "POST /api/v1/orders HTTP/1.1" 200 7252 "https://example.com/" "python-requests/2.31.0"
+10.0.0.5 - - [16/Nov/2026:13:17:44 +0530] "GET /wp-admin/ HTTP/1.1" 302 0 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:13:29:33 +0530] "GET /js/app.js HTTP/1.1" 200 4872 "https://www.google.com/" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:13:43:32 +0530] "GET /about.html HTTP/1.1" 200 13365 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:13:46:15 +0530] "GET /about.html HTTP/1.1" 200 17271 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+172.16.4.8 - - [16/Nov/2026:14:00:22 +0530] "GET /images/logo.png HTTP/1.1" 200 4215 "-" "python-requests/2.31.0"
+185.220.101.3 - - [16/Nov/2026:14:02:17 +0530] "GET /.env HTTP/1.1" 404 388 "https://example.com/" "sqlmap/1.7.11#stable"
+192.168.1.15 - - [16/Nov/2026:14:10:49 +0530] "GET /blog/post-2 HTTP/1.1" 200 4742 "https://example.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+185.220.101.3 - - [16/Nov/2026:14:11:11 +0530] "POST /xmlrpc.php HTTP/1.1" 403 536 "https://example.com/" "sqlmap/1.7.11#stable"
+192.168.1.10 - - [16/Nov/2026:14:14:09 +0530] "GET /index.php HTTP/1.1" 200 4732 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:14:27:14 +0530] "GET / HTTP/1.1" 200 32146 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+185.220.101.3 - - [16/Nov/2026:14:28:32 +0530] "GET /.env HTTP/1.1" 404 215 "-" "sqlmap/1.7.11#stable"
+172.16.4.8 - - [16/Nov/2026:14:40:23 +0530] "GET /blog/post-2 HTTP/1.1" 200 38234 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:14:51:17 +0530] "GET /js/app.js HTTP/1.1" 200 37942 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:14:56:04 +0530] "GET /api/v1/users HTTP/1.1" 200 16542 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+203.0.113.7 - - [16/Nov/2026:14:58:38 +0530] "GET /contact.html HTTP/1.1" 200 21620 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+203.0.113.7 - - [16/Nov/2026:15:06:47 +0530] "GET /css/style.css HTTP/1.1" 200 7452 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.15 - - [16/Nov/2026:15:15:45 +0530] "GET /api/v1/report HTTP/1.1" 500 215 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:15:20:56 +0530] "GET /missing.html HTTP/1.1" 404 540 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+45.33.32.156 - - [16/Nov/2026:15:32:39 +0530] "GET /contact.html HTTP/1.1" 200 44375 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:15:37:29 +0530] "GET / HTTP/1.1" 200 37156 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+203.0.113.7 - - [16/Nov/2026:15:42:37 +0530] "GET /api/v1/users HTTP/1.1" 200 14242 "https://www.google.com/" "python-requests/2.31.0"
+10.0.0.23 - - [16/Nov/2026:15:51:34 +0530] "GET /admin HTTP/1.1" 403 206 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.15 - - [16/Nov/2026:16:06:03 +0530] "GET / HTTP/1.1" 200 51436 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+198.51.100.42 - - [16/Nov/2026:16:09:08 +0530] "GET /images/logo.png HTTP/1.1" 200 28928 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:16:11:22 +0530] "GET /.env HTTP/1.1" 404 256 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:16:25:56 +0530] "GET /images/logo.png HTTP/1.1" 200 29066 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+10.0.0.5 - - [16/Nov/2026:16:31:31 +0530] "GET /api/v1/report HTTP/1.1" 500 200 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:16:43:29 +0530] "GET / HTTP/1.1" 200 37592 "-" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:16:47:51 +0530] "GET /xmlrpc.php HTTP/1.1" 403 391 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+185.220.101.3 - - [16/Nov/2026:17:00:45 +0530] "GET /xmlrpc.php HTTP/1.1" 403 556 "-" "sqlmap/1.7.11#stable"
+192.168.1.10 - - [16/Nov/2026:17:05:38 +0530] "GET /api/v1/users HTTP/1.1" 200 25970 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:17:09:45 +0530] "GET /admin HTTP/1.1" 403 359 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.10 - - [16/Nov/2026:17:13:53 +0530] "GET /index.php HTTP/1.1" 200 22412 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:17:27:24 +0530] "GET /js/app.js HTTP/1.1" 200 27093 "https://www.google.com/" "python-requests/2.31.0"
+192.168.1.10 - - [16/Nov/2026:17:28:12 +0530] "POST /xmlrpc.php HTTP/1.1" 403 315 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+10.0.0.5 - - [16/Nov/2026:17:38:42 +0530] "GET /api/v1/users HTTP/1.1" 200 21457 "-" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:17:45:36 +0530] "GET /index.php HTTP/1.1" 200 3808 "https://example.com/" "python-requests/2.31.0"
+10.0.0.23 - - [16/Nov/2026:17:45:57 +0530] "POST /api/v1/orders HTTP/1.1" 200 49524 "-" "python-requests/2.31.0"
+10.0.0.5 - - [16/Nov/2026:17:52:29 +0530] "GET /api/v1/report HTTP/1.1" 500 349 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+45.33.32.156 - - [16/Nov/2026:18:04:08 +0530] "GET /api/v1/users HTTP/1.1" 200 20581 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:18:15:50 +0530] "GET /blog/post-2 HTTP/1.1" 200 20276 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:18:19:26 +0530] "GET /api/v1/report HTTP/1.1" 500 526 "-" "python-requests/2.31.0"</code></pre></div>
+
+<h2 id="basics">Basics</h2>
+
+<h3 id="b-print">Printing fields</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk '{ print $1 }' datasets/df.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Filesystem
+/dev/sda1
+/dev/sda2
+/dev/sdb1
+tmpfs
+/dev/sdc1
+/dev/nvme0n1p1</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk '{ print $6, $5 }' datasets/df.txt          # comma = OFS (a space) between values
+awk '{ print $6 $5 }'  datasets/df.txt | head -2  # no comma = glued together</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Mounted Use%
+/ 87%
+/var 64%
+/backup 96%
+/run 1%
+/home 13%
+/data 92%
+MountedUse%
+/87%</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk '{ print NR ": " $NF }' datasets/df.txt     # line number and last field</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>1: on
+2: /
+3: /var
+4: /backup
+5: /run
+6: /home
+7: /data</pre></div>
+
+<h3 id="b-F">-F: the field separator</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F',' '{ print $2 " works in " $3 }' datasets/employees.csv | head -4</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>name works in department
+Aarav Kapoor works in Engineering
+Priya Sharma works in Engineering
+Rohan Mehta works in Engineering</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F'[ :]' '{ print $1, $2 }' datasets/auth.log | head -3     # regex FS: space OR colon</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Nov 16
+Nov 16
+Nov 16</pre></div>
+<div class="callout warn"><span class="ct">Careful</span>With the default FS, awk splits on <em>runs</em> of spaces and ignores leading blanks. With <code>-F' '</code> it is the same; but with <code>-F'[ ]'</code> every single space separates a field, so two spaces create an empty field.</div>
+
+<h3 id="b-nr-nf">NR and NF</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk 'NR == 1' datasets/sales.csv                 # just the header
+awk 'NR &gt; 1 &amp;&amp; NR &lt;= 3' datasets/sales.csv       # lines 2-3
+awk 'END { print NR " lines" }' datasets/sales.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>date,region,product,units,unit_price
+2026-11-01,South,Headset,10,3500
+2026-11-01,West,Mouse,4,800
+31 lines</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk '{ print NF }' datasets/access.log | sort -n | uniq -c   # fields per log line vary (user agents)</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>     32 12
+     17 13
+     10 16
+     12 18
+      9 19</pre></div>
+
+<h3 id="b-pattern">Patterns: regex and comparisons</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, '/Engineering/' datasets/employees.csv | head -3          # regex on the whole line</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>101,Aarav Kapoor,Engineering,Delhi,110000,2023-08-11
+102,Priya Sharma,Engineering,Delhi,135000,2023-02-27
+103,Rohan Mehta,Engineering,Mumbai,84000,2025-11-22</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, '$3 == "Finance"' datasets/employees.csv                  # exact field match</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>107,Arjun Nair,Finance,Hyderabad,94000,2016-10-24
+110,Isha Das,Finance,Chennai,93000,2023-05-02
+122,Tanvi Joshi,Finance,Bengaluru,84000,2017-06-09</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, '$5 &gt;= 120000 { print $2, $5 }' datasets/employees.csv    # numeric comparison</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>name salary
+Priya Sharma 135000
+Ananya Iyer 131000
+Pooja Nair 127000</pre></div>
+<p>Why is the header line in the output? On line 1, <code>$5</code> is the text <code>salary</code>, which does not look like a number, so awk compares it as a <em>string</em> with <code>"120000"</code>, and <code>"s"</code> sorts after <code>"1"</code>. Skip the header explicitly:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 &amp;&amp; $5 &gt;= 120000 { print $2, $5 }' datasets/employees.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Priya Sharma 135000
+Ananya Iyer 131000
+Pooja Nair 127000</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk '$9 ~ /^5/ { print $4, $7 }' datasets/access.log | head -3    # field matches regex</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>[16/Nov/2026:10:13:29 /api/v1/report
+[16/Nov/2026:12:08:31 /api/v1/report
+[16/Nov/2026:15:15:45 /api/v1/report</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, '$2 !~ /a$/ &amp;&amp; $3 == "Sales" { print $2 }' datasets/employees.csv   # !~ does not match</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Sneha Joshi
+Karan Nair
+Meera Nair
+Aditya Singh</pre></div>
+
+<h3 id="b-begin-end">BEGIN and END</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk 'BEGIN { print "Mount        Use%" } NR &gt; 1 { print $6, $5 } END { print "--", NR-1, "filesystems" }' datasets/df.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Mount        Use%
+/ 87%
+/var 64%
+/backup 96%
+/run 1%
+/home 13%
+/data 92%
+-- 6 filesystems</pre></div>
+
+<h3 id="b-ofs">OFS and rebuilding $0</h3>
+<p>Changing OFS only affects <code>print a, b</code>, and <code>$0</code> after a field is assigned. The idiom <code>$1 = $1</code> forces awk to rebuild the line with the new OFS:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, -v OFS=' | ' 'NR &lt;= 3 { $1 = $1; print }' datasets/employees.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>id | name | department | city | salary | join_date
+101 | Aarav Kapoor | Engineering | Delhi | 110000 | 2023-08-11
+102 | Priya Sharma | Engineering | Delhi | 135000 | 2023-02-27</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk 'BEGIN { OFS = "," } NR &gt; 1 { print $1, $5, $6 }' datasets/df.txt     # df -&gt; CSV</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>/dev/sda1,87%,/
+/dev/sda2,64%,/var
+/dev/sdb1,96%,/backup
+tmpfs,1%,/run
+/dev/sdc1,13%,/home
+/dev/nvme0n1p1,92%,/data</pre></div>
+
+<h2 id="intermediate">Intermediate</h2>
+
+<h3 id="i-printf">printf: formatted output</h3>
+<p><code>printf</code> works like C/Bash printf: no automatic newline, and format specifiers control width and alignment.</p>
+<div class="table-wrap"><table>
+<tr><th>Spec</th><th>Meaning</th><th>Example → output</th></tr>
+<tr><td><code>%s</code></td><td>string</td><td><code>printf "%s", "web"</code> → <code>web</code></td></tr>
+<tr><td><code>%-10s</code></td><td>left-aligned in 10 columns</td><td><code>web       </code></td></tr>
+<tr><td><code>%10s</code></td><td>right-aligned in 10 columns</td><td><code>       web</code></td></tr>
+<tr><td><code>%d</code></td><td>integer</td><td><code>printf "%d", 3.9</code> → <code>3</code></td></tr>
+<tr><td><code>%5d</code> / <code>%05d</code></td><td>width 5, space- / zero-padded</td><td><code>   42</code> / <code>00042</code></td></tr>
+<tr><td><code>%.2f</code></td><td>2 decimal places</td><td><code>printf "%.2f", 2/3</code> → <code>0.67</code></td></tr>
+<tr><td><code>%e</code>, <code>%x</code>, <code>%o</code>, <code>%c</code></td><td>scientific, hex, octal, character</td><td></td></tr>
+<tr><td><code>%%</code></td><td>a literal percent sign</td><td></td></tr>
+</table></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 &amp;&amp; NR &lt;= 6 { printf "%-15s %-12s %8d\n", $2, $3, $5 }' datasets/employees.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Aarav Kapoor    Engineering    110000
+Priya Sharma    Engineering    135000
+Rohan Mehta     Engineering     84000
+Ananya Iyer     Engineering    131000
+Vikram Verma    Sales           93000</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk 'NR &gt; 1 { printf "%-8s %5s used (%s)\n", $6, $5, $3 }' datasets/df.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>/          87% used (41G)
+/var       64% used (120G)
+/backup    96% used (478G)
+/run        1% used (1.2M)
+/home      13% used (12G)
+/data      92% used (910G)</pre></div>
+
+<h3 id="i-v">-v: passing values in from the shell</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">limit=90
+awk -v max="$limit" 'NR &gt; 1 &amp;&amp; $5+0 &gt; max { print "ALERT", $6, $5 }' datasets/df.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>ALERT /backup 96%
+ALERT /data 92%</pre></div>
+<p><code>$5+0</code> turns <code>"87%"</code> into the number 87, awk reads the leading digits and ignores the rest. Never paste shell variables into the program text (<code>'... > '$limit' ...'</code>); use <code>-v</code>.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">dept="Sales"
+awk -F, -v d="$dept" '$3 == d { n++ } END { print d ": " n " employees" }' datasets/employees.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Sales: 5 employees</pre></div>
+
+<h3 id="i-cond">if / else, the ternary operator, next</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk 'NR &gt; 1 {
+  use = $5 + 0
+  if (use &gt;= 90)      level = "CRITICAL"
+  else if (use &gt;= 80) level = "WARNING"
+  else                level = "ok"
+  printf "%-8s %4s  %s\n", $6, $5, level
+}' datasets/df.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>/         87%  WARNING
+/var      64%  ok
+/backup   96%  CRITICAL
+/run       1%  ok
+/home     13%  ok
+/data     92%  CRITICAL</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 { print $2, ($5 &gt;= 100000 ? "senior band" : "standard band") }' datasets/employees.csv | head -4</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Aarav Kapoor senior band
+Priya Sharma senior band
+Rohan Mehta standard band
+Ananya Iyer senior band</pre></div>
+<p><code>next</code> stops processing the current line and moves to the next, a clean way to skip headers or comments:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR == 1 { next } { total += $5 } END { print "Payroll:", total }' datasets/employees.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Payroll: 2182000</pre></div>
+
+<h3 id="i-ranges">Range patterns</h3>
+<p><code>pattern1, pattern2</code> selects from a line matching the first to the next line matching the second (like sed):</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk 'NR == 3, NR == 5' datasets/df.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>/dev/sda2       200G  120G   70G  64% /var
+/dev/sdb1       500G  478G   22G  96% /backup
+tmpfs           3.9G  1.2M  3.9G   1% /run</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, '/2026-11-04/, /2026-11-05/' datasets/sales.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>2026-11-04,South,Mouse,13,800
+2026-11-04,South,Monitor,3,12000
+2026-11-04,West,Keyboard,11,1500
+2026-11-05,East,Headset,1,3500</pre></div>
+<p>Note the range stops at the <em>first</em> 2026-11-05 line. For "all of the 4th and 5th" use a comparison instead, ISO dates compare correctly as strings:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, '$1 &gt;= "2026-11-04" &amp;&amp; $1 &lt;= "2026-11-05"' datasets/sales.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>2026-11-04,South,Mouse,13,800
+2026-11-04,South,Monitor,3,12000
+2026-11-04,West,Keyboard,11,1500
+2026-11-05,East,Headset,1,3500
+2026-11-05,East,Keyboard,19,1500
+2026-11-05,West,Headset,5,3500</pre></div>
+
+<h3 id="i-sum">Counting, summing, averaging, min and max</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 { n++; sum += $5 } END { printf "employees=%d total=%d avg=%.2f\n", n, sum, sum/n }' datasets/employees.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>employees=25 total=2182000 avg=87280.00</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 {
+  if (min == "" || $5 &lt; min) { min = $5; minname = $2 }
+  if ($5 &gt; max)              { max = $5; maxname = $2 }
+} END { print "lowest :", minname, min; print "highest:", maxname, max }' datasets/employees.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>lowest : Sanjay Kapoor 38000
+highest: Priya Sharma 135000</pre></div>
+<p>The <code>min == ""</code> test initialises the minimum from the first data line, starting from 0 would give a wrong minimum.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk '{ bytes += $10 } END { printf "%d requests, %.1f KB total, %.0f bytes avg\n", NR, bytes/1024, bytes/NR }' datasets/access.log</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>80 requests, 1300.6 KB total, 16647 bytes avg</pre></div>
+
+<h3 id="i-arrays">Associative arrays and for-in</h3>
+<p>awk arrays are indexed by strings, perfect for "per something" counts. <code>count[$3]++</code> creates the element on first use.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 { count[$3]++ } END { for (d in count) print d, count[d] }' datasets/employees.csv | sort</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Engineering 10
+Finance 3
+HR 2
+Sales 5
+Support 5</pre></div>
+<div class="callout warn"><span class="ct">Order</span><code>for (k in arr)</code> visits keys in an <strong>unspecified order</strong> that differs between gawk, mawk and BSD awk. Pipe into <code>sort</code> (as here) whenever the order matters. gawk can sort internally with <code>PROCINFO["sorted_in"]</code>, but that is not portable.</div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 { sum[$3] += $5; n[$3]++ }
+END { for (d in sum) printf "%-12s %3d  %10.2f\n", d, n[d], sum[d]/n[d] }' datasets/employees.csv | sort -k3 -rn</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Engineering   10   111600.00
+Finance        3    90333.33
+Sales          5    74600.00
+HR             2    65000.00
+Support        5    58400.00</pre></div>
+<p>Useful array operations:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk '{ hits[$1]++ }
+END {
+  print length(hits), "distinct IPs"                # number of elements
+  if ("45.33.32.156" in hits) print "45.33.32.156 seen", hits["45.33.32.156"], "times"
+  delete hits["10.0.0.5"]                           # remove one element
+  print length(hits), "after delete"
+}' datasets/access.log</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>10 distinct IPs
+45.33.32.156 seen 2 times
+9 after delete</pre></div>
+<p>Multi-dimensional keys are joined with <code>SUBSEP</code>; write them as <code>arr[a, b]</code> and split them back with <code>split(k, parts, SUBSEP)</code>. This is how the sales pivot in Use case 2 works.</p>
+
+<h3 id="i-loops">Loops over fields</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">echo "3 9 4 1 7" | awk '{ for (i = 1; i &lt;= NF; i++) s += $i; print "sum=" s, "mean=" s/NF }'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>sum=24 mean=4.8</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">head -2 datasets/sales.csv | awk -F, '{ for (i = NF; i &gt;= 1; i--) printf "%s%s", $i, (i &gt; 1 ? "," : "\n") }'   # reverse columns</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>unit_price,units,product,region,date
+3500,10,Headset,South,2026-11-01</pre></div>
+
+<h3 id="i-strings">String functions</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 &amp;&amp; NR &lt;= 4 { print $2, length($2) }' datasets/employees.csv          # length</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Aarav Kapoor 12
+Priya Sharma 12
+Rohan Mehta 11</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 &amp;&amp; NR &lt;= 4 { print $6, "-&gt; year", substr($6, 1, 4), "month", substr($6, 6, 2) }' datasets/employees.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>2023-08-11 -&gt; year 2023 month 08
+2023-02-27 -&gt; year 2023 month 02
+2025-11-22 -&gt; year 2025 month 11</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 &amp;&amp; NR &lt;= 4 { n = split($6, d, "-"); print d[3] "/" d[2] "/" d[1], "(" n " parts)" }' datasets/employees.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>11/08/2023 (3 parts)
+27/02/2023 (3 parts)
+22/11/2025 (3 parts)</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk 'NR &lt;= 3 { print index($0, "\""), $0 }' datasets/access.log | cut -c1-60    # index: first quote position</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>47 192.168.1.10 - - [16/Nov/2026:08:11:14 +0530] "GET /api/v
+47 192.168.1.10 - - [16/Nov/2026:08:24:08 +0530] "GET /api/v
+47 192.168.1.10 - - [16/Nov/2026:08:25:00 +0530] "GET /index</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 &amp;&amp; NR &lt;= 4 { sub(/ .*/, "", $2); print $2 }' datasets/employees.csv   # sub: first name only</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Aarav
+Priya
+Rohan</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk '{ n = gsub(/\//, "/"); total += n } END { print total, "slashes in the log" }' datasets/access.log   # gsub returns a count</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>650 slashes in the log</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 &amp;&amp; NR &lt;= 4 { print toupper($3), tolower($4) }' datasets/employees.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>ENGINEERING delhi
+ENGINEERING delhi
+ENGINEERING mumbai</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk 'match($0, /"[A-Z]+ [^ ]+/) { print substr($0, RSTART + 1, RLENGTH - 1) }' datasets/access.log | head -3   # match + RSTART/RLENGTH</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>GET /api/v1/users
+GET /api/v1/users
+GET /index.php</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 &amp;&amp; NR &lt;= 4 { id = sprintf("EMP-%05d", $1); print id, $2 }' datasets/employees.csv   # sprintf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>EMP-00101 Aarav Kapoor
+EMP-00102 Priya Sharma
+EMP-00103 Rohan Mehta</pre></div>
+
+<h3 id="i-rs">RS and ORS: changing what a "record" is</h3>
+<p><code>RS=""</code> is <em>paragraph mode</em>: records are separated by blank lines, and newlines also separate fields. app.conf has blank-line separated sections:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk 'BEGIN { RS = "" } { print "section " NR ": " $2 " " $3 " (" NF " fields)" }' datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>section 1: ===== Application (9 fields)
+section 2: Database DB_HOST=localhost (7 fields)
+section 3: Logging LOG_LEVEL=debug (5 fields)
+section 4: Features FEATURE_CACHE=off (5 fields)</pre></div>
+<p><code>ORS</code> replaces the newline that <code>print</code> adds, handy to join lines:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 &amp;&amp; $3 == "HR" { print $2 }' ORS=', ' datasets/employees.csv; echo</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Sanjay Kapoor, Harsh Verma, </pre></div>
+
+<h3 id="i-files">Multiple files: FILENAME, FNR and the NR==FNR join</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk 'FNR == 1 { print FILENAME ": " NF " fields, header=" $0 }' datasets/sales.csv datasets/df.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>datasets/sales.csv: 1 fields, header=date,region,product,units,unit_price
+datasets/df.txt: 7 fields, header=Filesystem      Size  Used Avail Use% Mounted on</pre></div>
+<p>While reading the <strong>first</strong> file, <code>NR == FNR</code> is true (both counters are equal). This lets you load a lookup table from file 1, then use it while reading file 2, a join, like SQL. First create a small lookup file of department heads:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">printf 'department,head,floor\nEngineering,Divya Singh,4\nSales,Vikram Verma,2\nFinance,Arjun Nair,3\nHR,Harsh Verma,1\nSupport,Kunal Singh,2\n' &gt; depts.csv
+awk -F, 'NR == FNR { head[$1] = $2; floor[$1] = $3; next }
+         FNR &gt; 1   { printf "%-14s %-12s head: %-13s floor %s\n", $2, $3, head[$3], floor[$3] }' depts.csv datasets/employees.csv | head -6</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Aarav Kapoor   Engineering  head: Divya Singh   floor 4
+Priya Sharma   Engineering  head: Divya Singh   floor 4
+Rohan Mehta    Engineering  head: Divya Singh   floor 4
+Ananya Iyer    Engineering  head: Divya Singh   floor 4
+Vikram Verma   Sales        head: Vikram Verma  floor 2
+Sneha Joshi    Sales        head: Vikram Verma  floor 2</pre></div>
+<p>The <code>next</code> in the first rule is essential: without it, lines of <code>depts.csv</code> would also fall through to the second rule.</p>
+
+<h2 id="advanced">Advanced</h2>
+
+<h3 id="a-f">awk programs in files (-f) and the shebang</h3>
+<p>Once a program is more than a couple of lines, put it in a file. Comments start with <code>#</code>.</p>
+<div class="code"><div class="code-head">awk · disk_alert.awk</div><pre><code class="language-awk">#!/usr/bin/awk -f
+# disk_alert.awk - report filesystems above a threshold from `df -h` output
+# usage: df -h | awk -v limit=85 -f disk_alert.awk
+BEGIN {
+    if (limit == "") limit = 80          # default when -v limit=... is not given
+    printf "%-16s %6s %6s  %s\n", "FILESYSTEM", "SIZE", "USE%", "MOUNT"
+}
+NR == 1 { next }                         # skip df header
+{
+    pct = $5 + 0
+    if (pct &gt;= limit) {
+        printf "%-16s %6s %5d%%  %s\n", $1, $2, pct, $6
+        bad++
+    }
+}
+END {
+    printf "%d of %d filesystems at or above %d%%\n", bad, NR - 1, limit
+    exit (bad &gt; 0)                       # exit status 1 if any alert -&gt; usable in if
+}</code></pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -v limit=85 -f disk_alert.awk datasets/df.txt; echo "exit=$?"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>FILESYSTEM         SIZE   USE%  MOUNT
+/dev/sda1           50G    87%  /
+/dev/sdb1          500G    96%  /backup
+/dev/nvme0n1p1     1.0T    92%  /data
+3 of 6 filesystems at or above 85%
+exit=1</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">chmod +x disk_alert.awk
+./disk_alert.awk datasets/df.txt; echo "exit=$?"         # thanks to the #! line, default limit 80</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>FILESYSTEM         SIZE   USE%  MOUNT
+/dev/sda1           50G    87%  /
+/dev/sdb1          500G    96%  /backup
+/dev/nvme0n1p1     1.0T    92%  /data
+3 of 6 filesystems at or above 80%
+exit=1</pre></div>
+
+<h3 id="a-bash">Calling awk from Bash</h3>
+<p>Three common patterns: capture a result, read multiple results, and pass environment values.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash"># 1. capture one value
+avg=$(awk -F, 'NR &gt; 1 { s += $5; n++ } END { printf "%.0f", s/n }' datasets/employees.csv)
+echo "Average salary is $avg"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Average salary is 87280</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash"># 2. read several values in one pass
+read -r total errors &lt; &lt;(awk '{ t++ } $9 &gt;= 400 { e++ } END { print t, e }' datasets/access.log)
+echo "requests=$total errors=$errors rate=$(( 100 * errors / total ))%"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>requests=80 errors=23 rate=28%</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash"># 3. loop over awk output in bash
+awk -F, 'NR &gt; 1 &amp;&amp; $5 &lt; 50000 { print $2 "," $5 }' datasets/employees.csv |
+while IFS=, read -r name salary; do
+  echo "Review salary of $name (currently $salary)"
+done</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Review salary of Sanjay Kapoor (currently 38000)
+Review salary of Neha Verma (currently 49000)
+Review salary of Simran Mehta (currently 39000)</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash"># 4. ENVIRON: read an exported variable without -v
+export REPORT_CITY=Pune
+awk -F, '$4 == ENVIRON["REPORT_CITY"] { print $2 }' datasets/employees.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Ananya Iyer
+Rahul Gupta
+Aditya Singh
+Manish Nair</pre></div>
+
+<h3 id="a-func">User-defined functions</h3>
+<p>Portable awk has no built-in sort, so a tiny insertion sort is a useful function to keep around. Extra parameters after spaces act as <strong>local variables</strong>, an awk convention:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, '
+function isort(arr, n,    i, j, t) {       # i, j, t are locals
+  for (i = 2; i &lt;= n; i++)
+    for (j = i; j &gt; 1 &amp;&amp; arr[j-1] &gt; arr[j]; j--) { t = arr[j]; arr[j] = arr[j-1]; arr[j-1] = t }
+}
+NR &gt; 1 &amp;&amp; !seen[$4]++ { cities[++n] = $4 }
+END { isort(cities, n); for (i = 1; i &lt;= n; i++) print i, cities[i] }' datasets/employees.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>1 Bengaluru
+2 Chennai
+3 Delhi
+4 Hyderabad
+5 Mumbai
+6 Pune</pre></div>
+<p><code>!seen[$4]++</code> is the famous de-duplication idiom: it is true only the first time a value is seen (the counter is 0, so <code>!0</code> is true, then it becomes 1).</p>
+
+<h3 id="a-uniq">One-liners worth memorising</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk '!seen[$1]++ { print $1 }' datasets/access.log | head -4       # unique values, first-seen order</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>192.168.1.10
+203.0.113.7
+10.0.0.5
+192.168.1.15</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk 'NF' datasets/app.conf | wc -l                                  # drop blank lines (NF=0 is false)</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>19</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk 'length &gt; 150' datasets/access.log | wc -l                      # lines longer than 150 chars</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>19</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk '{ $1 = ""; print substr($0, 2) }' datasets/df.txt | head -2    # everything except field 1</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Size Used Avail Use% Mounted on
+50G 41G 6.5G 87% /</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 { print $NF }' datasets/sales.csv | sort -u          # last column, distinct</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>12000
+1500
+3500
+55000
+800</pre></div>
+
+<h3 id="a-gawk">GNU awk (gawk) vs BSD awk / mawk</h3>
+<p>Linux distributions usually ship <code>gawk</code> (Ubuntu's default may be <code>mawk</code>!); macOS ships the original BWK awk. Everything above works in all of them. These gawk features do not:</p>
+<div class="table-wrap"><table>
+<tr><th>gawk feature</th><th>What it does</th><th>Portable alternative</th></tr>
+<tr><td><code>asort(a)</code>, <code>asorti(a)</code></td><td>sort an array by value / by index</td><td>pipe output to <code>sort</code>, or write an insertion sort (above)</td></tr>
+<tr><td><code>PROCINFO["sorted_in"] = "@val_num_desc"</code></td><td>makes <code>for (k in a)</code> iterate in sorted order</td><td><code>... | sort -k2 -rn</code></td></tr>
+<tr><td><code>strftime("%Y-%m-%d")</code>, <code>systime()</code></td><td>dates and timestamps</td><td><code>awk -v today="$(date +%F)"</code></td></tr>
+<tr><td><code>gawk -i inplace '...' file</code></td><td>edit the file in place</td><td><code>awk '...' f &gt; f.tmp &amp;&amp; mv f.tmp f</code></td></tr>
+<tr><td><code>gensub(re, repl, "g", s)</code></td><td>substitution with <code>\\1</code> back-references, returns new string</td><td><code>match()</code> + <code>substr()</code>, or sed</td></tr>
+<tr><td><code>match(s, re, arr)</code></td><td>third argument captures groups</td><td><code>match()</code> + <code>substr()</code> + <code>split()</code></td></tr>
+<tr><td><code>IGNORECASE = 1</code></td><td>case-insensitive regex</td><td><code>tolower($0) ~ /re/</code></td></tr>
+<tr><td><code>FPAT</code></td><td>define fields by content (e.g. quoted CSV)</td><td>a real CSV tool, or careful <code>split</code></td></tr>
+<tr><td><code>BEGINFILE</code>/<code>ENDFILE</code></td><td>per-file hooks</td><td><code>FNR == 1</code> tests</td></tr>
+</table></div>
+<div class="code"><div class="code-head">gawk only · for reference (not portable)</div><pre><code class="language-awk">gawk -F, 'NR &gt; 1 { s[$3] += $5 }
+END {
+  PROCINFO["sorted_in"] = "@val_num_desc"     # iterate largest total first
+  for (d in s) printf "%-12s %8d\n", d, s[d]
+  print "generated", strftime("%Y-%m-%d %H:%M")
+}' datasets/employees.csv</code></pre></div>
+<div class="code"><div class="code-head">bash · the portable equivalent</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 { s[$3] += $5 } END { for (d in s) printf "%-12s %8d\n", d, s[d] }' datasets/employees.csv | sort -k2 -rn
+echo "generated $(date '+%Y-%m-%d %H:%M')"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Engineering   1116000
+Sales          373000
+Support        292000
+Finance        271000
+HR             130000
+generated 2026-11-16 10:30</pre></div>
+
+<!-- ================= USE CASES ================= -->
+<h2 id="use-cases">Use cases</h2>
+
+<div class="usecase">
+<h3 id="uc1"><span class="uc-tag">Use case 1</span> Department salary report</h3>
+<p><strong>Scenario:</strong> HR asks for a per-department summary of <code>employees.csv</code>: head count, total, average, minimum and maximum salary, the best-paid person, and a grand total line, as a neatly aligned table. One pass over the file, arrays keyed by department, and <code>printf</code> for layout.</p>
+<div class="code"><div class="code-head">awk · dept_report.awk</div><pre><code class="language-awk">#!/usr/bin/awk -f
+# dept_report.awk - salary statistics per department
+# usage: awk -F, -f dept_report.awk employees.csv | sort ...  (see wrapper)
+NR == 1 { next }                                  # skip CSV header
+{
+    d = $3; s = $5 + 0
+    n[d]++
+    sum[d] += s
+    if (!(d in min) || s &lt; min[d]) min[d] = s
+    if (s &gt; max[d]) { max[d] = s; top[d] = $2 }
+    total += s; people++
+}
+END {
+    for (d in n)
+        printf "%-12s %5d %10d %10.0f %9d %9d  %s\n",
+               d, n[d], sum[d], sum[d] / n[d], min[d], max[d], top[d]
+    # grand total, tagged so the wrapper can print it last
+    printf "TOTAL        %5d %10d %10.0f\n", people, total, total / people
+}</code></pre></div>
+<div class="code"><div class="code-head">bash · dept_report.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# dept_report.sh - print a formatted department salary report
+set -euo pipefail
+csv="${1:-datasets/employees.csv}"
+[[ -r "$csv" ]] || { echo "cannot read $csv" &gt;&amp;2; exit 1; }
+
+printf '%-12s %5s %10s %10s %9s %9s  %s\n' DEPARTMENT COUNT TOTAL AVERAGE MIN MAX TOP-EARNER
+printf '%.0s-' {1..80}; echo
+report=$(awk -F, -f dept_report.awk "$csv")
+
+# department rows sorted by AVERAGE (column 4), highest first
+grep -v '^TOTAL' &lt;&lt;&lt; "$report" | sort -k4,4nr
+printf '%.0s-' {1..80}; echo
+grep '^TOTAL' &lt;&lt;&lt; "$report"</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">bash dept_report.sh datasets/employees.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>DEPARTMENT   COUNT      TOTAL    AVERAGE       MIN       MAX  TOP-EARNER
+--------------------------------------------------------------------------------
+Engineering     10    1116000     111600     84000    135000  Priya Sharma
+Finance          3     271000      90333     84000     94000  Arjun Nair
+Sales            5     373000      74600     62000     93000  Vikram Verma
+HR               2     130000      65000     38000     92000  Harsh Verma
+Support          5     292000      58400     39000     75000  Kunal Singh
+--------------------------------------------------------------------------------
+TOTAL           25    2182000      87280</pre></div>
+<p><strong>How it works:</strong></p>
+<ul>
+  <li><code>n[d]++</code>, <code>sum[d] += s</code>: one array per statistic, all keyed by department name. After one pass every array holds the per-department value.</li>
+  <li><code>!(d in min) || s &lt; min[d]</code>: initialises the minimum from the first salary seen for that department (testing <code>min[d] == 0</code> would break if a salary were 0, and testing <code>""</code> would create the element).</li>
+  <li><code>for (d in n)</code> produces rows in random order, so the wrapper sorts by the AVERAGE column with <code>sort -k4,4nr</code>.</li>
+  <li>The grand total row starts with <code>TOTAL</code>, so the wrapper can keep it out of the sort with <code>grep -v</code> and print it last, under a rule. <code>printf '%.0s-' {1..80}</code> prints 80 dashes (the <code>%.0s</code> consumes each argument but prints nothing of it).</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3 id="uc2"><span class="uc-tag">Use case 2</span> Sales pivot table: revenue by region × product</h3>
+<p><strong>Scenario:</strong> management wants a cross-tab of <code>sales.csv</code>, regions as rows, products as columns, revenue (<code>units × unit_price</code>) in each cell, with row and column totals. This is a spreadsheet "pivot table" built with a two-dimensional awk array.</p>
+<div class="code"><div class="code-head">awk · pivot.awk</div><pre><code class="language-awk">#!/usr/bin/awk -f
+# pivot.awk - revenue pivot: rows = region ($2), columns = product ($3)
+# usage: awk -F, -f pivot.awk sales.csv
+function isort(a, n,    i, j, t) {               # portable in-place sort of a[1..n]
+    for (i = 2; i &lt;= n; i++)
+        for (j = i; j &gt; 1 &amp;&amp; a[j-1] &gt; a[j]; j--) { t = a[j]; a[j] = a[j-1]; a[j-1] = t }
+}
+NR == 1 { next }
+{
+    rev = $4 * $5
+    cell[$2, $3] += rev                          # 2-D key: region SUBSEP product
+    rowtot[$2]   += rev
+    coltot[$3]   += rev
+    grand        += rev
+    if (!($2 in seenR)) { seenR[$2] = 1; R[++nr] = $2 }
+    if (!($3 in seenC)) { seenC[$3] = 1; C[++nc] = $3 }
+}
+END {
+    isort(R, nr); isort(C, nc)
+    printf "%-8s", "REGION"
+    for (j = 1; j &lt;= nc; j++) printf " %10s", C[j]
+    printf " %11s\n", "TOTAL"
+    for (i = 1; i &lt;= nr; i++) {
+        printf "%-8s", R[i]
+        for (j = 1; j &lt;= nc; j++) printf " %10d", cell[R[i], C[j]]   # missing cell -&gt; 0
+        printf " %11d\n", rowtot[R[i]]
+    }
+    printf "%-8s", "TOTAL"
+    for (j = 1; j &lt;= nc; j++) printf " %10d", coltot[C[j]]
+    printf " %11d\n", grand
+}</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">awk -F, -f pivot.awk datasets/sales.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>REGION      Headset   Keyboard     Laptop    Monitor      Mouse       TOTAL
+East          52500      28500          0      48000       8800      137800
+North             0      27000          0          0      48800       75800
+South         35000      12000     330000      36000      12800      425800
+West          56000      55500     220000     144000      29600      505100
+TOTAL        143500     123000     550000     228000     100000     1144500</pre></div>
+<p><strong>Key ideas:</strong></p>
+<ul>
+  <li><code>cell[$2, $3]</code>: awk joins the two subscripts with the invisible <code>SUBSEP</code> character, giving a single string key such as <code>"West\034Laptop"</code>. That is how awk simulates 2-D arrays.</li>
+  <li>Region and product names are collected in first-seen order into the numerically indexed arrays <code>R</code> and <code>C</code>, then sorted with our own <code>isort</code>, so the output is identical in gawk, mawk and BSD awk (no <code>asort</code> needed).</li>
+  <li>An empty cell (North sold no Laptops) prints as <code>0</code> because an unset element used as a number is 0, but note that merely <em>reading</em> <code>cell[...]</code> creates it.</li>
+</ul>
+<p>Quick cross-check of one cell with a one-liner:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, '$2 == "West" &amp;&amp; $3 == "Laptop" { r += $4 * $5 } END { print r }' datasets/sales.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>220000</pre></div>
+</div>
+
+<div class="usecase">
+<h3 id="uc3"><span class="uc-tag">Use case 3</span> Web server log summary</h3>
+<p><strong>Scenario:</strong> produce a daily summary of <code>access.log</code> for the ops team: total requests and bandwidth, unique visitors, status-code classes with percentages, top client IPs, the most-requested missing (404) pages, and suspicious scanners (clients whose requests are mostly 4xx).</p>
+<div class="code"><div class="code-head">bash · logsummary.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# logsummary.sh - summarise an Apache/Nginx combined access log with awk
+set -euo pipefail
+log="${1:-/var/log/nginx/access.log}"
+[[ -r "$log" ]] || { echo "cannot read $log" &gt;&amp;2; exit 1; }
+
+echo "== Summary of $log =="
+awk '
+{
+    req++
+    bytes += $10
+    ip[$1]++
+    class = substr($9, 1, 1) "xx"            # 200 -&gt; 2xx
+    cls[class]++
+    if ($9 &gt;= 400) bad[$1]++
+}
+END {
+    printf "Requests        : %d\n", req
+    printf "Bandwidth       : %.2f MB\n", bytes / 1024 / 1024
+    printf "Unique clients  : %d\n", length(ip)
+    print  "Status classes  :"
+    for (c in cls) printf "   %s %4d  %5.1f%%\n", c, cls[c], 100 * cls[c] / req | "sort"
+    close("sort")                             # flush the sort pipe before continuing
+    print  "Suspicious clients (&gt;= 50% errors, &gt;= 3 requests):"
+    for (h in ip)
+        if (ip[h] &gt;= 3 &amp;&amp; bad[h] / ip[h] &gt;= 0.5)
+            printf "   %-15s %d of %d requests failed\n", h, bad[h], ip[h]
+}' "$log"
+
+echo "Top 3 clients:"
+awk '{ n[$1]++ } END { for (h in n) printf "   %4d %s\n", n[h], h }' "$log" | sort -rn | head -3
+
+echo "Top missing pages (404):"
+awk '$9 == 404 { n[$7]++ } END { for (p in n) printf "   %4d %s\n", n[p], p }' "$log" | sort -rn</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">bash logsummary.sh datasets/access.log</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>== Summary of datasets/access.log ==
+Requests        : 80
+Bandwidth       : 1.27 MB
+Unique clients  : 10
+Status classes  :
+   2xx   55   68.8%
+   3xx    2    2.5%
+   4xx   17   21.2%
+   5xx    6    7.5%
+Suspicious clients (&gt;= 50% errors, &gt;= 3 requests):
+   185.220.101.3   7 of 8 requests failed
+Top 3 clients:
+     18 192.168.1.10
+     14 192.168.1.15
+     13 10.0.0.5
+Top missing pages (404):
+      5 /.env
+      3 /missing.html</pre></div>
+<p><strong>Techniques used:</strong></p>
+<ul>
+  <li><code>substr($9, 1, 1) "xx"</code>: string concatenation is just writing values next to each other.</li>
+  <li><code>printf ... | "sort"</code>: awk can pipe its own output into a command. All lines printed to the same command string share one pipe; <code>close("sort")</code> ends it so the sorted block appears before what follows.</li>
+  <li><code>length(ip)</code>: number of distinct keys = unique visitors.</li>
+  <li>The ratio test <code>bad[h] / ip[h] &gt;= 0.5</code> only finds <code>185.220.101.3</code> (the sqlmap scanner), exactly the client you would block.</li>
+</ul>
+</div>
+
+<h2 id="gotchas">Gotchas</h2>
+<div class="table-wrap"><table>
+<tr><th>Problem</th><th>Why</th><th>Fix</th></tr>
+<tr><td>Program in double quotes breaks</td><td>the shell expands <code>$1</code>, <code>$NF</code> before awk runs</td><td>always single-quote the program; pass values with <code>-v</code></td></tr>
+<tr><td><code>for (k in a)</code> order differs on another machine</td><td>hash order is implementation-specific</td><td>pipe to <code>sort</code></td></tr>
+<tr><td>Header line counted in totals/averages</td><td>forgot to skip line 1</td><td><code>NR == 1 { next }</code> or <code>NR &gt; 1</code></td></tr>
+<tr><td><code>"10" &lt; "9"</code> is true</td><td>both values are string constants → string comparison</td><td>force numbers: <code>$5+0</code></td></tr>
+<tr><td><code>-F,</code> breaks on <code>"Delhi, India"</code></td><td>awk does not understand quoted CSV</td><td>gawk <code>FPAT</code>, or a CSV tool (<code>mlr</code>, <code>csvkit</code>)</td></tr>
+<tr><td><code>print $1 $2</code> glues fields</td><td>no comma = concatenation</td><td><code>print $1, $2</code></td></tr>
+<tr><td><code>printf</code> output all on one line</td><td>printf adds no newline</td><td>end the format with <code>\n</code></td></tr>
+<tr><td>Assigning <code>OFS</code> has no effect on <code>print</code></td><td><code>$0</code> is not rebuilt until a field changes</td><td><code>$1 = $1</code></td></tr>
+<tr><td><code>if (arr[k] == "")</code> creates <code>k</code></td><td>referencing an element creates it</td><td><code>if (k in arr)</code></td></tr>
+<tr><td>Windows CSV: last field compares wrong</td><td>trailing <code>\r</code></td><td><code>{ sub(/\r$/, "") }</code> as the first rule</td></tr>
+<tr><td><code>asort</code>/<code>strftime</code>: "function not defined"</td><td>running BSD awk or mawk, not gawk</td><td>install gawk, or use the portable alternatives above</td></tr>
+</table></div>
+
+<h2 id="exercises">Practice exercises</h2>
+<details><summary>1. Print the name and join year of everyone who joined before 2018.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 &amp;&amp; substr($6, 1, 4) &lt; 2018 { print $2, substr($6, 1, 4) }' datasets/employees.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Arjun Nair 2016
+Rahul Gupta 2017
+Riya Das 2016
+Sanjay Kapoor 2017
+Divya Singh 2016
+Tanvi Joshi 2017
+Kunal Singh 2016</pre></div>
+</details>
+<details><summary>2. Total units sold per product, highest first.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 { u[$3] += $4 } END { for (p in u) print u[p], p }' datasets/sales.csv | sort -rn</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>125 Mouse
+82 Keyboard
+41 Headset
+19 Monitor
+10 Laptop</pre></div>
+</details>
+<details><summary>3. For each city, list the employees in one line (<code>City: name1, name2</code>).</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 { list[$4] = (list[$4] == "" ? $2 : list[$4] ", " $2) } END { for (c in list) print c ": " list[c] }' datasets/employees.csv | sort</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Bengaluru: Riya Das, Tanvi Joshi, Simran Mehta
+Chennai: Kavya Gupta, Isha Das, Karan Nair, Meera Nair, Nikhil Das
+Delhi: Aarav Kapoor, Priya Sharma, Sanjay Kapoor, Divya Singh, Yash Iyer
+Hyderabad: Vikram Verma, Arjun Nair, Pooja Nair
+Mumbai: Rohan Mehta, Sneha Joshi, Neha Verma, Harsh Verma, Kunal Singh
+Pune: Ananya Iyer, Rahul Gupta, Aditya Singh, Manish Nair</pre></div>
+</details>
+<details><summary>4. Print the hour with the most requests in access.log.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk '{ split($4, t, ":"); h[t[2]]++ } END { for (k in h) print h[k], k ":00" }' datasets/access.log | sort -rn | head -1</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>11 14:00</pre></div>
+<p><code>$4</code> is <code>[16/Nov/2026:08:11:14</code>; splitting on <code>:</code> puts the hour in <code>t[2]</code>.</p>
+</details>
+<details><summary>5. Show filesystems in df.txt whose available space is in G and below 30G.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk 'NR &gt; 1 &amp;&amp; $4 ~ /G$/ &amp;&amp; $4 + 0 &lt; 30 { print $6, $4 }' datasets/df.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>/ 6.5G
+/backup 22G
+/run 3.9G</pre></div>
+</details>
+<details><summary>6. Daily revenue from sales.csv with a running total.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk -F, 'NR &gt; 1 { d[$1] += $4 * $5 } END { for (k in d) print k, d[k] }' datasets/sales.csv | sort | awk '{ run += $2; printf "%s %8d %9d\n", $1, $2, run }'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>2026-11-01   368200    368200
+2026-11-02   253400    621600
+2026-11-03   175400    797000
+2026-11-04    62900    859900
+2026-11-05    49500    909400
+2026-11-06    44100    953500
+2026-11-07    47200   1000700
+2026-11-08    85600   1086300
+2026-11-09    15200   1101500
+2026-11-10    43000   1144500</pre></div>
+</details>
+
+<h2 id="viva">Viva / exam questions</h2>
+<details><summary>What is the difference between NR and FNR?</summary><p><code>NR</code> counts records across all input files; <code>FNR</code> restarts at 1 for each file. <code>NR == FNR</code> is therefore true only while reading the first file.</p></details>
+<details><summary>What are BEGIN and END used for?</summary><p><code>BEGIN</code> runs before any input is read (set FS, print headers, initialise); <code>END</code> runs after all input (print totals and averages).</p></details>
+<details><summary>How do you print the last field of each line?</summary><p><code>awk '{ print $NF }'</code>. <code>NF</code> is the number of fields, so <code>$NF</code> is the last one; <code>$(NF-1)</code> is the second last.</p></details>
+<details><summary>How do you pass a shell variable into awk?</summary><p><code>awk -v name="$var" '...'</code>, or read an exported variable via <code>ENVIRON["var"]</code>.</p></details>
+<details><summary>What is an associative array in awk?</summary><p>An array indexed by strings rather than numbers, e.g. <code>count[$3]++</code>. Elements are created on first use; iterate with <code>for (k in count)</code>.</p></details>
+<details><summary>Difference between <code>sub</code> and <code>gsub</code>?</summary><p><code>sub</code> replaces the first match, <code>gsub</code> all matches. Both modify the target in place and return the number of replacements.</p></details>
+<details><summary>How do you change the output separator to a comma?</summary><p><code>awk 'BEGIN{OFS=","} {$1=$1; print}'</code>: set <code>OFS</code> and rebuild the record (or print fields with commas between them).</p></details>
+<details><summary>What does <code>awk '!seen[$0]++'</code> do?</summary><p>Prints each distinct line once, keeping first-seen order, like <code>sort -u</code> without sorting.</p></details>
+<details><summary>Name two gawk-only features.</summary><p><code>asort()</code>/<code>asorti()</code>, <code>strftime()</code>, <code>PROCINFO["sorted_in"]</code>, <code>gensub()</code>, <code>-i inplace</code>, <code>IGNORECASE</code>.</p></details>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="grep.html">grep</a> and <a href="sed.html">sed</a>: the regex syntax in <code>/.../</code> patterns is the same ERE.</li>
+  <li><a href="sort-uniq.html">sort &amp; uniq</a>: pairing awk output with <code>sort</code> for ordered reports.</li>
+  <li><a href="cut-tr.html">cut, tr, …</a>: simpler alternatives when you only need one column.</li>
+  <li><a href="../labs/lab06-access-logs.html">Lab 06, Access log analysis</a> is built almost entirely on awk.</li>
+  <li><a href="../labs/lab07-email-alerts.html">Lab 07, Automated email alerts</a> uses the df threshold check.</li>
+  <li><a href="../labs/lab12-service-health.html">Lab 12, Service health monitoring</a>.</li>
+</ul>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

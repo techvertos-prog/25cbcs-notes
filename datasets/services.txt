@@ -1,0 +1,9 @@
+# service     type     target                        expect
+nginx         systemd  nginx                         active
+mysql         systemd  mysql                         active
+php-fpm       systemd  php8.3-fpm                    active
+redis         systemd  redis-server                  active
+website       http     https://example.com           200
+api-health    http     https://api.example.com/health 200
+ssh           port     127.0.0.1:22                  open
+mysql-port    port     127.0.0.1:3306                open

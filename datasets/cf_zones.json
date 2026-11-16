@@ -1,0 +1,47 @@
+{
+  "result": [
+    {
+      "id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "name": "example.com",
+      "status": "active",
+      "paused": false,
+      "type": "full",
+      "name_servers": [
+        "ada.ns.cloudflare.com",
+        "bob.ns.cloudflare.com"
+      ],
+      "plan": { "name": "Free Website" },
+      "account": { "id": "0123456789abcdef0123456789abcdef", "name": "Student Lab Account" }
+    },
+    {
+      "id": "353c0d2a7183ac9dc8fae4cef5e301e3",
+      "name": "example.org",
+      "status": "active",
+      "paused": false,
+      "type": "full",
+      "name_servers": [
+        "ada.ns.cloudflare.com",
+        "bob.ns.cloudflare.com"
+      ],
+      "plan": { "name": "Pro Website" },
+      "account": { "id": "0123456789abcdef0123456789abcdef", "name": "Student Lab Account" }
+    },
+    {
+      "id": "7d1c4a1b2f9e43c3a2b8d6e5f4a3b2c1",
+      "name": "example.net",
+      "status": "pending",
+      "paused": false,
+      "type": "full",
+      "name_servers": [
+        "kim.ns.cloudflare.com",
+        "lee.ns.cloudflare.com"
+      ],
+      "plan": { "name": "Free Website" },
+      "account": { "id": "0123456789abcdef0123456789abcdef", "name": "Student Lab Account" }
+    }
+  ],
+  "result_info": { "page": 1, "per_page": 20, "count": 3, "total_count": 3, "total_pages": 1 },
+  "success": true,
+  "errors": [],
+  "messages": []
+}

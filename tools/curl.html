@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>curl · CBCS Unit 4 Shell Wiki</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="curl">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Command tutorials / curl</div>
+<h1>curl: HTTP from the shell</h1>
+<p class="lead"><code>curl</code> sends HTTP requests and prints the response. It is how shell scripts talk to REST APIs (Cloudflare, GitHub), check whether a website is up, measure latency and download files reliably. This page covers requests and headers, JSON bodies, authentication, status codes, timeouts and retries, and how to wire it all into scripts with proper error handling.</p>
+<div class="meta-row">
+  <span class="pill">Command: curl</span><span class="pill grey">curl 7.82+ / 8.x</span><span class="pill grey">~45 min</span><span class="pill grey">Used in Lab 05, Lab 12, Lab 04</span>
+</div>
+
+<div class="callout note"><span class="ct">Network examples</span>Everything on this page talks to public test services: <code>httpbin.org</code> (echoes back what you send), <code>api.github.com</code> and <code>example.com</code>. Outputs are labelled <strong>sample output</strong> because dates, timings, star counts and your IP will differ. Install with <code>sudo apt install curl jq</code>.</div>
+
+<h2 id="syntax">Syntax and mental model</h2>
+<div class="code"><div class="code-head">bash · syntax</div><pre><code class="language-bash">curl [options] URL
+curl -X METHOD -H 'Header: value' -d 'body' URL</code></pre></div>
+<p>An HTTP exchange has two halves:</p>
+<ol class="steps">
+  <li><strong>Request</strong> = method (<code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>PATCH</code>, <code>DELETE</code>) + URL + headers + optional body. curl builds this from your options.</li>
+  <li><strong>Response</strong> = status line (<code>HTTP/2 200</code>) + headers + body. By default curl prints <em>only the body</em> to stdout, and progress/errors to stderr.</li>
+</ol>
+<p>The most important idea for scripting: <strong>curl's exit code is about the transfer, not the HTTP status.</strong> A 404 or 500 page is a successful transfer, so curl exits 0 unless you add <code>-f</code>. To make decisions, either use <code>-f</code> or capture the status code with <code>-w '%{http_code}'</code>.</p>
+
+<h2 id="options">Options cheat table</h2>
+<div class="table-wrap"><table>
+<tr><th>Option</th><th>Meaning</th></tr>
+<tr><td><code>-s</code> / <code>-S</code></td><td>Silent (no progress bar, no errors) / show errors even when silent. Use <code>-sS</code> in scripts</td></tr>
+<tr><td><code>-f</code> (<code>--fail</code>)</td><td>Exit 22 on HTTP status &gt;= 400, print no body</td></tr>
+<tr><td><code>-L</code></td><td>Follow redirects (3xx + Location)</td></tr>
+<tr><td><code>-i</code> / <code>-I</code></td><td>Include response headers in output / send HEAD, show headers only</td></tr>
+<tr><td><code>-v</code></td><td>Verbose: show request (<code>&gt;</code>) and response (<code>&lt;</code>) headers on stderr</td></tr>
+<tr><td><code>-o FILE</code> / <code>-O</code></td><td>Save body to FILE / save under the remote file name</td></tr>
+<tr><td><code>-w FORMAT</code></td><td>Write-out after transfer: <code>%{http_code}</code>, <code>%{time_total}</code>, <code>%{size_download}</code>, <code>%{url_effective}</code>…</td></tr>
+<tr><td><code>-X METHOD</code></td><td>Request method (POST is implied by <code>-d</code>)</td></tr>
+<tr><td><code>-H 'K: V'</code></td><td>Add a request header (repeatable)</td></tr>
+<tr><td><code>-d DATA</code> / <code>--data-raw</code> / <code>--data-urlencode</code></td><td>Request body (form-encoded by default; <code>@file</code> reads a file; raw does not treat <code>@</code> specially)</td></tr>
+<tr><td><code>--json DATA</code></td><td>JSON body + Content-Type and Accept headers (curl 7.82+)</td></tr>
+<tr><td><code>-G</code></td><td>Put <code>-d</code> data into the URL query string, send GET</td></tr>
+<tr><td><code>-F 'name=@file'</code></td><td>multipart/form-data upload</td></tr>
+<tr><td><code>-u user:pass</code></td><td>HTTP Basic authentication</td></tr>
+<tr><td><code>-A 'agent'</code></td><td>Set User-Agent</td></tr>
+<tr><td><code>-c FILE</code> / <code>-b FILE|'k=v'</code></td><td>Save cookies to jar / send cookies</td></tr>
+<tr><td><code>--connect-timeout S</code></td><td>Max seconds to establish the connection</td></tr>
+<tr><td><code>--max-time S</code> (<code>-m</code>)</td><td>Max seconds for the whole operation</td></tr>
+<tr><td><code>--retry N</code> / <code>--retry-delay S</code></td><td>Retry transient failures (timeouts, 408, 429, 5xx)</td></tr>
+<tr><td><code>-C -</code></td><td>Resume a partial download</td></tr>
+<tr><td><code>-k</code></td><td>Skip TLS certificate verification (testing only!)</td></tr>
+</table></div>
+
+<h3>Status codes and curl exit codes</h3>
+<div class="table-wrap"><table>
+<tr><th>HTTP status</th><th>Meaning</th><th>curl exit code</th><th>Meaning</th></tr>
+<tr><td>200 / 201 / 204</td><td>OK / Created / No Content</td><td>0</td><td>Transfer OK (even for 404 without <code>-f</code>)</td></tr>
+<tr><td>301 / 302</td><td>Redirect (follow with <code>-L</code>)</td><td>6</td><td>Could not resolve host (DNS)</td></tr>
+<tr><td>400 / 401 / 403</td><td>Bad request / not authenticated / forbidden</td><td>7</td><td>Failed to connect (port closed, host down)</td></tr>
+<tr><td>404 / 409 / 429</td><td>Not found / conflict / rate limited</td><td>22</td><td>HTTP error &gt;= 400 with <code>-f</code></td></tr>
+<tr><td>500 / 502 / 503</td><td>Server error / bad gateway / unavailable</td><td>28</td><td>Timeout</td></tr>
+<tr><td></td><td></td><td>35 / 60</td><td>TLS handshake error / certificate not trusted</td></tr>
+</table></div>
+
+<h2 id="datasets">Datasets used</h2>
+<p>The uptime checker in Use case 2 reads the <code>http</code> lines from <code>services.txt</code> (<code>name type target expect</code>):</p>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/services.txt</span></div><pre><code># service     type     target                        expect
+nginx         systemd  nginx                         active
+mysql         systemd  mysql                         active
+php-fpm       systemd  php8.3-fpm                    active
+redis         systemd  redis-server                  active
+website       http     https://example.com           200
+api-health    http     https://api.example.com/health 200
+ssh           port     127.0.0.1:22                  open
+mysql-port    port     127.0.0.1:3306                open</code></pre></div>
+
+<h2 id="basics">Basics: GET, headers, output</h2>
+<h3>Simple GET</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl https://httpbin.org/get</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>{
+  "args": {},
+  "headers": {
+    "Accept": "*/*",
+    "Host": "httpbin.org",
+    "User-Agent": "curl/8.7.1"
+  },
+  "origin": "203.0.113.50",
+  "url": "https://httpbin.org/get"
+}</pre></div>
+<p>httpbin returns the request it received, which makes it ideal for seeing what curl actually sends.</p>
+<h3>Headers only (-I) and headers + body (-i)</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -sI https://example.com</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>HTTP/2 200
+date: Mon, 16 Nov 2026 18:08:53 GMT
+content-type: text/html; charset=utf-8
+server: cloudflare
+last-modified: Mon, 16 Nov 2026 00:26:08 GMT
+allow: GET, HEAD
+accept-ranges: bytes
+age: 3823
+cf-cache-status: HIT</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -si https://httpbin.org/status/201 | head -3</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>HTTP/2 201
+access-control-allow-credentials: true
+access-control-allow-origin: *</pre></div>
+<h3>Verbose (-v): see the whole conversation</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -v -s -o /dev/null https://example.com 2&gt;&amp;1 | grep -E '^[&lt;&gt;]' | head -8</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>&gt; GET / HTTP/2
+&gt; Host: example.com
+&gt; User-Agent: curl/8.7.1
+&gt; Accept: */*
+&gt;
+&lt; HTTP/2 200
+&lt; date: Mon, 16 Nov 2026 18:09:53 GMT
+&lt; content-type: text/html; charset=utf-8</pre></div>
+<p><code>&gt;</code> lines are what curl sent, <code>&lt;</code> lines what the server replied. Verbose output goes to stderr, hence <code>2&gt;&amp;1</code>.</p>
+<h3>Saving: -o and -O</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -sO https://httpbin.org/robots.txt       # saved as ./robots.txt
+cat robots.txt
+curl -s -o page.html https://example.com      # saved under a name you choose</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>User-agent: *
+Disallow: /deny</pre></div>
+<h3>Custom headers and User-Agent</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -s -H 'Accept: application/json' https://httpbin.org/headers
+curl -s -A 'unit4-checker/1.0' https://httpbin.org/user-agent</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>{
+  "headers": {
+    "Accept": "application/json",
+    "Host": "httpbin.org",
+    "User-Agent": "curl/8.7.1"
+  }
+}
+{
+  "user-agent": "unit4-checker/1.0"
+}</pre></div>
+<h3>Query strings</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -s -G --data-urlencode 'q=disk full' -d 'page=2' https://httpbin.org/get | jq -c '{args, url}'</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>{"args":{"page":"2","q":"disk full"},"url":"https://httpbin.org/get?q=disk+full&amp;page=2"}</pre></div>
+<p><code>-G</code> moves the data into the URL; <code>--data-urlencode</code> escapes the space. Writing the URL by hand works too, but quote it: an unquoted <code>&amp;</code> sends curl to the background.</p>
+
+<h2 id="status">Status codes, -f and -w</h2>
+<h3>Why -f matters</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -s https://httpbin.org/status/500; echo "exit=$?"     # transfer worked -&gt; 0
+curl -sf https://httpbin.org/status/500; echo "exit=$?"    # -f: HTTP error -&gt; 22, silent
+curl -sSf https://httpbin.org/status/500; echo "exit=$?"   # -S: still show the error</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>exit=0
+exit=22
+curl: (22) The requested URL returned error: 500
+exit=22</pre></div>
+<div class="callout tip"><span class="ct">Script default</span><code>curl -fsSL</code> is the standard combination for scripts: fail on HTTP errors, no progress bar, but print error messages, and follow redirects.</div>
+<h3>Write-out variables (-w)</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -s -o /dev/null -w '%{http_code}\n' https://httpbin.org/status/404
+curl -s -o /dev/null -w 'code=%{http_code} time=%{time_total}s size=%{size_download}B\n' https://example.com
+curl -s -o /dev/null -w 'dns=%{time_namelookup} connect=%{time_connect} tls=%{time_appconnect} ttfb=%{time_starttransfer} total=%{time_total}\n' https://example.com</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>404
+code=200 time=0.332801s size=577B
+dns=0.003820 connect=0.026330 tls=0.048280 ttfb=0.067062 total=0.067200</pre></div>
+<div class="table-wrap"><table>
+<tr><th>Variable</th><th>Value</th></tr>
+<tr><td><code>%{http_code}</code></td><td>Status of the last response (000 if no response)</td></tr>
+<tr><td><code>%{time_namelookup}</code> … <code>%{time_total}</code></td><td>Seconds: DNS, TCP connect, TLS done, first byte, total (cumulative)</td></tr>
+<tr><td><code>%{size_download}</code></td><td>Body bytes downloaded</td></tr>
+<tr><td><code>%{content_type}</code></td><td>Content-Type of the response</td></tr>
+<tr><td><code>%{url_effective}</code> / <code>%{num_redirects}</code></td><td>Final URL after <code>-L</code> / number of redirects followed</td></tr>
+<tr><td><code>%{remote_ip}</code></td><td>IP address actually connected to</td></tr>
+</table></div>
+<h3>Body and status in one request</h3>
+<p>A common pattern: save the body to a file and capture the code in a variable, so you can print the body only on success:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">code=$(curl -s -o /tmp/body.json -w '%{http_code}' https://httpbin.org/status/404)
+if [[ "$code" == 2* ]]; then jq . /tmp/body.json; else echo "request failed: HTTP $code" &gt;&amp;2; fi</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>request failed: HTTP 404</pre></div>
+<h3>Redirects</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -sI https://httpbin.org/redirect/2 | head -1                 # without -L: the 302 itself
+curl -sL -o /dev/null -w '%{http_code} after %{num_redirects} redirects -&gt; %{url_effective}\n' \
+     https://httpbin.org/redirect/2</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>HTTP/2 302
+200 after 2 redirects -&gt; https://httpbin.org/get</pre></div>
+
+<h2 id="sending">Sending data: forms, JSON, methods, uploads</h2>
+<h3>Form data with -d (POST)</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -s -d 'name=asha&amp;role=dev' https://httpbin.org/post | jq '{form, ct: .headers["Content-Type"]}'</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>{
+  "form": {
+    "name": "asha",
+    "role": "dev"
+  },
+  "ct": "application/x-www-form-urlencoded"
+}</pre></div>
+<p><code>-d</code> implies <code>POST</code> and form encoding. For JSON you must change the Content-Type, or use <code>--json</code>.</p>
+<h3>JSON bodies</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash"># classic form (works with every curl version)
+curl -s -H 'Content-Type: application/json' --data-raw '{"name":"asha","role":"dev"}' https://httpbin.org/post
+
+# curl 7.82+: --json sets Content-Type AND Accept for you
+curl -s --json '{"name":"asha","role":"dev"}' https://httpbin.org/post |
+  jq '{json, ct: .headers["Content-Type"], accept: .headers.Accept}'</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>{
+  "json": {
+    "name": "asha",
+    "role": "dev"
+  },
+  "ct": "application/json",
+  "accept": "application/json"
+}</pre></div>
+<div class="callout tip"><span class="ct">Build JSON with jq, not string pasting</span>If values come from variables, let <code>jq</code> do the quoting so a name like <code>O"Brien</code> cannot break the JSON:<br><code>body=$(jq -n --arg n "$name" --arg r "$role" '{name:$n, role:$r}')</code> then <code>curl --json "$body" …</code>. Use <code>-d @file.json</code> to send a file.</div>
+<h3>Other methods: -X</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -s -X PUT -H 'Content-Type: application/json' -d '{"role":"admin"}' https://httpbin.org/put | jq -c '{url, json}'
+curl -s -X DELETE https://httpbin.org/delete | jq -r .url</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>{"url":"https://httpbin.org/put","json":{"role":"admin"}}
+https://httpbin.org/delete</pre></div>
+<p>Do not use <code>-X GET</code> with <code>-d</code> or <code>-X POST</code> with <code>-L</code> unless you mean it: <code>-X</code> forces the method on every request, including the ones after a redirect.</p>
+<h3>File upload: -F (multipart)</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -s -F 'file=@report.csv' -F 'note=lab upload' https://httpbin.org/post |
+  jq '{files: (.files | keys), form, ct: (.headers["Content-Type"] | .[0:30])}'</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>{
+  "files": [
+    "file"
+  ],
+  "form": {
+    "note": "lab upload"
+  },
+  "ct": "multipart/form-data; boundary="
+}</pre></div>
+<p><code>@</code> means "read this file". This is what an HTML <code>&lt;input type="file"&gt;</code> form sends. To send a file as the raw body instead, use <code>--data-binary @file</code> or <code>-T file</code> (PUT).</p>
+
+<h2 id="auth">Authentication</h2>
+<h3>Basic auth: -u</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -s -u student:s3cret https://httpbin.org/basic-auth/student/s3cret
+curl -s -o /dev/null -w '%{http_code}\n' -u student:wrong https://httpbin.org/basic-auth/student/s3cret</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>{
+  "authenticated": true,
+  "user": "student",
+  "authorized": true
+}
+401</pre></div>
+<p><code>-u user</code> without a password makes curl prompt for it, which keeps it out of shell history. Basic auth is only Base64, not encryption: use it over HTTPS only.</p>
+<h3>Bearer tokens (API keys)</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">export API_TOKEN='TEST_TOKEN_123'          # in real life: read from a file or a secret store
+curl -s -H "Authorization: Bearer $API_TOKEN" https://httpbin.org/bearer</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>{
+  "authenticated": true,
+  "token": "TEST_TOKEN_123"
+}</pre></div>
+<p>This is exactly how the Cloudflare API in <a href="../labs/lab05-cloudflare-api.html">Lab 05</a> works (<code>Authorization: Bearer $CF_API_TOKEN</code>). Double quotes are required so the variable expands. Keep tokens in environment variables or a <code>chmod 600</code> file, never in the script or in git; note that command-line arguments are visible to other users in <code>ps</code>, so for shared machines prefer <code>-H @headers.txt</code> (curl 7.55+) or a <code>.netrc</code> file.</p>
+<h3>Cookies: -c and -b</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -s -c cookies.txt -o /dev/null https://httpbin.org/cookies/set/session/abc123   # server sets cookie, saved to jar
+grep session cookies.txt | cut -f6,7
+curl -s -b cookies.txt https://httpbin.org/cookies                                    # send it back
+curl -s -b 'theme=dark' https://httpbin.org/cookies                                   # send an ad-hoc cookie</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>session	abc123
+{
+  "cookies": {
+    "session": "abc123"
+  }
+}
+{
+  "cookies": {
+    "theme": "dark"
+  }
+}</pre></div>
+<p>Log in once with <code>-c jar</code>, then reuse the session with <code>-b jar</code> on later requests. The jar is a tab-separated Netscape cookie file (field 6 = name, 7 = value).</p>
+
+<h2 id="reliability">Timeouts, retries and TLS</h2>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -sS --max-time 2 https://httpbin.org/delay/5; echo "exit=$?"          # server too slow
+curl -sS --connect-timeout 3 https://10.255.255.1/; echo "exit=$?"         # nothing answers
+curl -sS https://no-such-host.invalid/; echo "exit=$?"                     # DNS failure</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>curl: (28) Operation timed out after 2005 milliseconds with 0 bytes received
+exit=28
+curl: (28) Failed to connect to 10.255.255.1 port 443 after 3005 ms: Timeout was reached
+exit=28
+curl: (6) Could not resolve host: no-such-host.invalid
+exit=6</pre></div>
+<p>Without timeouts curl can hang for minutes (the default connect timeout is 300 s, total has no limit), freezing your cron job. Always set <code>--connect-timeout</code> and <code>--max-time</code> in scripts.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -sS --retry 3 --retry-delay 2 --retry-max-time 30 -o data.json https://api.example.com/data</code></pre></div>
+<p><code>--retry</code> repeats on timeouts and on HTTP 408, 429, 500, 502, 503 and 504 only, not on 404 or 401 (retrying those will not help). Add <code>--retry-all-errors</code> (curl 7.71+) to retry everything.</p>
+<h3>-k and why not</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -sS -o /dev/null https://expired.badssl.com/; echo "exit=$?"
+curl -sSk -o /dev/null -w '%{http_code}\n' https://expired.badssl.com/</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>curl: (60) SSL certificate problem: certificate has expired
+More details here: https://curl.se/docs/sslcerts.html
+...
+exit=60
+200</pre></div>
+<div class="callout warn"><span class="ct">Do not ship -k</span><code>-k</code> (<code>--insecure</code>) turns off certificate checking, so anyone in the network path can impersonate the server and read your API token. It is acceptable for a one-off test against your own lab box with a self-signed cert. In scripts, fix the cause instead: renew the certificate, install the CA (<code>update-ca-certificates</code>), or pin your own CA with <code>--cacert my-ca.pem</code>.</div>
+
+<h2 id="jq">Piping to jq</h2>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -fsS https://api.github.com/repos/jqlang/jq |
+  jq '{name: .full_name, stars: .stargazers_count, lang: .language}'
+
+curl -fsS 'https://api.github.com/repos/jqlang/jq/releases?per_page=3' |
+  jq -r '.[] | [.tag_name, .published_at[:10]] | @tsv'</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>{
+  "name": "jqlang/jq",
+  "stars": 36153,
+  "lang": "C"
+}
+jq-1.8.2	2026-06-20
+jq-1.8.1	2025-07-01
+jq-1.8.0	2025-06-01</pre></div>
+<p>Use <code>-fsS</code> before piping to jq: without <code>-f</code>, an error page (HTML or an error JSON) is fed to jq and you get a confusing parse error or wrong data instead of a clear failure. In a script with <code>set -o pipefail</code>, curl's failure then fails the whole pipeline. Unauthenticated GitHub API calls are limited to 60 per hour per IP.</p>
+
+<h2 id="usecases">Use cases</h2>
+
+<div class="usecase"><h3><span class="uc-tag">Use case 1</span> REST API CRUD script with error handling</h3>
+<p>Every API lab boils down to the same four calls: create, read, update, delete. Wrap curl in one function that adds auth, timeouts and retries, checks the HTTP status and returns non-zero on failure. Here <code>BASE_URL</code> defaults to httpbin's <code>/anything</code> endpoint, which echoes every request back, so the script runs without an account. Set <code>BASE_URL</code> and <code>API_TOKEN</code> to use a real API.</p>
+<div class="code"><div class="code-head">bash · api_crud.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# api_crud.sh - create / read / update / delete a resource over a REST API
+# Default BASE_URL is httpbin's /anything endpoint, which echoes back every request,
+# so the script runs anywhere. Point BASE_URL at a real API to use it for real.
+set -euo pipefail
+
+BASE_URL="${BASE_URL:-https://httpbin.org/anything}"
+API_TOKEN="${API_TOKEN:-dummy-token}"          # never hard-code real tokens
+
+# api METHOD PATH [JSON_BODY]  -&gt; prints response body on success, returns 1 on error
+api() {
+  local method="$1" path="$2" body="${3:-}"
+  local tmp code
+  tmp=$(mktemp)
+  local args=(-sS -X "$method" -o "$tmp" -w '%{http_code}'
+              --connect-timeout 5 --max-time 20 --retry 2
+              -H "Authorization: Bearer $API_TOKEN"
+              -H 'Accept: application/json')
+  if [[ -n "$body" ]]; then
+    args+=(-H 'Content-Type: application/json' --data-raw "$body")
+  fi
+
+  if ! code=$(curl "${args[@]}" "$BASE_URL$path"); then
+    echo "ERROR: $method $path - network/curl failure" &gt;&amp;2
+    rm -f "$tmp"; return 1
+  fi
+  if [[ "$code" != 2?? ]]; then
+    echo "ERROR: $method $path - HTTP $code: $(head -c 200 "$tmp")" &gt;&amp;2
+    rm -f "$tmp"; return 1
+  fi
+  cat "$tmp"; rm -f "$tmp"
+}
+
+# show what the server received (httpbin echoes method, url and JSON body)
+summary() { jq -c '{method, url, json}'; }
+
+echo "CREATE"; api POST   /users     '{"name":"Asha","role":"dev"}'  | summary
+echo "READ";   api GET    /users/42                                  | summary
+echo "UPDATE"; api PATCH  /users/42  '{"role":"admin"}'              | summary
+echo "DELETE"; api DELETE /users/42                                  | summary
+
+echo "ERROR HANDLING"
+if ! BASE_URL="https://httpbin.org" api GET /status/404 &gt;/dev/null; then
+  echo "handled: request failed, script continues"
+fi</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">chmod +x api_crud.sh
+./api_crud.sh
+# against a real API:
+# BASE_URL=https://api.example.com/v1 API_TOKEN="$(cat ~/.config/myapi.token)" ./api_crud.sh</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>CREATE
+{"method":"POST","url":"https://httpbin.org/anything/users","json":{"name":"Asha","role":"dev"}}
+READ
+{"method":"GET","url":"https://httpbin.org/anything/users/42","json":null}
+UPDATE
+{"method":"PATCH","url":"https://httpbin.org/anything/users/42","json":{"role":"admin"}}
+DELETE
+{"method":"DELETE","url":"https://httpbin.org/anything/users/42","json":null}
+ERROR HANDLING
+ERROR: GET /status/404 - HTTP 404:
+handled: request failed, script continues</pre></div>
+<p><strong>Design notes.</strong> The curl arguments are built in a Bash <em>array</em>, so headers with spaces stay single arguments and the JSON body is added only when present. Two separate failure paths: curl's own exit code (DNS, timeout, TLS) and the HTTP status from <code>-w '%{http_code}'</code>. <code>[[ "$code" != 2?? ]]</code> is a glob match: anything that is not 2xx is an error. The body goes to a temp file so the status code is the only thing on stdout. Because of <code>set -o pipefail</code>, a failing <code>api … | summary</code> stops the script, while the last call shows how to handle an expected failure with <code>if !</code>.</p>
+</div>
+
+<div class="usecase"><h3><span class="uc-tag">Use case 2</span> Uptime and latency checker</h3>
+<p>Read the <code>http</code> services from <code>services.txt</code>, request each with timeouts, compare the status with the expected code, flag slow responses, print a table and append a CSV line per check for history. Exit status 1 when anything failed, so cron or a monitoring wrapper can alert (see <a href="../labs/lab12-service-health.html">Lab 12</a>).</p>
+<div class="code"><div class="code-head">bash · uptime_check.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# uptime_check.sh - check every "http" service in services.txt: status code + latency
+# usage: ./uptime_check.sh [services.txt] [slow-threshold-seconds]
+set -uo pipefail                       # no -e: a failing check must not stop the loop
+
+list="${1:-datasets/services.txt}"
+slow="${2:-1.0}"
+log="uptime_$(date +%Y%m%d).csv"
+fails=0
+
+printf '%-12s %-34s %5s %8s  %s\n' SERVICE URL CODE TIME RESULT
+while read -r name type target expect; do
+  [[ -z "$name" || "$name" == \#* || "$type" != "http" ]] &amp;&amp; continue
+
+  # -w prints "code seconds"; on network errors curl exits non-zero and code is 000
+  out=$(curl -sS -o /dev/null -w '%{http_code} %{time_total}' \
+             --connect-timeout 5 --max-time 10 -L "$target" 2&gt;/tmp/curl_err.$$)
+  rc=$?
+  read -r code secs &lt;&lt;&lt; "$out"
+
+  if (( rc != 0 )); then
+    result="DOWN (curl exit $rc: $(sed 's/^curl: ([0-9]*) //' /tmp/curl_err.$$))"
+  elif [[ "$code" != "$expect" ]]; then
+    result="FAIL (expected $expect)"
+  elif awk -v t="$secs" -v s="$slow" 'BEGIN { exit !(t &gt; s) }'; then
+    result="SLOW"
+  else
+    result="OK"
+  fi
+  [[ "$result" == OK || "$result" == SLOW ]] || fails=$((fails + 1))
+
+  printf '%-12s %-34s %5s %7.3fs  %s\n' "$name" "$target" "$code" "$secs" "$result"
+  echo "$(date +%FT%T),$name,$code,$secs,${result%% *}" &gt;&gt; "$log"
+done &lt; "$list"
+rm -f /tmp/curl_err.$$
+
+echo "failures: $fails  (history appended to $log)"
+exit $(( fails &gt; 0 ? 1 : 0 ))</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">./uptime_check.sh datasets/services.txt; echo "exit=$?"
+cat uptime_*.csv</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>SERVICE      URL                                 CODE     TIME  RESULT
+website      https://example.com                  200   0.443s  OK
+api-health   https://api.example.com/health       000   0.136s  DOWN (curl exit 6: Could not resolve host: api.example.com)
+failures: 1  (history appended to uptime_20261116.csv)
+exit=1
+2026-11-16T23:40:41,website,200,0.442667,OK
+2026-11-16T23:40:42,api-health,000,0.135784,DOWN</pre></div>
+<p>To see the SLOW and FAIL branches, try a list of httpbin endpoints:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">printf '%s\n' "httpbin    http  https://httpbin.org/get         200" \
+              "slow-api   http  https://httpbin.org/delay/2     200" \
+              "maint      http  https://httpbin.org/status/503  200" &gt; my_sites.txt
+./uptime_check.sh my_sites.txt 1.0</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>SERVICE      URL                                 CODE     TIME  RESULT
+httpbin      https://httpbin.org/get              200   0.793s  OK
+slow-api     https://httpbin.org/delay/2          200   2.781s  SLOW
+maint        https://httpbin.org/status/503       503   0.810s  FAIL (expected 200)
+failures: 1  (history appended to uptime_20261116.csv)</pre></div>
+<p><strong>Tricky parts.</strong> <code>set -e</code> is deliberately off: one dead site must not abort the loop, so the script checks <code>$?</code> itself. Bash cannot compare decimals, so the latency check is delegated to <code>awk</code>, whose <code>exit !(t &gt; s)</code> returns success when the response is slow. curl's error message is captured from stderr into a per-process temp file (<code>$$</code> = PID) and trimmed with sed. <code>${result%% *}</code> keeps only the first word (<code>DOWN</code>) for the CSV. Schedule it with <code>*/5 * * * * cd /opt/monitor &amp;&amp; ./uptime_check.sh || ./alert.sh</code>.</p>
+</div>
+
+<div class="usecase"><h3><span class="uc-tag">Use case 3</span> Download with resume and checksum verification</h3>
+<p>Downloading a release binary on a flaky connection: resume where it stopped instead of starting over, retry transient errors, and verify the SHA-256 against the checksum list the project publishes before trusting the file.</p>
+<div class="code"><div class="code-head">bash · download_verify.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# download_verify.sh - resumable download + SHA-256 verification against a published list
+# usage: ./download_verify.sh URL SHA256SUMS_URL
+set -euo pipefail
+
+url="${1:?usage: $0 URL SHA256SUMS_URL}"
+sums_url="${2:?usage: $0 URL SHA256SUMS_URL}"
+file="${url##*/}"                       # last path component = file name
+
+# 1. download, resuming a partial file if one exists (-C -), retrying transient errors
+if [[ -s "$file" ]]; then
+  echo "partial file found ($(( $(wc -c &lt; "$file") )) bytes) - resuming $file"
+else
+  echo "downloading $file"
+fi
+curl -fsSL --retry 5 --retry-delay 2 --connect-timeout 10 \
+     -C - -o "$file" "$url" \
+  || { echo "download failed (curl exit $?)" &gt;&amp;2; exit 1; }
+
+# 2. fetch the published checksums and pick the line for our file
+expected=$(curl -fsSL "$sums_url" | awk -v f="$file" '$2 == f { print $1 }')
+[[ -n "$expected" ]] || { echo "no checksum for $file in $sums_url" &gt;&amp;2; exit 2; }
+
+# 3. verify (sha256sum -c reads "HASH  FILENAME" lines from stdin)
+if echo "$expected  $file" | sha256sum -c -; then
+  echo "verified: $file ($(( $(wc -c &lt; "$file") )) bytes)"
+else
+  echo "CHECKSUM MISMATCH - deleting $file" &gt;&amp;2
+  rm -f -- "$file"
+  exit 3
+fi</code></pre></div>
+<div class="code"><div class="code-head">bash · run it (simulating an interrupted download)</div><pre><code class="language-bash">U=https://github.com/jqlang/jq/releases/download/jq-1.7.1
+curl -sfL -r 0-999999 -o jq-linux-amd64 "$U/jq-linux-amd64"   # fetch only the first 1 MB
+./download_verify.sh "$U/jq-linux-amd64" "$U/sha256sum.txt"; echo "exit=$?"</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>partial file found (1000000 bytes) - resuming jq-linux-amd64
+jq-linux-amd64: OK
+verified: jq-linux-amd64 (2319424 bytes)
+exit=0</pre></div>
+<p>If the file is corrupted (here two bytes were overwritten after downloading), the check catches it:</p>
+<div class="output"><div class="out-head">sample output</div><pre>partial file found (2319424 bytes) - resuming jq-linux-amd64
+jq-linux-amd64: FAILED
+sha256sum: WARNING: 1 computed checksum did NOT match
+CHECKSUM MISMATCH - deleting jq-linux-amd64
+exit=3</pre></div>
+<p><strong>How it works.</strong> <code>-C -</code> tells curl to look at the existing file size and request only the remaining bytes with an HTTP <code>Range</code> header; if the file is already complete, curl recognises it and does nothing. <code>-L</code> is essential because GitHub release URLs redirect to a CDN. <code>${url##*/}</code> strips everything up to the last slash to get the file name. The checksum list has the format <code>HASH  NAME</code>, so <code>awk '$2 == f'</code> picks our line and <code>sha256sum -c -</code> verifies it. A resumed download on top of a corrupt partial file can never verify, which is why the script deletes the file on mismatch so the next run starts clean.</p>
+</div>
+
+<h2 id="gotchas">Gotchas</h2>
+<div class="table-wrap"><table>
+<tr><th>Problem</th><th>Cause and fix</th></tr>
+<tr><td>Script says "success" on a 404/500</td><td>curl exits 0 for any HTTP response. Use <code>-f</code> or check <code>-w '%{http_code}'</code>.</td></tr>
+<tr><td>Progress bar garbage in logs or <code>$( )</code></td><td>Add <code>-sS</code>.</td></tr>
+<tr><td>Empty output from a URL that works in the browser</td><td>It redirects. Add <code>-L</code>.</td></tr>
+<tr><td>URL with <code>&amp;</code> runs in the background, <code>?</code> glob errors</td><td>Quote the URL: <code>'https://x/?a=1&amp;b=2'</code>.</td></tr>
+<tr><td>Server says "Unsupported Media Type" (415) for JSON</td><td><code>-d</code> sends form encoding. Add <code>-H 'Content-Type: application/json'</code> or use <code>--json</code>.</td></tr>
+<tr><td><code>-d @data.json</code> strips newlines; <code>@</code> in a password is read as a file</td><td>Use <code>--data-binary @file</code> to send a file exactly, <code>--data-raw</code> for literal strings.</td></tr>
+<tr><td><code>$TOKEN</code> sent literally</td><td>Single quotes stop expansion. <code>-H "Authorization: Bearer $TOKEN"</code>.</td></tr>
+<tr><td>Cron job hangs forever</td><td>No timeout. Add <code>--connect-timeout</code> and <code>--max-time</code>.</td></tr>
+<tr><td><code>curl: (60) SSL certificate problem</code></td><td>Fix the cert or CA store; do not add <code>-k</code> to production scripts.</td></tr>
+<tr><td><code>jq: parse error</code> after curl</td><td>The response is not JSON (HTML error page, empty). Use <code>-f</code>, check the code, inspect with <code>-i</code>.</td></tr>
+<tr><td><code>--json: unknown option</code></td><td>curl older than 7.82 (e.g. Ubuntu 20.04). Use <code>-H 'Content-Type: application/json' -d …</code>.</td></tr>
+</table></div>
+
+<h2 id="practice">Practice exercises</h2>
+<details><summary>1. Print only the HTTP status code of https://example.com and of https://httpbin.org/status/403, one per line.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">for u in https://example.com https://httpbin.org/status/403; do
+  curl -s -o /dev/null -w '%{http_code}\n' "$u"
+done</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>200
+403</pre></div></details>
+<details><summary>2. POST a JSON object built from shell variables (name, email) with jq and print what httpbin received.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">name='Asha Rao'; email='asha@example.com'
+body=$(jq -n --arg n "$name" --arg e "$email" '{name: $n, email: $e}')
+curl -s -H 'Content-Type: application/json' -d "$body" https://httpbin.org/post | jq -c .json</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>{"email":"asha@example.com","name":"Asha Rao"}</pre></div>
+<p>httpbin re-serialises the JSON, which is why the keys come back in a different order; JSON objects are unordered.</p></details>
+<details><summary>3. Write a one-liner that exits non-zero if https://httpbin.org/delay/3 takes longer than 2 seconds.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -fsS --max-time 2 -o /dev/null https://httpbin.org/delay/3 &amp;&amp; echo fast || echo "too slow (exit $?)"</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>curl: (28) Operation timed out after 2002 milliseconds with 0 bytes received
+too slow (exit 28)</pre></div></details>
+<details><summary>4. Print the total time and downloaded size for https://example.com three times and compute the average time.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">for i in 1 2 3; do
+  curl -s -o /dev/null -w '%{time_total} %{size_download}\n' https://example.com
+done | awk '{t+=$1; print} END {printf "avg %.3f s\n", t/NR}'</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>0.071233 577
+0.052110 577
+0.049876 577
+avg 0.058 s</pre></div></details>
+<details><summary>5. List the names of the 5 most recently pushed public repositories of the GitHub user "torvalds".</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -fsS 'https://api.github.com/users/torvalds/repos?sort=pushed&amp;per_page=5' | jq -r '.[].name'</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>linux
+GuitarPedal
+subsurface-for-dirk
+uemacs
+ScrollWheel</pre></div>
+<p>Note the single quotes around the URL because of <code>&amp;</code>.</p></details>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="../labs/lab05-cloudflare-api.html">Lab 05, Cloudflare API</a> (Bearer tokens, JSON bodies, CRUD on DNS records)</li>
+  <li><a href="../labs/lab04-json-jq.html">Lab 04, JSON with jq</a> and <a href="jq.html">jq tutorial</a></li>
+  <li><a href="../labs/lab12-service-health.html">Lab 12, Service health monitoring</a> (HTTP checks)</li>
+  <li><a href="../labs/lab07-email-alerts.html">Lab 07, Automated email alerts</a></li>
+  <li><a href="../reference/cheatsheet.html">One-page cheat sheet</a></li>
+</ul>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

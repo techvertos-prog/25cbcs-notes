@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cheat sheet · CBCS Unit 4 Shell Wiki</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="cheatsheet">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Reference / Cheat sheet</div>
+<h1>One-page cheat sheet</h1>
+<p class="lead">Dense quick reference for revision and the lab exam: Bash scripting essentials first, then one compact table per command. Print it (Ctrl+P) or keep it open in a second window. Each section links to the full tutorial.</p>
+<div class="meta-row">
+  <span class="pill">Bash 5 · GNU tools</span><span class="pill grey">Printable</span><span class="pill grey">Revision</span>
+</div>
+
+<h2 id="script">Script skeleton</h2>
+<div class="code"><div class="code-head">bash · template.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+set -euo pipefail            # -e exit on error, -u unset var = error, pipefail: pipe fails if any part fails
+IFS=$'\n\t'                  # optional: safer word splitting
+
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &amp;&amp; pwd)"
+log()  { printf '%s %s\n' "$(date +%T)" "$*" &gt;&amp;2; }
+die()  { log "ERROR: $*"; exit 1; }
+cleanup() { rm -f "${tmp:-}"; }
+trap cleanup EXIT
+
+[[ $# -ge 1 ]] || die "usage: $0 FILE"
+tmp=$(mktemp)
+main() { local file="$1"; log "processing $file"; }
+main "$@"</code></pre></div>
+<p>Run: <code>chmod +x template.sh &amp;&amp; ./template.sh file</code> · debug: <code>bash -x script.sh</code> · syntax check: <code>bash -n script.sh</code> · lint: <code>shellcheck script.sh</code></p>
+
+<h2 id="variables">Variables, quoting, special parameters</h2>
+<div class="table-wrap"><table>
+<tr><th>Syntax</th><th>Meaning</th><th>Syntax</th><th>Meaning</th></tr>
+<tr><td><code>name=value</code></td><td>Assign (no spaces around =)</td><td><code>$0</code></td><td>Script name</td></tr>
+<tr><td><code>"$name"</code></td><td>Expand, keep as one word (always quote)</td><td><code>$1 … ${10}</code></td><td>Positional arguments</td></tr>
+<tr><td><code>'literal $x'</code></td><td>Single quotes: no expansion</td><td><code>$#</code></td><td>Number of arguments</td></tr>
+<tr><td><code>$(cmd)</code></td><td>Command substitution</td><td><code>"$@"</code></td><td>All args, each separately quoted</td></tr>
+<tr><td><code>$(( a + b ))</code></td><td>Integer arithmetic</td><td><code>"$*"</code></td><td>All args as one string</td></tr>
+<tr><td><code>readonly X=1</code> / <code>export X</code></td><td>Constant / pass to child processes</td><td><code>$?</code></td><td>Exit status of last command</td></tr>
+<tr><td><code>local v</code></td><td>Function-local variable</td><td><code>$$</code> / <code>$!</code></td><td>PID of shell / last background job</td></tr>
+<tr><td><code>read -rp 'Name: ' n</code></td><td>Read input (<code>-s</code> hidden)</td><td><code>shift</code></td><td>Drop <code>$1</code>, renumber</td></tr>
+</table></div>
+
+<h2 id="tests">Tests: [[ ]] and (( ))</h2>
+<div class="table-wrap"><table>
+<tr><th>String</th><th>Number</th><th>File</th><th>Logic</th></tr>
+<tr><td><code>[[ $a == "$b" ]]</code> equal</td><td><code>-eq</code> equal</td><td><code>-e</code> exists</td><td><code>&amp;&amp;</code> and</td></tr>
+<tr><td><code>[[ $a != "$b" ]]</code> not equal</td><td><code>-ne</code> not equal</td><td><code>-f</code> regular file</td><td><code>||</code> or</td></tr>
+<tr><td><code>[[ $a == *.log ]]</code> glob match</td><td><code>-lt -le</code> &lt; ≤</td><td><code>-d</code> directory</td><td><code>!</code> not</td></tr>
+<tr><td><code>[[ $a =~ ^[0-9]+$ ]]</code> regex (<code>BASH_REMATCH</code>)</td><td><code>-gt -ge</code> &gt; ≥</td><td><code>-r -w -x</code> readable/writable/executable</td><td><code>cmd &amp;&amp; ok || fail</code></td></tr>
+<tr><td><code>-z "$s"</code> empty · <code>-n "$s"</code> non-empty</td><td><code>(( n &gt; 5 ))</code> arithmetic test</td><td><code>-s</code> non-empty file · <code>-L</code> symlink</td><td><code>f1 -nt f2</code> newer than</td></tr>
+</table></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">if [[ -f "$cfg" &amp;&amp; -r "$cfg" ]]; then echo ok; elif (( count &gt; 10 )); then echo many; else echo no; fi
+case "$1" in
+  start|up) echo starting ;;
+  stop)     echo stopping ;;
+  *)        echo "usage: $0 {start|stop}"; exit 2 ;;
+esac</code></pre></div>
+
+<h2 id="loops">Loops</h2>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">for f in *.log; do echo "$f"; done                  # glob
+for i in {1..5}; do echo "$i"; done                 # brace range
+for (( i=0; i&lt;5; i++ )); do echo "$i"; done         # C-style
+while read -r host ip _; do echo "$host=$ip"; done &lt; servers.txt      # read a file line by line
+while IFS=, read -r id name dept _; do echo "$name"; done &lt; &lt;(tail -n +2 employees.csv)
+until ping -c1 -W1 "$h" &amp;&gt;/dev/null; do sleep 2; done                # retry until success
+select opt in Start Stop Quit; do [[ $opt == Quit ]] &amp;&amp; break; echo "$opt"; done   # menu
+break / continue                                    # leave loop / next iteration</code></pre></div>
+
+<h2 id="functions">Functions and arrays</h2>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">greet() {                       # define
+  local name="${1:-world}"      # local + default
+  echo "hello $name"            # "return" data via stdout
+  return 0                      # status 0-255 only
+}
+msg=$(greet Asha)               # capture output;  greet || echo failed  (use status)
+
+arr=(web01 web02 "db 01")       # indexed array
+echo "${arr[0]} ${#arr[@]}"     # first element, length
+for h in "${arr[@]}"; do echo "$h"; done
+arr+=(cache01)                  # append
+declare -A port=([http]=80 [https]=443)     # associative array (Bash 4+)
+for k in "${!port[@]}"; do echo "$k=${port[$k]}"; done
+mapfile -t lines &lt; file.txt     # file -&gt; array, one line per element</code></pre></div>
+
+<h2 id="expansion">Parameter expansion</h2>
+<p>Examples use <code>f=/var/log/app.tar.gz</code>.</p>
+<div class="table-wrap"><table>
+<tr><th>Syntax</th><th>Meaning</th><th>Result</th></tr>
+<tr><td><code>${f##*/}</code></td><td>Remove longest prefix match (basename)</td><td><code>app.tar.gz</code></td></tr>
+<tr><td><code>${f%/*}</code></td><td>Remove shortest suffix match (dirname)</td><td><code>/var/log</code></td></tr>
+<tr><td><code>${f#*.}</code></td><td>Remove shortest prefix match</td><td><code>tar.gz</code></td></tr>
+<tr><td><code>${f##*.}</code></td><td>Remove longest prefix (extension)</td><td><code>gz</code></td></tr>
+<tr><td><code>${f%.*}</code></td><td>Remove shortest suffix</td><td><code>/var/log/app.tar</code></td></tr>
+<tr><td><code>${f%%.*}</code></td><td>Remove longest suffix</td><td><code>/var/log/app</code></td></tr>
+<tr><td><code>${#f}</code></td><td>Length</td><td><code>19</code></td></tr>
+<tr><td><code>${f/log/LOG}</code></td><td>Replace first match</td><td><code>/var/LOG/app.tar.gz</code></td></tr>
+<tr><td><code>${f//a/A}</code></td><td>Replace all matches</td><td><code>/vAr/log/App.tAr.gz</code></td></tr>
+<tr><td><code>${f:5:3}</code></td><td>Substring (offset 5, length 3)</td><td><code>log</code></td></tr>
+<tr><td><code>${f: -6}</code></td><td>Last 6 characters (space needed)</td><td><code>tar.gz</code></td></tr>
+<tr><td><code>${x:-def}</code></td><td>Value, or <code>def</code> if unset/empty</td><td><code>def</code></td></tr>
+<tr><td><code>${x:=def}</code></td><td>Same, and assign it</td><td><code>def</code></td></tr>
+<tr><td><code>${x:?msg}</code></td><td>Exit with msg if unset/empty</td><td>error</td></tr>
+<tr><td><code>${x:+alt}</code></td><td><code>alt</code> if x is set and non-empty</td><td>(empty)</td></tr>
+<tr><td><code>${s^^}</code> / <code>${s,,}</code></td><td>Upper / lower case (Bash 4+)</td><td></td></tr>
+</table></div>
+
+<h2 id="exit-codes">Exit codes</h2>
+<div class="table-wrap"><table>
+<tr><th>Code</th><th>Meaning</th><th>Code</th><th>Meaning</th></tr>
+<tr><td>0</td><td>Success</td><td>126</td><td>Found but not executable</td></tr>
+<tr><td>1</td><td>General error (grep: no match)</td><td>127</td><td>Command not found</td></tr>
+<tr><td>2</td><td>Misuse / syntax (grep: error)</td><td>128+N</td><td>Killed by signal N (130 = Ctrl+C, 137 = kill -9)</td></tr>
+</table></div>
+<p><code>set -e</code> does not trigger inside <code>if</code>/<code>while</code> conditions or for commands before <code>&amp;&amp;</code>/<code>||</code>. <code>set -o pipefail</code> makes a pipeline fail if any command in it fails. <code>${PIPESTATUS[@]}</code> holds every stage's code.</p>
+
+<h2 id="redirection">Redirection and pipes</h2>
+<div class="table-wrap"><table>
+<tr><th>Syntax</th><th>Meaning</th></tr>
+<tr><td><code>cmd &gt; f</code> / <code>cmd &gt;&gt; f</code></td><td>stdout to file (overwrite / append)</td></tr>
+<tr><td><code>cmd 2&gt; f</code> / <code>cmd 2&gt;&gt; f</code></td><td>stderr to file</td></tr>
+<tr><td><code>cmd &gt; f 2&gt;&amp;1</code> or <code>cmd &amp;&gt; f</code></td><td>stdout and stderr to file (order matters: <code>2&gt;&amp;1 &gt; f</code> is wrong)</td></tr>
+<tr><td><code>cmd 2&gt;/dev/null</code></td><td>Discard errors</td></tr>
+<tr><td><code>cmd &lt; f</code></td><td>stdin from file</td></tr>
+<tr><td><code>cmd &lt;&lt;EOF … EOF</code></td><td>Here-document (<code>&lt;&lt;'EOF'</code> = no expansion, <code>&lt;&lt;-EOF</code> strips tabs)</td></tr>
+<tr><td><code>cmd &lt;&lt;&lt; "$var"</code></td><td>Here-string</td></tr>
+<tr><td><code>a | b</code> / <code>a |&amp; b</code></td><td>Pipe stdout / stdout+stderr</td></tr>
+<tr><td><code>diff &lt;(cmd1) &lt;(cmd2)</code></td><td>Process substitution: output as a file</td></tr>
+<tr><td><code>cmd | tee f</code> / <code>tee -a</code></td><td>Show and save / append</td></tr>
+<tr><td><code>exec 3&gt; f; echo hi &gt;&amp;3; exec 3&gt;&amp;-</code></td><td>Open, write to, close custom fd 3</td></tr>
+<tr><td><code>cmd &amp;</code>, <code>wait</code>, <code>nohup cmd &amp;</code></td><td>Background, wait for jobs, survive logout</td></tr>
+</table></div>
+
+<h2 id="grep">grep</h2>
+<div class="table-wrap"><table>
+<tr><th>Option</th><th>Meaning</th><th>Option</th><th>Meaning</th></tr>
+<tr><td><code>-i</code></td><td>Ignore case</td><td><code>-E</code></td><td>Extended regex (<code>+ ? | ()</code>)</td></tr>
+<tr><td><code>-v</code></td><td>Invert (non-matching lines)</td><td><code>-F</code></td><td>Fixed string, no regex</td></tr>
+<tr><td><code>-c</code></td><td>Count matching lines</td><td><code>-o</code></td><td>Print only the match</td></tr>
+<tr><td><code>-n</code></td><td>Line numbers</td><td><code>-w</code> / <code>-x</code></td><td>Whole word / whole line</td></tr>
+<tr><td><code>-l</code> / <code>-L</code></td><td>Files with / without matches</td><td><code>-r</code> / <code>-R</code></td><td>Recursive (R follows symlinks)</td></tr>
+<tr><td><code>-A N -B N -C N</code></td><td>Context after / before / around</td><td><code>-q</code></td><td>Quiet: only exit status</td></tr>
+<tr><td><code>-e P1 -e P2</code></td><td>Several patterns</td><td><code>--include='*.sh'</code></td><td>Restrict recursive search</td></tr>
+</table></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -c 'Failed password' auth.log
+grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' auth.log | sort | uniq -c | sort -rn
+grep -q '^APP_DEBUG=true' app.conf &amp;&amp; echo "debug is on"</code></pre></div>
+<p>Full tutorial: <a href="../tools/grep.html">grep</a></p>
+
+<h2 id="sed">sed</h2>
+<div class="table-wrap"><table>
+<tr><th>Command</th><th>Meaning</th></tr>
+<tr><td><code>sed 's/old/new/'</code> / <code>s/old/new/g</code></td><td>Replace first / all on each line (<code>I</code> flag = ignore case)</td></tr>
+<tr><td><code>sed -n '5,10p'</code></td><td>Print lines 5–10 only</td></tr>
+<tr><td><code>sed '/^#/d'</code> / <code>sed '/^$/d'</code></td><td>Delete comment lines / blank lines</td></tr>
+<tr><td><code>sed -i 's/a/b/' f</code> / <code>-i.bak</code></td><td>Edit in place (GNU) / with backup. macOS: <code>sed -i '' …</code></td></tr>
+<tr><td><code>sed -E 's/([0-9]+)-([0-9]+)/\2-\1/'</code></td><td>ERE with capture groups</td></tr>
+<tr><td><code>sed 's|/usr|/opt|g'</code></td><td>Different delimiter for paths</td></tr>
+<tr><td><code>sed '/pat/a text'</code> / <code>i text</code> / <code>c text</code></td><td>Append after / insert before / change line</td></tr>
+<tr><td><code>sed '/start/,/end/d'</code></td><td>Delete a range between patterns</td></tr>
+<tr><td><code>sed "s/^PORT=.*/PORT=$p/"</code></td><td>Set a config value (double quotes to expand)</td></tr>
+<tr><td><code>&amp;</code> in replacement</td><td>The whole match: <code>s/[0-9]+/[&amp;]/</code></td></tr>
+</table></div>
+<p>Full tutorial: <a href="../tools/sed.html">sed</a></p>
+
+<h2 id="awk">awk</h2>
+<div class="table-wrap"><table>
+<tr><th>Item</th><th>Meaning</th><th>Item</th><th>Meaning</th></tr>
+<tr><td><code>$0</code> / <code>$1</code> / <code>$NF</code></td><td>Whole line / field 1 / last field</td><td><code>-F,</code> / <code>-F'[:,]'</code></td><td>Field separator</td></tr>
+<tr><td><code>NR</code> / <code>FNR</code></td><td>Line number (overall / per file)</td><td><code>-v x=5</code></td><td>Pass shell value</td></tr>
+<tr><td><code>NF</code></td><td>Number of fields</td><td><code>BEGIN{}</code> / <code>END{}</code></td><td>Run before / after input</td></tr>
+<tr><td><code>OFS</code> / <code>FS</code></td><td>Output / input separator</td><td><code>/re/ {…}</code>, <code>$3 &gt; 100 {…}</code></td><td>Pattern → action</td></tr>
+<tr><td><code>printf "%-10s %5.1f\n"</code></td><td>Formatted output</td><td><code>a[$1]++</code>, <code>for (k in a)</code></td><td>Associative arrays</td></tr>
+<tr><td><code>length() substr() index() split()</code></td><td>String functions</td><td><code>sub() gsub() tolower() toupper()</code></td><td>Replace / case</td></tr>
+</table></div>
+<div class="code"><div class="code-head">awk</div><pre><code class="language-awk">awk -F, 'NR&gt;1 {sum[$3]+=$5; n[$3]++} END {for (d in sum) printf "%-12s %8.0f\n", d, sum[d]/n[d]}' employees.csv
+awk '$9 &gt;= 500 {print $1, $7}' access.log          # 5xx requests
+awk '!seen[$0]++' file                              # dedupe keeping order
+awk 'NR==FNR {ok[$1]; next} !($1 in ok)' allow.txt hosts.txt   # lines of file2 not in file1</code></pre></div>
+<p>Full tutorial: <a href="../tools/awk.html">awk</a></p>
+
+<h2 id="jq">jq</h2>
+<div class="table-wrap"><table>
+<tr><th>Filter</th><th>Meaning</th><th>Filter</th><th>Meaning</th></tr>
+<tr><td><code>.</code></td><td>Whole input (pretty-print)</td><td><code>-r</code> / <code>-c</code></td><td>Raw strings / compact output</td></tr>
+<tr><td><code>.key</code>, <code>.a.b</code>, <code>.["k-1"]</code></td><td>Field access</td><td><code>--arg n "$v"</code> / <code>--argjson</code></td><td>Pass shell values</td></tr>
+<tr><td><code>.[]</code>, <code>.[0]</code>, <code>.[-1]</code>, <code>.[2:4]</code></td><td>Iterate / index / slice</td><td><code>-n</code></td><td>No input (build JSON)</td></tr>
+<tr><td><code>select(.active)</code></td><td>Keep matching items</td><td><code>map(f)</code></td><td>Apply to each element</td></tr>
+<tr><td><code>length</code>, <code>keys</code>, <code>has("k")</code></td><td>Size, keys, test key</td><td><code>sort_by(.x)</code>, <code>group_by(.x)</code>, <code>unique</code></td><td>Order and group</td></tr>
+<tr><td><code>{name, id}</code>, <code>{n: .name}</code></td><td>Build objects</td><td><code>[.[] | f]</code></td><td>Collect into array</td></tr>
+<tr><td><code>"\(.name) is \(.age)"</code></td><td>String interpolation</td><td><code>@csv</code>, <code>@tsv</code>, <code>@base64</code></td><td>Output formats</td></tr>
+<tr><td><code>.x // "default"</code></td><td>Alternative if null/false</td><td><code>add</code>, <code>min_by</code>, <code>max_by</code></td><td>Aggregate</td></tr>
+<tr><td><code>to_entries</code>, <code>with_entries</code></td><td>Object ↔ key/value list</td><td><code>del(.x)</code>, <code>.x = 1</code>, <code>.x |= .+1</code></td><td>Modify</td></tr>
+</table></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.[] | select(.active) | [.username, .email] | @csv' users.json
+jq '.servers | group_by(.role) | map({role: .[0].role, count: length})' servers.json
+jq -r '.result[] | "\(.type)\t\(.name)\t\(.content)"' cf_dns_records.json</code></pre></div>
+<p>Full tutorial: <a href="../tools/jq.html">jq</a></p>
+
+<h2 id="sort-uniq">sort, uniq, comm</h2>
+<div class="table-wrap"><table>
+<tr><th>Option</th><th>Meaning</th><th>Option</th><th>Meaning</th></tr>
+<tr><td><code>-n</code> / <code>-h</code> / <code>-V</code> / <code>-M</code></td><td>Numeric / human (2K, 1G) / version / month</td><td><code>uniq -c</code></td><td>Count adjacent duplicates</td></tr>
+<tr><td><code>-r</code></td><td>Reverse</td><td><code>uniq -d</code> / <code>-u</code></td><td>Only repeated / only unique</td></tr>
+<tr><td><code>-t, -k3,3</code></td><td>Separator, key = field 3 only</td><td><code>uniq -i</code> / <code>-f N</code> / <code>-s N</code></td><td>Ignore case / skip N fields / chars</td></tr>
+<tr><td><code>-k3,3 -k5,5nr</code></td><td>Multi-key: field 3, then 5 numeric desc</td><td><code>comm -12 a b</code></td><td>Lines in both (sorted input)</td></tr>
+<tr><td><code>-u</code> / <code>-f</code> / <code>-s</code></td><td>Unique / fold case / stable</td><td><code>comm -23 a b</code> / <code>-13</code></td><td>Only in a / only in b</td></tr>
+<tr><td><code>-c</code> / <code>-o f</code></td><td>Check sorted / output file (in-place safe)</td><td><code>LC_ALL=C sort</code></td><td>Byte order, fast, predictable</td></tr>
+</table></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk '{print $1}' access.log | sort | uniq -c | sort -rn | head    # top-N frequency idiom
+tail -n +2 employees.csv | sort -t, -k5,5nr | head -3               # top 3 salaries
+du -sh /var/log/* | sort -rh | head -5                              # biggest dirs</code></pre></div>
+<p>Full tutorial: <a href="../tools/sort-uniq.html">sort &amp; uniq</a></p>
+
+<h2 id="cut-tr">cut, tr, paste, wc, head, tail, tee, column</h2>
+<div class="table-wrap"><table>
+<tr><th>Command</th><th>Meaning</th><th>Command</th><th>Meaning</th></tr>
+<tr><td><code>cut -d, -f2,5</code></td><td>Fields 2 and 5 of CSV</td><td><code>wc -l -w -c -m</code></td><td>Lines / words / bytes / chars</td></tr>
+<tr><td><code>cut -c1-10</code> / <code>-f3-</code></td><td>Chars 1–10 / field 3 to end</td><td><code>head -n 5</code> / <code>tail -n 5</code></td><td>First / last 5 lines</td></tr>
+<tr><td><code>tr 'a-z' 'A-Z'</code></td><td>Translate chars (stdin only)</td><td><code>tail -n +2</code></td><td>From line 2 (skip header)</td></tr>
+<tr><td><code>tr -d '\r'</code> / <code>tr -s ' '</code></td><td>Delete CR / squeeze spaces</td><td><code>tail -F log</code></td><td>Follow, survive rotation</td></tr>
+<tr><td><code>tr -cd '[:alnum:]'</code></td><td>Keep only alphanumerics</td><td><code>tee -a f</code></td><td>Copy stdin to file (append)</td></tr>
+<tr><td><code>paste -sd, -</code></td><td>Join lines with commas</td><td><code>column -t -s,</code></td><td>Align CSV as a table</td></tr>
+<tr><td><code>paste a b</code> / <code>paste - - -</code></td><td>Side by side / 3 per row</td><td><code>echo x | sudo tee -a /etc/f</code></td><td>Write to root-owned file</td></tr>
+</table></div>
+<p>Full tutorial: <a href="../tools/cut-tr.html">cut, tr &amp; friends</a></p>
+
+<h2 id="find-xargs">find and xargs</h2>
+<div class="table-wrap"><table>
+<tr><th>Test / action</th><th>Meaning</th><th>Test / action</th><th>Meaning</th></tr>
+<tr><td><code>-name '*.log'</code> / <code>-iname</code></td><td>Name glob (quote it!)</td><td><code>-mtime +30</code> / <code>-7</code></td><td>Older than 30 / newer than 7 days</td></tr>
+<tr><td><code>-type f</code> / <code>d</code> / <code>l</code></td><td>File / dir / symlink</td><td><code>-mmin -60</code>, <code>-newer f</code></td><td>Minutes, newer than file</td></tr>
+<tr><td><code>-size +100M</code></td><td>Bigger than 100 MiB</td><td><code>-perm -o+w</code>, <code>-user u</code></td><td>Permission bits, owner</td></tr>
+<tr><td><code>-maxdepth 1</code></td><td>No recursion</td><td><code>\( A -o B \)</code>, <code>!</code></td><td>Group OR, NOT</td></tr>
+<tr><td><code>-name .git -prune -o … -print</code></td><td>Skip a directory</td><td><code>-empty</code></td><td>Empty file/dir</td></tr>
+<tr><td><code>-exec cmd {} \;</code> / <code>{} +</code></td><td>Once per file / batched</td><td><code>-delete</code></td><td>Delete (put LAST, dry-run first)</td></tr>
+<tr><td><code>-print0 | xargs -0</code></td><td>Space-safe pipeline</td><td><code>xargs -n 1 -P 4</code></td><td>1 arg per run, 4 in parallel</td></tr>
+<tr><td><code>xargs -I{} cp {} {}.bak</code></td><td>Placeholder</td><td><code>xargs -r</code></td><td>Skip if no input</td></tr>
+</table></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">find /var/backups -name '*.tar.gz' -mtime +7 -print            # dry run
+find /var/backups -name '*.tar.gz' -mtime +7 -delete            # then delete
+find . -type f -name '*.sh' -print0 | xargs -0 grep -l 'curl'</code></pre></div>
+<p>Full tutorial: <a href="../tools/find-xargs.html">find &amp; xargs</a></p>
+
+<h2 id="curl">curl</h2>
+<div class="table-wrap"><table>
+<tr><th>Option</th><th>Meaning</th><th>Option</th><th>Meaning</th></tr>
+<tr><td><code>-fsSL</code></td><td>Fail on HTTP ≥400, silent, show errors, follow redirects</td><td><code>-o f</code> / <code>-O</code></td><td>Save to f / remote name</td></tr>
+<tr><td><code>-I</code> / <code>-i</code> / <code>-v</code></td><td>Headers only / with body / verbose</td><td><code>-w '%{http_code}'</code></td><td>Print status code</td></tr>
+<tr><td><code>-X POST|PUT|PATCH|DELETE</code></td><td>Method</td><td><code>%{time_total}</code> <code>%{size_download}</code></td><td>Timing / size</td></tr>
+<tr><td><code>-H 'K: V'</code></td><td>Header</td><td><code>--connect-timeout 5 -m 20</code></td><td>Timeouts</td></tr>
+<tr><td><code>-d 'a=1'</code> / <code>--json '{…}'</code></td><td>Form body / JSON body</td><td><code>--retry 3</code></td><td>Retry transient errors</td></tr>
+<tr><td><code>-u user:pass</code></td><td>Basic auth</td><td><code>-C -</code></td><td>Resume download</td></tr>
+<tr><td><code>-H "Authorization: Bearer $T"</code></td><td>Token auth</td><td><code>-F 'f=@file'</code></td><td>Multipart upload</td></tr>
+<tr><td><code>-c jar</code> / <code>-b jar</code></td><td>Save / send cookies</td><td><code>-k</code></td><td>Skip TLS check (never in prod)</td></tr>
+</table></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://example.com)
+curl -fsS -H "Authorization: Bearer $CF_API_TOKEN" \
+     "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" | jq -r '.result[].name'</code></pre></div>
+<p>curl exit codes: 6 DNS, 7 connect refused, 22 HTTP error with <code>-f</code>, 28 timeout, 60 bad certificate. Full tutorial: <a href="../tools/curl.html">curl</a></p>
+
+<h2 id="ssh">ssh, scp, rsync</h2>
+<div class="table-wrap"><table>
+<tr><th>Command</th><th>Meaning</th></tr>
+<tr><td><code>ssh-keygen -t ed25519 -C "me@lab"</code></td><td>Create a key pair (<code>~/.ssh/id_ed25519</code>)</td></tr>
+<tr><td><code>ssh-copy-id deploy@10.0.1.11</code></td><td>Install your public key on the server</td></tr>
+<tr><td><code>ssh -p 2222 -i key user@host</code></td><td>Port, identity file</td></tr>
+<tr><td><code>ssh user@host 'uptime; df -h /'</code></td><td>Run remote commands</td></tr>
+<tr><td><code>ssh user@host 'bash -s' &lt; local.sh</code></td><td>Run a local script remotely</td></tr>
+<tr><td><code>ssh -o BatchMode=yes -o ConnectTimeout=5 h</code></td><td>Non-interactive, fail fast (for scripts)</td></tr>
+<tr><td><code>scp file user@host:/tmp/</code> / <code>scp -r dir h:</code></td><td>Copy file / directory</td></tr>
+<tr><td><code>rsync -avz --delete src/ user@host:/dst/</code></td><td>Mirror (archive, verbose, compress); trailing <code>/</code> = contents</td></tr>
+<tr><td><code>rsync -avn …</code></td><td>Dry run (<code>-n</code>)</td></tr>
+<tr><td><code>rsync -e 'ssh -p 2222' --exclude '*.log'</code></td><td>Custom ssh, exclusions</td></tr>
+</table></div>
+
+<h2 id="tar">tar</h2>
+<div class="table-wrap"><table>
+<tr><th>Command</th><th>Meaning</th></tr>
+<tr><td><code>tar -czf backup.tar.gz dir/</code></td><td>Create gzip archive (<code>c</code> create, <code>z</code> gzip, <code>f</code> file)</td></tr>
+<tr><td><code>tar -cJf b.tar.xz dir/</code> / <code>-cjf b.tar.bz2</code></td><td>xz / bzip2 compression</td></tr>
+<tr><td><code>tar -tzf backup.tar.gz</code></td><td>List contents</td></tr>
+<tr><td><code>tar -xzf backup.tar.gz -C /restore</code></td><td>Extract into a directory</td></tr>
+<tr><td><code>tar -czf b.tgz --exclude='*.log' -C /var/www html</code></td><td>Exclude pattern, change dir first</td></tr>
+<tr><td><code>tar -xzf b.tgz path/in/archive</code></td><td>Extract one file</td></tr>
+<tr><td><code>gzip -t b.tar.gz &amp;&amp; tar -tzf b.tar.gz &gt;/dev/null</code></td><td>Verify an archive</td></tr>
+<tr><td><code>tar -czf "site_$(date +%F_%H%M).tar.gz" site/</code></td><td>Timestamped backup name</td></tr>
+</table></div>
+
+<h2 id="systemctl">systemctl and journalctl</h2>
+<div class="table-wrap"><table>
+<tr><th>Command</th><th>Meaning</th></tr>
+<tr><td><code>systemctl status nginx</code></td><td>State, PID, last log lines</td></tr>
+<tr><td><code>sudo systemctl start|stop|restart|reload nginx</code></td><td>Control a service now</td></tr>
+<tr><td><code>sudo systemctl enable --now nginx</code> / <code>disable</code></td><td>Start at boot (and now) / don't</td></tr>
+<tr><td><code>systemctl is-active --quiet nginx</code></td><td>Exit 0 if running (for scripts)</td></tr>
+<tr><td><code>systemctl is-enabled nginx</code></td><td>Enabled at boot?</td></tr>
+<tr><td><code>systemctl --failed</code> / <code>list-units --type=service</code></td><td>Failed units / all services</td></tr>
+<tr><td><code>sudo systemctl daemon-reload</code></td><td>After editing unit files</td></tr>
+<tr><td><code>journalctl -u nginx -n 50 --no-pager</code></td><td>Last 50 log lines of a unit</td></tr>
+<tr><td><code>journalctl -u nginx -f</code> / <code>--since "1 hour ago"</code></td><td>Follow / time filter</td></tr>
+</table></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">for s in nginx mysql php8.3-fpm; do
+  systemctl is-active --quiet "$s" || { echo "$s down, restarting"; sudo systemctl restart "$s"; }
+done</code></pre></div>
+
+<h2 id="cron">cron syntax</h2>
+<div class="code"><div class="code-head">crontab</div><pre><code># ┌───────── minute (0-59)
+# │ ┌─────── hour (0-23)
+# │ │ ┌───── day of month (1-31)
+# │ │ │ ┌─── month (1-12 or jan-dec)
+# │ │ │ │ ┌─ day of week (0-7, 0 and 7 = Sunday, or sun-sat)
+# │ │ │ │ │
+  * * * * *  command</code></pre></div>
+<div class="table-wrap"><table>
+<tr><th>Schedule</th><th>Meaning</th><th>Schedule</th><th>Meaning</th></tr>
+<tr><td><code>*/5 * * * *</code></td><td>Every 5 minutes</td><td><code>0 2 * * *</code></td><td>Daily at 02:00</td></tr>
+<tr><td><code>0 * * * *</code></td><td>Every hour, on the hour</td><td><code>30 3 * * 0</code></td><td>Sundays 03:30</td></tr>
+<tr><td><code>0 9-17 * * 1-5</code></td><td>Hourly 9–17, Mon–Fri</td><td><code>0 0 1 * *</code></td><td>Monthly, 1st at midnight</td></tr>
+<tr><td><code>15 6,18 * * *</code></td><td>06:15 and 18:15</td><td><code>@reboot</code> / <code>@daily</code></td><td>At boot / once a day</td></tr>
+</table></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">crontab -e        # edit      crontab -l   # list      crontab -r   # remove ALL (careful)
+# in crontab: absolute paths, set PATH, log output, escape % as \%
+PATH=/usr/local/bin:/usr/bin:/bin
+0 2 * * * /opt/scripts/backup.sh &gt;&gt; /var/log/backup.log 2&gt;&amp;1
+0 3 * * * tar -czf /backups/www_$(date +\%F).tar.gz /var/www</code></pre></div>
+<div class="callout exam"><span class="ct">Exam</span>Cron runs with a minimal environment (short <code>PATH</code>, no aliases, <code>/bin/sh</code>, home directory as cwd). Most "works in terminal, fails in cron" problems come from relative paths, missing <code>PATH</code> entries and unescaped <code>%</code>.</div>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="datasets.html">Dataset library</a>: the files every example uses</li>
+  <li>Tutorials: <a href="../tools/grep.html">grep</a> · <a href="../tools/sed.html">sed</a> · <a href="../tools/awk.html">awk</a> · <a href="../tools/jq.html">jq</a> · <a href="../tools/sort-uniq.html">sort &amp; uniq</a> · <a href="../tools/cut-tr.html">cut &amp; tr</a> · <a href="../tools/find-xargs.html">find &amp; xargs</a> · <a href="../tools/curl.html">curl</a></li>
+  <li>Labs: <a href="../labs/lab01-multi-function.html">01 Functions</a> · <a href="../labs/lab03-remote-execution.html">03 Remote execution</a> · <a href="../labs/lab09-pipes-redirection.html">09 Pipes</a> · <a href="../labs/lab11-backup-retention.html">11 Backups</a> · <a href="../labs/lab12-service-health.html">12 Service health</a></li>
+</ul>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

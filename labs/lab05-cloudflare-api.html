@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 05 · Cloudflare API</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="lab05">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Labs / Lab 05</div>
+<h1>Lab 05: Managing DNS with the Cloudflare API (curl + jq)</h1>
+<p class="lead">Cloudflare runs DNS for millions of websites. Everything you can click in its dashboard can also be done from a script, by sending HTTP requests to its <strong>API</strong>. In this lab you use <code>curl</code> to talk to the API and <code>jq</code> to read the JSON answers, and you write small scripts that list, add and update DNS records.</p>
+<div class="meta-row">
+  <span class="pill">Commands: curl, jq</span><span class="pill">Difficulty: beginner</span><span class="pill grey">~45 min</span><span class="pill grey">Cloudflare API v4</span>
+</div>
+
+<div class="callout note"><span class="ct">Offline vs online</span>API calls need a Cloudflare account, a domain and a token, so their outputs here are labelled <strong>sample output</strong> and use <code>example.com</code> with made-up IDs. The jq examples marked "offline" read <code>datasets/cf_dns_records.json</code>, a saved API answer, so you can run them anywhere and get exactly the output shown.</div>
+
+<h2 id="aim">Aim and objectives</h2>
+<p><strong>Aim:</strong> manage DNS records of a domain from Bash using the Cloudflare API.</p>
+<ul>
+  <li>Create an API token and keep it safe.</li>
+  <li>Send API requests with <code>curl</code> and an <code>Authorization: Bearer</code> header.</li>
+  <li>Read the JSON answers with <code>jq</code> and check whether a request succeeded.</li>
+  <li>Write scripts to list, add and update DNS records.</li>
+</ul>
+
+<h2 id="prerequisites">Prerequisites</h2>
+<div class="code"><div class="code-head">bash · install</div><pre><code class="language-bash">sudo apt install -y curl jq      # Ubuntu / Debian</code></pre></div>
+<ul>
+  <li>A free Cloudflare account with a test domain. These scripts change real DNS, so do not use an important domain.</li>
+  <li>Basic jq from <a href="lab04-json-jq.html">Lab 04</a>.</li>
+</ul>
+
+<h3 id="token">Create an API token (one time)</h3>
+<ol class="steps">
+  <li>In the Cloudflare dashboard click your profile icon, then <strong>My Profile</strong>, then <strong>API Tokens</strong>.</li>
+  <li>Click <strong>Create Token</strong> and use the <strong>Edit zone DNS</strong> template.</li>
+  <li>Permissions: <code>Zone · DNS · Edit</code>. Also add <code>Zone · Zone · Read</code> so scripts can list zones.</li>
+  <li>Zone Resources: <code>Include · Specific zone · your domain</code>.</li>
+  <li>Click <strong>Continue to summary</strong>, then <strong>Create Token</strong>. Copy the token now: Cloudflare shows it only once.</li>
+</ol>
+<p>Keep the token out of your scripts. Put it in a file called <code>.env</code> that only you can read:</p>
+<div class="code"><div class="code-head">bash · .env</div><pre><code class="language-bash"># .env  (never share this file or upload it to GitHub)
+export CF_API_TOKEN="paste-your-token-here"
+export ZONE_ID="paste-your-zone-id-here"</code></pre></div>
+<div class="code"><div class="code-head">bash · protect and load it</div><pre><code class="language-bash">chmod 600 .env        # only the owner can read and write it
+source .env           # load the variables into this terminal
+echo "${CF_API_TOKEN:0:4}..."   # print only the first 4 characters to check</code></pre></div>
+
+<h2 id="start-here">Start here: simple scripts</h2>
+<p>Run <code>source .env</code> first, then each script with <code>chmod +x name.sh</code> and <code>./name.sh</code>.</p>
+
+<h3 id="step1">Step 1: check that the token works</h3>
+<div class="code"><div class="code-head">bash · cf1_verify.sh</div><pre><code class="language-bash">#!/bin/bash
+# Step 1: check that your API token works
+# The token is read from the environment variable CF_API_TOKEN
+curl -s "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+     -H "Authorization: Bearer $CF_API_TOKEN" | jq '.'</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">chmod +x cf1_verify.sh
+./cf1_verify.sh</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>{
+  "result": {
+    "id": "ed17574386854bf78a67040be0a770b0",
+    "status": "active"
+  },
+  "success": true,
+  "errors": [],
+  "messages": [
+    {
+      "code": 10000,
+      "message": "This API Token is valid and active",
+      "type": null
+    }
+  ]
+}</pre></div>
+<ul>
+  <li><code>-s</code> (silent) hides curl's progress bar.</li>
+  <li><code>-H "Authorization: Bearer $CF_API_TOKEN"</code> sends your token in a header. This is how the API knows who you are.</li>
+  <li><code>"success": true</code> and <code>"status": "active"</code> mean the token is good. With a wrong token you get <code>"success": false</code> and an error message.</li>
+</ul>
+
+<h3 id="step2">Step 2: list your zones</h3>
+<div class="code"><div class="code-head">bash · cf2_zones.sh</div><pre><code class="language-bash">#!/bin/bash
+# Step 2: list your zones (domains) and their IDs
+api="https://api.cloudflare.com/client/v4"
+curl -s "$api/zones" -H "Authorization: Bearer $CF_API_TOKEN" |
+    jq -r '.result[] | .name + "  " + .id'     # one line per zone: name and id</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">./cf2_zones.sh</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>example.com  023e105f4ecef8ad9ca31a8372d0c353
+example.org  353c0d2a7183ac9dc8fae4cef5e301e3
+example.net  7d1c4a1b2f9e43c3a2b8d6e5f4a3b2c1</pre></div>
+<ul>
+  <li>A <strong>zone</strong> is a domain in your account. Each one has a 32-character <strong>id</strong>.</li>
+  <li>The answer has a <code>result</code> array; <code>.result[]</code> walks through it like in Lab 04.</li>
+  <li>Copy your zone id into <code>.env</code> as <code>ZONE_ID</code>: the DNS commands need it.</li>
+</ul>
+
+<h3 id="step3">Step 3: list the DNS records</h3>
+<div class="code"><div class="code-head">bash · cf3_records.sh</div><pre><code class="language-bash">#!/bin/bash
+# Step 3: list the DNS records of one zone
+api="https://api.cloudflare.com/client/v4"
+zone="023e105f4ecef8ad9ca31a8372d0c353"        # zone id copied from step 2
+curl -s "$api/zones/$zone/dns_records" -H "Authorization: Bearer $CF_API_TOKEN" |
+    jq -r '.result[] | .type + "  " + .name + "  " + .content'</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">./cf3_records.sh</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>A  example.com  203.0.113.10
+A  www.example.com  203.0.113.10
+A  api.example.com  203.0.113.20
+A  staging.example.com  198.51.100.5
+AAAA  example.com  2001:db8::10
+CNAME  blog.example.com  example.com
+CNAME  shop.example.com  shops.myshopify.com
+MX  example.com  mail.example.com
+TXT  example.com  v=spf1 include:_spf.google.com ~all
+A  vpn.example.com  198.51.100.77</pre></div>
+<ul>
+  <li>The URL is <code>/zones/ZONE_ID/dns_records</code>: records belong to a zone.</li>
+  <li><code>jq -r</code> joins type, name and content with <code>+</code> into one readable line.</li>
+</ul>
+
+<h3 id="step4">Step 4: practise jq offline</h3>
+<p>The dataset below is a saved answer from the same request as Step 3. Run jq on it:</p>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/cf_dns_records.json</span></div><pre><code>{
+  "result": [
+    {
+      "id": "d918b3e5f2f25eef1f45dbfdf7dc67e0",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "example.com",
+      "type": "A",
+      "content": "203.0.113.10",
+      "proxiable": true,
+      "proxied": true,
+      "ttl": 1,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-08-12T08:52:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "98de8ebba3b5cecea446be72364c911a",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "www.example.com",
+      "type": "A",
+      "content": "203.0.113.10",
+      "proxiable": true,
+      "proxied": true,
+      "ttl": 1,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-01-11T08:31:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "c9776598203c8c25fd235def3e5a87e3",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "api.example.com",
+      "type": "A",
+      "content": "203.0.113.20",
+      "proxiable": true,
+      "proxied": true,
+      "ttl": 1,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-04-12T08:58:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "3748967f961d33ba350843f08de08fc2",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "staging.example.com",
+      "type": "A",
+      "content": "198.51.100.5",
+      "proxiable": true,
+      "proxied": false,
+      "ttl": 300,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-06-14T08:48:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "fbe94499dbc080fd46fb7bf300b9d4a3",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "example.com",
+      "type": "AAAA",
+      "content": "2001:db8::10",
+      "proxiable": true,
+      "proxied": true,
+      "ttl": 1,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-03-14T08:44:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "1c24220e2cabd7e7cc6b66e5402adf9c",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "blog.example.com",
+      "type": "CNAME",
+      "content": "example.com",
+      "proxiable": true,
+      "proxied": true,
+      "ttl": 1,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-01-14T08:10:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "3ce915e7c9d6a63bca3c6f5f5bb5c40c",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "shop.example.com",
+      "type": "CNAME",
+      "content": "shops.myshopify.com",
+      "proxiable": true,
+      "proxied": false,
+      "ttl": 3600,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-01-15T08:26:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "6bc4123ebde13c1b20733f6d0d6a05b3",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "example.com",
+      "type": "MX",
+      "content": "mail.example.com",
+      "proxiable": false,
+      "proxied": false,
+      "ttl": 300,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-02-25T08:38:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z",
+      "priority": 10
+    },
+    {
+      "id": "97fa7f04836390075cae9610c72c1fe3",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "example.com",
+      "type": "TXT",
+      "content": "v=spf1 include:_spf.google.com ~all",
+      "proxiable": false,
+      "proxied": false,
+      "ttl": 300,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-08-26T08:24:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "ba2c98ce0b19f88e9d77a45ef206c269",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "vpn.example.com",
+      "type": "A",
+      "content": "198.51.100.77",
+      "proxiable": true,
+      "proxied": false,
+      "ttl": 3600,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-08-10T08:13:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    }
+  ],
+  "success": true,
+  "errors": [],
+  "messages": [],
+  "result_info": {
+    "page": 1,
+    "per_page": 100,
+    "count": 10,
+    "total_count": 10,
+    "total_pages": 1
+  }
+}</code></pre></div>
+<div class="code"><div class="code-head">bash · offline: names and IPs of A records</div><pre><code class="language-bash">jq -r '.result[] | select(.type == "A") | .name + "  " + .content' datasets/cf_dns_records.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>example.com  203.0.113.10
+www.example.com  203.0.113.10
+api.example.com  203.0.113.20
+staging.example.com  198.51.100.5
+vpn.example.com  198.51.100.77</pre></div>
+<div class="code"><div class="code-head">bash · offline: did it succeed? how many records?</div><pre><code class="language-bash">jq '.success' datasets/cf_dns_records.json
+jq '.result | length' datasets/cf_dns_records.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>true
+10</pre></div>
+<div class="code"><div class="code-head">bash · offline: find the id of www.example.com</div><pre><code class="language-bash">jq -r '.result[] | select(.name == "www.example.com") | .id' datasets/cf_dns_records.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>98de8ebba3b5cecea446be72364c911a</pre></div>
+<ul>
+  <li>Every change to a record (update, delete) needs the record's <strong>id</strong>, so "find the id by name" is a very common step.</li>
+</ul>
+
+<h2 id="concepts">Concepts</h2>
+
+<h3 id="api">What is a REST API?</h3>
+<p>A REST API is a web address that a program (not a person) talks to. You send an HTTP request with a <strong>method</strong> (what to do) to a <strong>URL</strong> (what to do it to), and get JSON back. All Cloudflare URLs start with <code>https://api.cloudflare.com/client/v4</code>.</p>
+<div class="table-wrap"><table>
+<tr><th>Task</th><th>Method</th><th>URL (after /client/v4)</th></tr>
+<tr><td>Check token</td><td>GET</td><td><code>/user/tokens/verify</code></td></tr>
+<tr><td>List zones</td><td>GET</td><td><code>/zones</code></td></tr>
+<tr><td>List DNS records</td><td>GET</td><td><code>/zones/{zone_id}/dns_records</code></td></tr>
+<tr><td>Add a record</td><td>POST</td><td><code>/zones/{zone_id}/dns_records</code></td></tr>
+<tr><td>Change a record</td><td>PATCH</td><td><code>/zones/{zone_id}/dns_records/{record_id}</code></td></tr>
+<tr><td>Delete a record</td><td>DELETE</td><td><code>/zones/{zone_id}/dns_records/{record_id}</code></td></tr>
+</table></div>
+
+<h3 id="curl-options">curl options used here</h3>
+<div class="table-wrap"><table>
+<tr><th>Option</th><th>Meaning</th></tr>
+<tr><td><code>-s</code></td><td>silent: no progress bar</td></tr>
+<tr><td><code>-X POST</code></td><td>HTTP method (GET is the default)</td></tr>
+<tr><td><code>-H "Name: value"</code></td><td>add a header (token, content type)</td></tr>
+<tr><td><code>--data '…'</code></td><td>send a request body (the JSON for a new record)</td></tr>
+</table></div>
+
+<h3 id="answer">Every answer has the same shape</h3>
+<p>Cloudflare always answers with <code>success</code>, <code>errors</code> and <code>result</code>. If <code>success</code> is <code>false</code>, the reason is in <code>errors</code>. Here is a saved failed answer:</p>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/cf_error.json</span></div><pre><code>{
+  "result": null,
+  "success": false,
+  "errors": [
+    {
+      "code": 81058,
+      "message": "An identical record already exists."
+    }
+  ],
+  "messages": []
+}</code></pre></div>
+<div class="code"><div class="code-head">bash · offline: print the error message</div><pre><code class="language-bash">jq '.success' datasets/cf_error.json
+jq -r '.errors[0].message' datasets/cf_error.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>false
+An identical record already exists.</pre></div>
+<div class="callout tip"><span class="ct">Tip</span>curl's own exit code only tells you that a reply arrived, not that the API did what you asked. Always check <code>.success</code> with jq.</div>
+
+<h2 id="use-cases">Use cases</h2>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 1</span> List DNS records (with an optional type filter)</h3>
+<p><strong>Scenario:</strong> you want a quick command to see all records, or only the A records, and a clear message if the token is wrong.</p>
+<div class="code"><div class="code-head">bash · list_records.sh</div><pre><code class="language-bash">#!/bin/bash
+# list_records.sh - show the DNS records of a zone, optionally only one type
+# usage: ./list_records.sh [TYPE]      e.g. ./list_records.sh A
+api="https://api.cloudflare.com/client/v4"
+type="$1"
+
+if [ -z "$CF_API_TOKEN" ] || [ -z "$ZONE_ID" ]; then
+    echo "Please set CF_API_TOKEN and ZONE_ID first (source .env)"
+    exit 1
+fi
+
+url="$api/zones/$ZONE_ID/dns_records"
+if [ -n "$type" ]; then
+    url="$url?type=$type"              # add a filter if a type was given
+fi
+
+response=$(curl -s "$url" -H "Authorization: Bearer $CF_API_TOKEN")
+
+# Cloudflare answers "success": true or false in every response
+if [ "$(echo "$response" | jq '.success')" != "true" ]; then
+    echo "API error:"
+    echo "$response" | jq -r '.errors[] | .message'
+    exit 1
+fi
+echo "$response" | jq -r '.result[] | "\(.type)\t\(.name)\t\(.content)"'</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">./list_records.sh A</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>A	example.com	203.0.113.10
+A	www.example.com	203.0.113.10
+A	api.example.com	203.0.113.20
+A	staging.example.com	198.51.100.5
+A	vpn.example.com	198.51.100.77</pre></div>
+<div class="code"><div class="code-head">bash · with a wrong token</div><pre><code class="language-bash">CF_API_TOKEN=wrong ./list_records.sh</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>API error:
+Invalid API Token</pre></div>
+<p><strong>How it works:</strong></p>
+<ul>
+  <li><code>[ -z "$CF_API_TOKEN" ]</code> is true when the variable is empty, so the script stops early with a helpful message.</li>
+  <li>If a type was given, <code>?type=A</code> is added to the URL. The API then returns only A records.</li>
+  <li>The answer is saved in <code>$response</code>, so we can check <code>.success</code> and then print the records without calling the API twice.</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 2</span> Add one A record</h3>
+<p><strong>Scenario:</strong> a new test server at <code>203.0.113.50</code> needs the name <code>test.example.com</code>.</p>
+<div class="code"><div class="code-head">bash · add_record.sh</div><pre><code class="language-bash">#!/bin/bash
+# add_record.sh - create one A record
+# usage: ./add_record.sh NAME IP      e.g. ./add_record.sh test.example.com 203.0.113.50
+api="https://api.cloudflare.com/client/v4"
+name="$1"
+ip="$2"
+
+if [ -z "$name" ] || [ -z "$ip" ]; then
+    echo "Usage: ./add_record.sh NAME IP"
+    exit 1
+fi
+
+# Build the JSON body with jq, so the quotes are always correct
+body=$(jq -n --arg n "$name" --arg ip "$ip" \
+          '{type: "A", name: $n, content: $ip, ttl: 3600, proxied: false}')
+
+response=$(curl -s -X POST "$api/zones/$ZONE_ID/dns_records" \
+     -H "Authorization: Bearer $CF_API_TOKEN" \
+     -H "Content-Type: application/json" \
+     --data "$body")
+
+if [ "$(echo "$response" | jq '.success')" = "true" ]; then
+    echo "Created $name -&gt; $ip"
+else
+    echo "Failed: $(echo "$response" | jq -r '.errors[0].message')"
+fi</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">./add_record.sh test.example.com 203.0.113.50
+./add_record.sh www.example.com 203.0.113.10
+./add_record.sh</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>Created test.example.com -&gt; 203.0.113.50
+Failed: An identical record already exists.
+Usage: ./add_record.sh NAME IP</pre></div>
+<p><strong>How it works:</strong></p>
+<ul>
+  <li><code>-X POST</code> means "create". The new record is sent as JSON with <code>--data</code>, and <code>Content-Type: application/json</code> tells the API it is JSON.</li>
+  <li><code>jq -n --arg</code> builds that JSON from the Bash variables (see <a href="lab04-json-jq.html#building-json">Lab 04</a>).</li>
+  <li>The second run fails because <code>www.example.com</code> already exists; the script prints Cloudflare's error message.</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 3</span> Update the IP of an existing record</h3>
+<p><strong>Scenario:</strong> the staging server moved to a new IP. Find the record by name, then change only its IP.</p>
+<div class="code"><div class="code-head">bash · update_record.sh</div><pre><code class="language-bash">#!/bin/bash
+# update_record.sh - change the IP address of an existing A record
+# usage: ./update_record.sh NAME NEW_IP
+api="https://api.cloudflare.com/client/v4"
+name="$1"
+new_ip="$2"
+auth="Authorization: Bearer $CF_API_TOKEN"
+
+# 1. find the record id by its name
+id=$(curl -s "$api/zones/$ZONE_ID/dns_records?type=A&amp;name=$name" -H "$auth" |
+     jq -r '.result[0].id')
+
+if [ "$id" = "null" ] || [ -z "$id" ]; then
+    echo "No A record called $name"
+    exit 1
+fi
+echo "Record id: $id"
+
+# 2. PATCH changes only the fields we send (here: content)
+curl -s -X PATCH "$api/zones/$ZONE_ID/dns_records/$id" \
+     -H "$auth" -H "Content-Type: application/json" \
+     --data "{\"content\": \"$new_ip\"}" |
+     jq -r 'if .success then "Updated \(.result.name) -&gt; \(.result.content)" else .errors[0].message end'</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">./update_record.sh staging.example.com 198.51.100.6
+./update_record.sh nothere.example.com 203.0.113.9</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>Record id: 3748967f961d33ba350843f08de08fc2
+Updated staging.example.com -&gt; 198.51.100.6
+No A record called nothere.example.com</pre></div>
+<p><strong>How it works:</strong></p>
+<ul>
+  <li>Step 1 asks the API for the A record with that name and takes its <code>id</code>. If nothing matches, jq prints <code>null</code> and the script stops.</li>
+  <li>Step 2 uses <code>PATCH</code>, which changes only the fields you send (here <code>content</code>, the IP). The name, TTL and proxy setting stay the same.</li>
+  <li>An IP address has no quotes or spaces, so building the small JSON body as a string is fine here. For any text value use <code>jq -n --arg</code> as in Use case 2.</li>
+  <li>jq's <code>if … then … else … end</code> prints either the new value or the error message.</li>
+</ul>
+</div>
+
+<details><summary>Optional: going further (dynamic DNS)</summary>
+<p>Home internet connections often get a new public IP. This script asks <code>api.ipify.org</code> for the current IP and updates <code>vpn.example.com</code> only when it changed. Run it every 5 minutes with cron: <code>*/5 * * * * cd /home/user/ddns &amp;&amp; . ./.env &amp;&amp; ./ddns.sh &gt;&gt; ddns.log</code></p>
+<div class="code"><div class="code-head">bash · ddns.sh</div><pre><code class="language-bash">#!/bin/bash
+# ddns.sh - point vpn.example.com at this machine's public IP (run from cron)
+api="https://api.cloudflare.com/client/v4"
+name="vpn.example.com"
+auth="Authorization: Bearer $CF_API_TOKEN"
+
+my_ip=$(curl -s https://api.ipify.org)                       # what is my public IP?
+record=$(curl -s "$api/zones/$ZONE_ID/dns_records?type=A&amp;name=$name" -H "$auth")
+id=$(echo "$record" | jq -r '.result[0].id')
+old_ip=$(echo "$record" | jq -r '.result[0].content')
+
+if [ "$my_ip" = "$old_ip" ]; then
+    echo "$(date '+%F %T') no change ($my_ip)"
+else
+    curl -s -X PATCH "$api/zones/$ZONE_ID/dns_records/$id" -H "$auth" \
+         -H "Content-Type: application/json" --data "{\"content\": \"$my_ip\"}" &gt; /dev/null
+    echo "$(date '+%F %T') updated $name: $old_ip -&gt; $my_ip"
+fi</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">./ddns.sh</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>2026-11-16 10:05:01 updated vpn.example.com: 198.51.100.77 -&gt; 198.51.100.84</pre></div>
+</details>
+
+<h2 id="mistakes">Common mistakes</h2>
+<div class="table-wrap"><table>
+<tr><th>Problem</th><th>Cause</th><th>Fix</th></tr>
+<tr><td><code>Invalid API Token</code></td><td>Token typed wrong, expired, or <code>.env</code> not loaded</td><td>Run <code>source .env</code>; check with Step 1.</td></tr>
+<tr><td><code>Authentication error</code> on DNS calls</td><td>Token has no permission for this zone</td><td>Edit the token: add the zone and <code>DNS · Edit</code>.</td></tr>
+<tr><td><code>Could not route to …</code></td><td>Empty or wrong <code>ZONE_ID</code> in the URL</td><td><code>echo "$ZONE_ID"</code>; copy it again from Step 2.</td></tr>
+<tr><td><code>An identical record already exists</code></td><td>POST for a record that is already there</td><td>Use the update script (PATCH) instead.</td></tr>
+<tr><td>Single quotes around the URL or header</td><td><code>$CF_API_TOKEN</code> is sent literally</td><td>Use double quotes so Bash fills in the variable.</td></tr>
+<tr><td>Missing <code>\</code> at the end of a curl line</td><td>Next line runs as a separate command</td><td>End every continued line with <code>\</code> (no space after it).</td></tr>
+<tr><td><code>Permission denied</code></td><td>Script not executable</td><td><code>chmod +x script.sh</code></td></tr>
+<tr><td>Token leaked</td><td>Token written inside the script or pushed to GitHub</td><td>Keep it in <code>.env</code> with <code>chmod 600</code>; delete the token in the dashboard if leaked.</td></tr>
+</table></div>
+
+<h2 id="exercises">Practice exercises</h2>
+<p>Exercises 1 to 3 run offline on <code>datasets/cf_dns_records.json</code>.</p>
+<details><summary>1. Print the name of every CNAME record.</summary>
+<div class="code"><div class="code-head">bash · solution</div><pre><code class="language-bash">jq -r '.result[] | select(.type == "CNAME") | .name' datasets/cf_dns_records.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>blog.example.com
+shop.example.com</pre></div>
+</details>
+<details><summary>2. Print the records that are NOT proxied (proxied is false).</summary>
+<div class="code"><div class="code-head">bash · solution</div><pre><code class="language-bash">jq -r '.result[] | select(.proxied == false) | .type + " " + .name' datasets/cf_dns_records.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>A staging.example.com
+CNAME shop.example.com
+MX example.com
+TXT example.com
+A vpn.example.com</pre></div>
+</details>
+<details><summary>3. Save all records as a CSV file with type, name and content.</summary>
+<div class="code"><div class="code-head">bash · solution</div><pre><code class="language-bash">jq -r '.result[] | [.type, .name, .content] | @csv' datasets/cf_dns_records.json &gt; dns.csv
+head -3 dns.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>"A","example.com","203.0.113.10"
+"A","www.example.com","203.0.113.10"
+"A","api.example.com","203.0.113.20"</pre></div>
+</details>
+<details><summary>4. Write delete_record.sh NAME that deletes an A record (find the id first, then use DELETE).</summary>
+<div class="code"><div class="code-head">bash · delete_record.sh</div><pre><code class="language-bash">#!/bin/bash
+api="https://api.cloudflare.com/client/v4"
+auth="Authorization: Bearer $CF_API_TOKEN"
+id=$(curl -s "$api/zones/$ZONE_ID/dns_records?type=A&amp;name=$1" -H "$auth" | jq -r '.result[0].id')
+if [ "$id" = "null" ]; then
+    echo "No A record called $1"
+    exit 1
+fi
+curl -s -X DELETE "$api/zones/$ZONE_ID/dns_records/$id" -H "$auth" | jq '.success'</code></pre></div>
+</details>
+
+<h2 id="viva">Viva / exam questions</h2>
+<details><summary>What is an API token and why use it instead of your password?</summary><p>A secret key that lets a script use the API. It can be limited to certain permissions (only DNS) and certain domains, and it can be deleted at any time without changing your password.</p></details>
+<details><summary>How does curl send the token?</summary><p>In an HTTP header: <code>-H "Authorization: Bearer $CF_API_TOKEN"</code>.</p></details>
+<details><summary>What is a zone id and how do you find it?</summary><p>The unique id of a domain in Cloudflare. Get it with <code>GET /zones</code> and <code>jq -r '.result[] | .name + " " + .id'</code>, or from the domain's Overview page.</p></details>
+<details><summary>Which HTTP methods create, change and delete a record?</summary><p>POST creates, PATCH changes some fields, DELETE removes. GET only reads.</p></details>
+<details><summary>How do you know if an API call worked?</summary><p>Check the <code>success</code> field of the JSON answer with <code>jq '.success'</code>. If it is false, print <code>.errors[0].message</code>.</p></details>
+<details><summary>Why do we store the token in <code>.env</code> with <code>chmod 600</code>?</summary><p>So it is not written inside scripts that others may see, and so only the owner can read the file.</p></details>
+<details><summary>What does <code>-X POST</code> and <code>--data</code> do in curl?</summary><p><code>-X POST</code> sets the HTTP method; <code>--data</code> sends a request body, here the JSON describing the new record.</p></details>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="../tools/curl.html">curl: HTTP from the shell</a></li>
+  <li><a href="../tools/jq.html">jq: JSON processor</a></li>
+  <li><a href="lab04-json-jq.html">Lab 04: JSON with jq</a></li>
+  <li><a href="lab07-email-alerts.html">Lab 07: Automated email alerts</a></li>
+</ul>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

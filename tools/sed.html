@@ -1,0 +1,867 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sed: stream editor</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="sed">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Command tutorials / sed</div>
+<h1>sed: the stream editor</h1>
+<p class="lead"><code>sed</code> edits text as it flows through a pipe or out of a file: substitute, delete, insert, print ranges. It is the standard tool for changing configuration files from a script (<code>APP_ENV=production</code>, rotate a password, uncomment a line), for reshaping CSV data and for cutting a time window out of a log. This page explains the pattern-space model first, because once you understand it every sed command becomes obvious.</p>
+<div class="meta-row"><span class="pill">s/// · d · p · a/i/c · y</span><span class="pill">addresses &amp; ranges</span><span class="pill">in-place editing</span><span class="pill grey">Datasets: app.conf, employees.csv, access.log</span><span class="pill grey">~60 min</span></div>
+
+<h2 id="syntax">Syntax</h2>
+<div class="code"><div class="code-head">syntax</div><pre><code class="language-bash">sed [OPTIONS] 'SCRIPT' [FILE...]
+sed [OPTIONS] -e 'CMD1' -e 'CMD2' [FILE...]
+sed [OPTIONS] -f script.sed [FILE...]
+command | sed 'SCRIPT'
+
+# a SCRIPT is one or more commands, each optionally preceded by an address:
+#   [address[,address]][!]command[arguments]
+sed '3d'                 # address 3, command d
+sed '/^#/d'              # address /^#/, command d
+sed '2,5s/a/b/g'         # range 2-5, command s with flag g
+sed '/start/,/end/!d'    # NOT in the range -&gt; delete</code></pre></div>
+
+<h2 id="model">How it works: the pattern space</h2>
+<p>sed is a loop that you never write yourself. For <strong>every input line</strong> it does this:</p>
+<ol class="steps">
+  <li><strong>Read</strong> the next line into a buffer called the <em>pattern space</em> (the trailing newline is removed).</li>
+  <li><strong>Run the script</strong> top to bottom. Each command runs only if its <em>address</em> matches the current line. Commands change the pattern space (<code>s</code>, <code>y</code>), print it (<code>p</code>), throw it away and start the next cycle (<code>d</code>), and so on.</li>
+  <li><strong>Auto-print</strong> the pattern space at the end of the script, unless <code>-n</code> was given.</li>
+  <li>Repeat until the input ends. A second buffer, the <em>hold space</em>, survives between lines and can be used as memory.</li>
+</ol>
+<div class="output"><div class="out-head">mental model</div><pre>input line ──► [ pattern space ] ──► script: addr cmd; addr cmd; ... ──► auto-print (unless -n) ──► stdout
+                       ▲   │ h/H (copy/append to hold)
+                       │   ▼
+                  g/G  [ hold space ]   x = swap the two</pre></div>
+<p>Two consequences explain most beginner confusion:</p>
+<ul>
+  <li><code>sed 'p'</code> prints every line <strong>twice</strong> (once by <code>p</code>, once by auto-print). That is why <code>p</code> is almost always used with <code>-n</code>.</li>
+  <li>sed <strong>never changes the file</strong> unless you use <code>-i</code>. Without it, the result goes to stdout and the original stays as it was.</li>
+</ul>
+
+<h2 id="cheat">Commands and options cheat table</h2>
+<h3 id="cheat-opts">Options</h3>
+<div class="table-wrap"><table>
+<tr><th>Option</th><th>Meaning</th></tr>
+<tr><td><code>-n</code></td><td>no auto-print; only lines you explicitly <code>p</code> appear</td></tr>
+<tr><td><code>-e SCRIPT</code></td><td>add a script fragment (repeatable)</td></tr>
+<tr><td><code>-f FILE</code></td><td>read the script from a file</td></tr>
+<tr><td><code>-E</code> (or <code>-r</code> in GNU)</td><td>extended regex: <code>+ ? | ( ) { }</code> without backslashes</td></tr>
+<tr><td><code>-i</code> / <code>-i.bak</code></td><td>edit the file in place (optionally keep a backup with that suffix)</td></tr>
+<tr><td><code>-s</code></td><td>treat several files as separate streams (so <code>$</code> and line numbers restart)</td></tr>
+<tr><td><code>-z</code></td><td>(GNU) lines are separated by NUL instead of newline</td></tr>
+</table></div>
+<h3 id="cheat-cmds">Commands</h3>
+<div class="table-wrap"><table>
+<tr><th>Command</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>s/re/repl/flags</code></td><td>substitute</td><td><code>s/debug/info/</code></td></tr>
+<tr><td><code>p</code></td><td>print the pattern space</td><td><code>sed -n '5p'</code></td></tr>
+<tr><td><code>d</code></td><td>delete pattern space, start next cycle</td><td><code>sed '/^$/d'</code></td></tr>
+<tr><td><code>a\ text</code></td><td>append a line after</td><td><code>sed '/DB_PASS/a\'$'\n''DB_SSL=on'</code></td></tr>
+<tr><td><code>i\ text</code></td><td>insert a line before</td><td><code>sed '1i\'$'\n''# header'</code></td></tr>
+<tr><td><code>c\ text</code></td><td>change (replace) the whole line</td><td><code>sed '/^APP_ENV/c\'$'\n''APP_ENV=prod'</code></td></tr>
+<tr><td><code>y/abc/xyz/</code></td><td>transliterate characters one-to-one</td><td><code>y/,/;/</code></td></tr>
+<tr><td><code>q</code> / <code>Q</code></td><td>quit (after / without printing the current line; <code>Q</code> is GNU)</td><td><code>sed '10q'</code></td></tr>
+<tr><td><code>=</code></td><td>print the current line number</td><td><code>sed -n '$='</code> counts lines</td></tr>
+<tr><td><code>n</code> / <code>N</code></td><td>read next line (replace / append to pattern space)</td><td><code>sed '$!N;s/\n/ /'</code></td></tr>
+<tr><td><code>h H g G x</code></td><td>hold-space copy / append / get / append-get / swap</td><td><code>sed -n '1!G;h;$p'</code></td></tr>
+<tr><td><code>{ ... }</code></td><td>group commands under one address</td><td><code>/re/{s/a/b/;p;}</code></td></tr>
+<tr><td><code>w file</code></td><td>write pattern space to a file</td><td><code>/ERROR/w errors.txt</code></td></tr>
+</table></div>
+<h3 id="cheat-addr">Addresses</h3>
+<div class="table-wrap"><table>
+<tr><th>Address</th><th>Selects</th></tr>
+<tr><td><code>5</code></td><td>line 5</td></tr>
+<tr><td><code>$</code></td><td>the last line</td></tr>
+<tr><td><code>/regex/</code></td><td>every line matching regex</td></tr>
+<tr><td><code>3,8</code></td><td>lines 3 through 8</td></tr>
+<tr><td><code>/start/,/end/</code></td><td>from a line matching start to the next line matching end (inclusive)</td></tr>
+<tr><td><code>10,$</code></td><td>line 10 to the end</td></tr>
+<tr><td><code>5,+2</code></td><td>(GNU) line 5 and the 2 lines after it</td></tr>
+<tr><td><code>first~step</code></td><td>(GNU) every step-th line starting at first: <code>1~2</code> odd lines, <code>0~3</code> every third</td></tr>
+<tr><td><code>0,/re/</code></td><td>(GNU) from the start to the first match (even if line 1 matches)</td></tr>
+<tr><td><code>addr!</code></td><td>every line that does NOT match addr</td></tr>
+</table></div>
+
+<h2 id="datasets">Datasets used on this page</h2>
+<p>Run the examples from the wiki's root folder. Outputs below are real output from these files.</p>
+<h3 id="ds-conf">app.conf</h3>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/app.conf</span></div><pre><code># ===== Application configuration =====
+APP_NAME=inventory-api
+APP_ENV=development
+APP_DEBUG=true
+APP_PORT=8080
+
+# Database
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=inventory
+DB_USER=root
+DB_PASS=changeme
+
+# Logging
+LOG_LEVEL=debug
+LOG_FILE=/var/log/inventory/app.log
+#LOG_ROTATE=daily
+
+# Features
+FEATURE_CACHE=off
+FEATURE_EMAIL=on
+MAX_UPLOAD_MB=10</code></pre></div>
+<h3 id="ds-emp">employees.csv</h3>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/employees.csv</span></div><pre><code>id,name,department,city,salary,join_date
+101,Aarav Kapoor,Engineering,Delhi,110000,2023-08-11
+102,Priya Sharma,Engineering,Delhi,135000,2023-02-27
+103,Rohan Mehta,Engineering,Mumbai,84000,2025-11-22
+104,Ananya Iyer,Engineering,Pune,131000,2025-05-03
+105,Vikram Verma,Sales,Hyderabad,93000,2022-10-20
+106,Sneha Joshi,Sales,Mumbai,73000,2023-05-28
+107,Arjun Nair,Finance,Hyderabad,94000,2016-10-24
+108,Kavya Gupta,Engineering,Chennai,93000,2020-11-03
+109,Rahul Gupta,Engineering,Pune,115000,2017-03-01
+110,Isha Das,Finance,Chennai,93000,2023-05-02
+111,Karan Nair,Sales,Chennai,63000,2023-02-22
+112,Meera Nair,Sales,Chennai,82000,2019-07-04
+113,Aditya Singh,Sales,Pune,62000,2018-02-02
+114,Pooja Nair,Engineering,Hyderabad,127000,2025-05-15
+115,Nikhil Das,Engineering,Chennai,99000,2022-05-17
+116,Riya Das,Support,Bengaluru,65000,2016-07-24
+117,Sanjay Kapoor,HR,Delhi,38000,2017-04-22
+118,Divya Singh,Engineering,Delhi,116000,2016-03-16
+119,Manish Nair,Support,Pune,64000,2022-11-27
+120,Neha Verma,Support,Mumbai,49000,2022-06-11
+121,Yash Iyer,Engineering,Delhi,106000,2023-05-22
+122,Tanvi Joshi,Finance,Bengaluru,84000,2017-06-09
+123,Harsh Verma,HR,Mumbai,92000,2024-01-22
+124,Simran Mehta,Support,Bengaluru,39000,2024-06-20
+125,Kunal Singh,Support,Mumbai,75000,2016-04-09</code></pre></div>
+<h3 id="ds-access">access.log</h3>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/access.log</span></div><pre><code>192.168.1.10 - - [16/Nov/2026:08:11:14 +0530] "GET /api/v1/users HTTP/1.1" 200 16949 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:08:24:08 +0530] "GET /api/v1/users HTTP/1.1" 200 36641 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:08:25:00 +0530] "GET /index.php HTTP/1.1" 200 34018 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:08:34:54 +0530] "GET /js/app.js HTTP/1.1" 200 36613 "-" "curl/8.4.0"
+203.0.113.7 - - [16/Nov/2026:08:42:53 +0530] "GET /old-page HTTP/1.1" 301 0 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+10.0.0.5 - - [16/Nov/2026:08:55:07 +0530] "GET /about.html HTTP/1.1" 200 15010 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+10.0.0.5 - - [16/Nov/2026:08:57:01 +0530] "GET /blog/post-1 HTTP/1.1" 200 23441 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:09:11:07 +0530] "POST /wp-login.php HTTP/1.1" 200 25707 "https://www.google.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+203.0.113.7 - - [16/Nov/2026:09:25:36 +0530] "GET /.env HTTP/1.1" 404 365 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:09:37:57 +0530] "GET /js/app.js HTTP/1.1" 200 51563 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:09:52:52 +0530] "GET / HTTP/1.1" 200 19117 "https://www.google.com/" "curl/8.4.0"
+10.0.0.5 - - [16/Nov/2026:09:55:58 +0530] "GET /index.php HTTP/1.1" 200 18396 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:10:06:41 +0530] "GET /images/logo.png HTTP/1.1" 200 16943 "https://example.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.15 - - [16/Nov/2026:10:13:29 +0530] "GET /api/v1/report HTTP/1.1" 500 532 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:10:25:30 +0530] "POST /api/v1/orders HTTP/1.1" 200 3003 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.10 - - [16/Nov/2026:10:30:24 +0530] "GET /admin HTTP/1.1" 403 470 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:10:34:21 +0530] "GET /blog/post-2 HTTP/1.1" 200 43029 "-" "curl/8.4.0"
+192.168.1.10 - - [16/Nov/2026:10:39:12 +0530] "GET /api/v1/users HTTP/1.1" 200 36222 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+10.0.0.5 - - [16/Nov/2026:10:49:29 +0530] "GET /index.php HTTP/1.1" 200 9965 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+203.0.113.99 - - [16/Nov/2026:10:51:22 +0530] "GET /missing.html HTTP/1.1" 404 258 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:11:05:13 +0530] "GET /css/style.css HTTP/1.1" 200 26116 "https://example.com/" "curl/8.4.0"
+192.168.1.15 - - [16/Nov/2026:11:14:34 +0530] "GET /images/logo.png HTTP/1.1" 200 1652 "-" "python-requests/2.31.0"
+172.16.4.8 - - [16/Nov/2026:11:26:32 +0530] "GET /api/v1/users HTTP/1.1" 200 51270 "https://www.google.com/" "python-requests/2.31.0"
+192.168.1.15 - - [16/Nov/2026:11:28:46 +0530] "GET /index.php HTTP/1.1" 200 1112 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.99 - - [16/Nov/2026:11:37:38 +0530] "GET /images/logo.png HTTP/1.1" 200 7873 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:11:52:19 +0530] "GET /css/style.css HTTP/1.1" 200 10916 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+185.220.101.3 - - [16/Nov/2026:12:01:51 +0530] "POST /wp-login.php HTTP/1.1" 200 32921 "-" "sqlmap/1.7.11#stable"
+185.220.101.3 - - [16/Nov/2026:12:04:05 +0530] "GET /admin HTTP/1.1" 403 302 "-" "sqlmap/1.7.11#stable"
+172.16.4.8 - - [16/Nov/2026:12:08:31 +0530] "GET /api/v1/report HTTP/1.1" 500 223 "https://example.com/" "python-requests/2.31.0"
+192.168.1.10 - - [16/Nov/2026:12:22:46 +0530] "GET /api/v1/users HTTP/1.1" 200 51089 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+10.0.0.5 - - [16/Nov/2026:12:34:21 +0530] "GET /images/logo.png HTTP/1.1" 200 18270 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+185.220.101.3 - - [16/Nov/2026:12:38:17 +0530] "GET /.env HTTP/1.1" 404 545 "https://www.google.com/" "sqlmap/1.7.11#stable"
+185.220.101.3 - - [16/Nov/2026:12:45:25 +0530] "GET /xmlrpc.php HTTP/1.1" 403 411 "-" "sqlmap/1.7.11#stable"
+192.168.1.15 - - [16/Nov/2026:12:49:58 +0530] "GET /blog/post-1 HTTP/1.1" 200 39455 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:13:00:20 +0530] "GET / HTTP/1.1" 200 42259 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+172.16.4.8 - - [16/Nov/2026:13:01:49 +0530] "GET /missing.html HTTP/1.1" 404 216 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+203.0.113.7 - - [16/Nov/2026:13:06:54 +0530] "GET /index.php HTTP/1.1" 200 9571 "https://example.com/" "python-requests/2.31.0"
+203.0.113.99 - - [16/Nov/2026:13:11:22 +0530] "POST /api/v1/orders HTTP/1.1" 200 7252 "https://example.com/" "python-requests/2.31.0"
+10.0.0.5 - - [16/Nov/2026:13:17:44 +0530] "GET /wp-admin/ HTTP/1.1" 302 0 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:13:29:33 +0530] "GET /js/app.js HTTP/1.1" 200 4872 "https://www.google.com/" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:13:43:32 +0530] "GET /about.html HTTP/1.1" 200 13365 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:13:46:15 +0530] "GET /about.html HTTP/1.1" 200 17271 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+172.16.4.8 - - [16/Nov/2026:14:00:22 +0530] "GET /images/logo.png HTTP/1.1" 200 4215 "-" "python-requests/2.31.0"
+185.220.101.3 - - [16/Nov/2026:14:02:17 +0530] "GET /.env HTTP/1.1" 404 388 "https://example.com/" "sqlmap/1.7.11#stable"
+192.168.1.15 - - [16/Nov/2026:14:10:49 +0530] "GET /blog/post-2 HTTP/1.1" 200 4742 "https://example.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+185.220.101.3 - - [16/Nov/2026:14:11:11 +0530] "POST /xmlrpc.php HTTP/1.1" 403 536 "https://example.com/" "sqlmap/1.7.11#stable"
+192.168.1.10 - - [16/Nov/2026:14:14:09 +0530] "GET /index.php HTTP/1.1" 200 4732 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:14:27:14 +0530] "GET / HTTP/1.1" 200 32146 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+185.220.101.3 - - [16/Nov/2026:14:28:32 +0530] "GET /.env HTTP/1.1" 404 215 "-" "sqlmap/1.7.11#stable"
+172.16.4.8 - - [16/Nov/2026:14:40:23 +0530] "GET /blog/post-2 HTTP/1.1" 200 38234 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:14:51:17 +0530] "GET /js/app.js HTTP/1.1" 200 37942 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:14:56:04 +0530] "GET /api/v1/users HTTP/1.1" 200 16542 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+203.0.113.7 - - [16/Nov/2026:14:58:38 +0530] "GET /contact.html HTTP/1.1" 200 21620 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+203.0.113.7 - - [16/Nov/2026:15:06:47 +0530] "GET /css/style.css HTTP/1.1" 200 7452 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.15 - - [16/Nov/2026:15:15:45 +0530] "GET /api/v1/report HTTP/1.1" 500 215 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:15:20:56 +0530] "GET /missing.html HTTP/1.1" 404 540 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+45.33.32.156 - - [16/Nov/2026:15:32:39 +0530] "GET /contact.html HTTP/1.1" 200 44375 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:15:37:29 +0530] "GET / HTTP/1.1" 200 37156 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+203.0.113.7 - - [16/Nov/2026:15:42:37 +0530] "GET /api/v1/users HTTP/1.1" 200 14242 "https://www.google.com/" "python-requests/2.31.0"
+10.0.0.23 - - [16/Nov/2026:15:51:34 +0530] "GET /admin HTTP/1.1" 403 206 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.15 - - [16/Nov/2026:16:06:03 +0530] "GET / HTTP/1.1" 200 51436 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+198.51.100.42 - - [16/Nov/2026:16:09:08 +0530] "GET /images/logo.png HTTP/1.1" 200 28928 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:16:11:22 +0530] "GET /.env HTTP/1.1" 404 256 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:16:25:56 +0530] "GET /images/logo.png HTTP/1.1" 200 29066 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+10.0.0.5 - - [16/Nov/2026:16:31:31 +0530] "GET /api/v1/report HTTP/1.1" 500 200 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:16:43:29 +0530] "GET / HTTP/1.1" 200 37592 "-" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:16:47:51 +0530] "GET /xmlrpc.php HTTP/1.1" 403 391 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+185.220.101.3 - - [16/Nov/2026:17:00:45 +0530] "GET /xmlrpc.php HTTP/1.1" 403 556 "-" "sqlmap/1.7.11#stable"
+192.168.1.10 - - [16/Nov/2026:17:05:38 +0530] "GET /api/v1/users HTTP/1.1" 200 25970 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:17:09:45 +0530] "GET /admin HTTP/1.1" 403 359 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.10 - - [16/Nov/2026:17:13:53 +0530] "GET /index.php HTTP/1.1" 200 22412 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:17:27:24 +0530] "GET /js/app.js HTTP/1.1" 200 27093 "https://www.google.com/" "python-requests/2.31.0"
+192.168.1.10 - - [16/Nov/2026:17:28:12 +0530] "POST /xmlrpc.php HTTP/1.1" 403 315 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+10.0.0.5 - - [16/Nov/2026:17:38:42 +0530] "GET /api/v1/users HTTP/1.1" 200 21457 "-" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:17:45:36 +0530] "GET /index.php HTTP/1.1" 200 3808 "https://example.com/" "python-requests/2.31.0"
+10.0.0.23 - - [16/Nov/2026:17:45:57 +0530] "POST /api/v1/orders HTTP/1.1" 200 49524 "-" "python-requests/2.31.0"
+10.0.0.5 - - [16/Nov/2026:17:52:29 +0530] "GET /api/v1/report HTTP/1.1" 500 349 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+45.33.32.156 - - [16/Nov/2026:18:04:08 +0530] "GET /api/v1/users HTTP/1.1" 200 20581 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:18:15:50 +0530] "GET /blog/post-2 HTTP/1.1" 200 20276 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:18:19:26 +0530] "GET /api/v1/report HTTP/1.1" 500 526 "-" "python-requests/2.31.0"</code></pre></div>
+
+<h2 id="basics">Basics: substitute, print, delete</h2>
+
+<h3 id="b-s">s: substitute</h3>
+<p>The most used sed command. By default only the <strong>first</strong> match on each line is replaced.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed 's/development/production/' datasets/app.conf | grep APP_ENV</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>APP_ENV=production</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">echo "a-b-c-d" | sed 's/-/+/'      # first only
+echo "a-b-c-d" | sed 's/-/+/g'     # g = global, every match
+echo "a-b-c-d" | sed 's/-/+/2'     # N = only the 2nd match
+echo "a-b-c-d" | sed 's/-/+/2g'    # 2nd and all following (GNU)</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>a+b-c-d
+a+b+c+d
+a-b+c-d
+a-b+c+d</pre></div>
+
+<h3 id="b-flags">Substitution flags</h3>
+<div class="table-wrap"><table>
+<tr><th>Flag</th><th>Effect</th></tr>
+<tr><td><code>g</code></td><td>replace all matches on the line</td></tr>
+<tr><td><code>N</code> (a number)</td><td>replace only the N-th match</td></tr>
+<tr><td><code>i</code> / <code>I</code></td><td>case-insensitive match (GNU; also recent BSD)</td></tr>
+<tr><td><code>p</code></td><td>print the line if a substitution was made (use with <code>-n</code>)</td></tr>
+<tr><td><code>w FILE</code></td><td>write the line to FILE if a substitution was made</td></tr>
+</table></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n 's/=on$/=enabled/p' datasets/app.conf          # p: show only changed lines</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>FEATURE_EMAIL=enabled</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n 's/^log_level=.*/LOG_LEVEL=warn/Ip' datasets/app.conf   # I: ignore case</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>LOG_LEVEL=warn</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n 's/changeme/********/w changed.txt' datasets/app.conf
+cat changed.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>DB_PASS=********</pre></div>
+
+<h3 id="b-delim">Alternative delimiters</h3>
+<p>The character after <code>s</code> is the delimiter, and it can be (almost) anything. Use <code>|</code> or <code>#</code> when the text contains slashes, instead of escaping every <code>/</code>:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n 's/\/var\/log\/inventory/\/srv\/logs/p' datasets/app.conf   # "leaning toothpicks"
+sed -n 's|/var/log/inventory|/srv/logs|p'      datasets/app.conf   # much clearer
+sed -n 's#/var/log/inventory#/srv/logs#p'      datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>LOG_FILE=/srv/logs/app.log
+LOG_FILE=/srv/logs/app.log
+LOG_FILE=/srv/logs/app.log</pre></div>
+
+<h3 id="b-amp">&amp;: the whole match</h3>
+<p>In the replacement, <code>&amp;</code> stands for the text that was matched:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n 's/[0-9][0-9]*$/[&amp;]/p' datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>APP_PORT=[8080]
+DB_PORT=[3306]
+MAX_UPLOAD_MB=[10]</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">echo "port 8080" | sed 's/[0-9]*$/"&amp;"/'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>port "8080"</pre></div>
+<p>To insert a literal ampersand, escape it: <code>\&amp;</code>.</p>
+
+<h3 id="b-backref">\1 … \9: captured groups</h3>
+<p>Parentheses capture parts of the match (written <code>\( \)</code> in basic regex, <code>( )</code> with <code>-E</code>). <code>\1</code> is the first group, <code>\2</code> the second:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n 's/^\(DB_[A-Z]*\)=\(.*\)$/\2  &lt;- \1/p' datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>localhost  &lt;- DB_HOST
+3306  &lt;- DB_PORT
+inventory  &lt;- DB_NAME
+root  &lt;- DB_USER
+changeme  &lt;- DB_PASS</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -nE 's/^(DB_[A-Z]+)=(.*)$/\1="\2"/p' datasets/app.conf     # same with -E, adds quotes</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>DB_HOST="localhost"
+DB_PORT="3306"
+DB_NAME="inventory"
+DB_USER="root"
+DB_PASS="changeme"</pre></div>
+<p>Swap the first two CSV columns of the employee file:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">head -4 datasets/employees.csv | sed -E 's/^([^,]*),([^,]*),/\2,\1,/'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>name,id,department,city,salary,join_date
+Aarav Kapoor,101,Engineering,Delhi,110000,2023-08-11
+Priya Sharma,102,Engineering,Delhi,135000,2023-02-27
+Rohan Mehta,103,Engineering,Mumbai,84000,2025-11-22</pre></div>
+<p>Reformat dates from <code>YYYY-MM-DD</code> to <code>DD/MM/YYYY</code>:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">head -4 datasets/employees.csv | sed -E 's/([0-9]{4})-([0-9]{2})-([0-9]{2})$/\3\/\2\/\1/'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>id,name,department,city,salary,join_date
+101,Aarav Kapoor,Engineering,Delhi,110000,11/08/2023
+102,Priya Sharma,Engineering,Delhi,135000,27/02/2023
+103,Rohan Mehta,Engineering,Mumbai,84000,22/11/2025</pre></div>
+
+<h3 id="b-np">-n with p: print selected lines only</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '8,12p' datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=inventory
+DB_USER=root
+DB_PASS=changeme</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '/^FEATURE/p' datasets/app.conf     # like grep</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>FEATURE_CACHE=off
+FEATURE_EMAIL=on</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '$p' datasets/employees.csv         # last line (like tail -1)
+sed -n '$=' datasets/employees.csv         # number of lines (like wc -l)</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>125,Kunal Singh,Support,Mumbai,75000,2016-04-09
+26</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed 'p' datasets/df.txt | head -4          # without -n every line appears twice!</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Filesystem      Size  Used Avail Use% Mounted on
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1        50G   41G  6.5G  87% /
+/dev/sda1        50G   41G  6.5G  87% /</pre></div>
+
+<h3 id="b-d">d: delete lines</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed '/^#/d; /^$/d' datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>APP_NAME=inventory-api
+APP_ENV=development
+APP_DEBUG=true
+APP_PORT=8080
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=inventory
+DB_USER=root
+DB_PASS=changeme
+LOG_LEVEL=debug
+LOG_FILE=/var/log/inventory/app.log
+FEATURE_CACHE=off
+FEATURE_EMAIL=on
+MAX_UPLOAD_MB=10</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed '1d' datasets/employees.csv | head -3     # drop the CSV header</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>101,Aarav Kapoor,Engineering,Delhi,110000,2023-08-11
+102,Priya Sharma,Engineering,Delhi,135000,2023-02-27
+103,Rohan Mehta,Engineering,Mumbai,84000,2025-11-22</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed '2,$d' datasets/df.txt                    # keep only line 1</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Filesystem      Size  Used Avail Use% Mounted on</pre></div>
+
+<h2 id="intermediate">Intermediate: addresses, insert/append/change, y</h2>
+
+<h3 id="i-addr">Line numbers, ranges and $</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '2,4p' datasets/employees.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>101,Aarav Kapoor,Engineering,Delhi,110000,2023-08-11
+102,Priya Sharma,Engineering,Delhi,135000,2023-02-27
+103,Rohan Mehta,Engineering,Mumbai,84000,2025-11-22</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '24,$p' datasets/employees.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>123,Harsh Verma,HR,Mumbai,92000,2024-01-22
+124,Simran Mehta,Support,Bengaluru,39000,2024-06-20
+125,Kunal Singh,Support,Mumbai,75000,2016-04-09</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '3,+1p' datasets/df.txt              # GNU: line 3 and 1 more</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>/dev/sda2       200G  120G   70G  64% /var
+/dev/sdb1       500G  478G   22G  96% /backup</pre></div>
+
+<h3 id="i-regex-range">Regex ranges</h3>
+<p>A range <code>/A/,/B/</code> switches on at a line matching A and off after the next line matching B. Perfect for sections of a config file:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '/^# Database/,/^$/p' datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre># Database
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=inventory
+DB_USER=root
+DB_PASS=changeme</pre></div>
+<p>Mixing a regex and a line number works too:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '/^# Logging/,+3p' datasets/app.conf     # GNU: header + 3 lines</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre># Logging
+LOG_LEVEL=debug
+LOG_FILE=/var/log/inventory/app.log
+#LOG_ROTATE=daily</pre></div>
+
+<h3 id="i-step">first~step (GNU)</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '1~5p' datasets/employees.csv      # lines 1, 6, 11, 16, 21, 26</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>id,name,department,city,salary,join_date
+105,Vikram Verma,Sales,Hyderabad,93000,2022-10-20
+110,Isha Das,Finance,Chennai,93000,2023-05-02
+115,Nikhil Das,Engineering,Chennai,99000,2022-05-17
+120,Neha Verma,Support,Mumbai,49000,2022-06-11
+125,Kunal Singh,Support,Mumbai,75000,2016-04-09</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '0~10p' datasets/access.log | cut -c1-60    # every 10th line</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>192.168.1.10 - - [16/Nov/2026:09:37:57 +0530] "GET /js/app.j
+203.0.113.99 - - [16/Nov/2026:10:51:22 +0530] "GET /missing.
+192.168.1.10 - - [16/Nov/2026:12:22:46 +0530] "GET /api/v1/u
+203.0.113.7 - - [16/Nov/2026:13:29:33 +0530] "GET /js/app.js
+172.16.4.8 - - [16/Nov/2026:14:40:23 +0530] "GET /blog/post-
+10.0.0.23 - - [16/Nov/2026:15:51:34 +0530] "GET /admin HTTP/
+192.168.1.10 - - [16/Nov/2026:17:09:45 +0530] "GET /admin HT
+10.0.0.5 - - [16/Nov/2026:18:19:26 +0530] "GET /api/v1/repor</pre></div>
+<div class="callout note"><span class="ct">Portable</span><code>first~step</code> is a GNU extension. On BSD/macOS use <code>awk 'NR%5==1'</code>.</div>
+
+<h3 id="i-neg">!: negate an address</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '/^DB_/!p' datasets/app.conf | grep -v '^#' | grep -v '^$'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>APP_NAME=inventory-api
+APP_ENV=development
+APP_DEBUG=true
+APP_PORT=8080
+LOG_LEVEL=debug
+LOG_FILE=/var/log/inventory/app.log
+FEATURE_CACHE=off
+FEATURE_EMAIL=on
+MAX_UPLOAD_MB=10</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed '/^# Database/,/^$/!d' datasets/app.conf      # delete everything EXCEPT the section</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre># Database
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=inventory
+DB_USER=root
+DB_PASS=changeme</pre></div>
+
+<h3 id="i-group">{ }: several commands for one address</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '/^APP_/{s/^APP_//;s/=/ : /;p;}' datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>NAME : inventory-api
+ENV : development
+DEBUG : true
+PORT : 8080</pre></div>
+<p>The <code>;</code> before <code>}</code> is required by BSD sed and harmless in GNU sed, always write it.</p>
+
+<h3 id="i-aic">a, i, c: append, insert, change lines</h3>
+<p>GNU sed accepts a one-line form; POSIX (and macOS) require a backslash and a newline. Both forms are shown:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash"># GNU one-liner form
+sed '/^DB_PASS=/a DB_SSL=required' datasets/app.conf | sed -n '/^# Database/,/^$/p'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre># Database
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=inventory
+DB_USER=root
+DB_PASS=changeme
+DB_SSL=required</pre></div>
+<div class="code"><div class="code-head">bash · portable form (works on GNU and BSD)</div><pre><code class="language-bash">sed '/^DB_PASS=/a\
+DB_SSL=required' datasets/app.conf | sed -n '/^# Database/,/^$/p'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre># Database
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=inventory
+DB_USER=root
+DB_PASS=changeme
+DB_SSL=required</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed '1i # generated by deploy.sh - do not edit' datasets/df.txt | head -3      # i = insert before</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre># generated by deploy.sh - do not edit
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1        50G   41G  6.5G  87% /</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed '/^APP_ENV=/c APP_ENV=production' datasets/app.conf | head -5           # c = replace line</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre># ===== Application configuration =====
+APP_NAME=inventory-api
+APP_ENV=production
+APP_DEBUG=true
+APP_PORT=8080</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed '$a FEATURE_SEARCH=on' datasets/app.conf | tail -3                     # append at end of file</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>FEATURE_EMAIL=on
+MAX_UPLOAD_MB=10
+FEATURE_SEARCH=on</pre></div>
+
+<h3 id="i-y">y: transliterate</h3>
+<p><code>y/src/dst/</code> maps each character in <code>src</code> to the character at the same position in <code>dst</code> (like <code>tr</code>). No regex, no ranges:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">head -3 datasets/employees.csv | sed 'y/,/;/'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>id;name;department;city;salary;join_date
+101;Aarav Kapoor;Engineering;Delhi;110000;2023-08-11
+102;Priya Sharma;Engineering;Delhi;135000;2023-02-27</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '1{y/abcdefghijklmnopqrstuvwxyz/ABCDEFGHIJKLMNOPQRSTUVWXYZ/;p;}' datasets/employees.csv   # upper-case the header</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>ID,NAME,DEPARTMENT,CITY,SALARY,JOIN_DATE</pre></div>
+
+<h3 id="i-multi">Multiple commands: ; , -e and -f</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -e 's/development/production/' -e 's/^APP_DEBUG=true/APP_DEBUG=false/' datasets/app.conf | sed -n '2,4p'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>APP_NAME=inventory-api
+APP_ENV=production
+APP_DEBUG=false</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed 's/development/production/; s/^APP_DEBUG=true/APP_DEBUG=false/' datasets/app.conf | sed -n '2,4p'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>APP_NAME=inventory-api
+APP_ENV=production
+APP_DEBUG=false</pre></div>
+<p>For longer edits put the commands in a file, one per line, and run it with <code>-f</code>:</p>
+<div class="code"><div class="code-head">sed · harden.sed</div><pre><code class="language-sh"># harden.sed - production settings for app.conf
+s/^APP_ENV=.*/APP_ENV=production/
+s/^APP_DEBUG=.*/APP_DEBUG=false/
+s/^LOG_LEVEL=.*/LOG_LEVEL=warn/
+s/^#\(LOG_ROTATE=\)/\1/
+/^$/d</code></pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -f harden.sed datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre># ===== Application configuration =====
+APP_NAME=inventory-api
+APP_ENV=production
+APP_DEBUG=false
+APP_PORT=8080
+# Database
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=inventory
+DB_USER=root
+DB_PASS=changeme
+# Logging
+LOG_LEVEL=warn
+LOG_FILE=/var/log/inventory/app.log
+LOG_ROTATE=daily
+# Features
+FEATURE_CACHE=off
+FEATURE_EMAIL=on
+MAX_UPLOAD_MB=10</pre></div>
+
+<h3 id="i-E">-E: extended regex</h3>
+<p>With <code>-E</code>, <code>+</code>, <code>?</code>, <code>|</code>, <code>()</code> and <code>{}</code> work without backslashes, the same syntax as <code>grep -E</code> and <code>awk</code>:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -nE 's/^([^ ]+) .*"(GET|POST) ([^ ]+) .*" ([0-9]{3}) .*/\1 \2 \3 \4/p' datasets/access.log | head -5</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>192.168.1.10 GET /api/v1/users 200
+192.168.1.10 GET /api/v1/users 200
+192.168.1.10 GET /index.php 200
+192.168.1.10 GET /js/app.js 200
+203.0.113.7 GET /old-page 301</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -E 's/(Kapoor|Sharma)/[\1]/' datasets/employees.csv | sed -n '2,3p'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>101,Aarav [Kapoor],Engineering,Delhi,110000,2023-08-11
+102,Priya [Sharma],Engineering,Delhi,135000,2023-02-27</pre></div>
+
+<h3 id="i-q">q: quit early</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed '3q' datasets/employees.csv             # like head -3</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>id,name,department,city,salary,join_date
+101,Aarav Kapoor,Engineering,Delhi,110000,2023-08-11
+102,Priya Sharma,Engineering,Delhi,135000,2023-02-27</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '/ 500 /{p;q;}' datasets/access.log  # first server error, then stop reading</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>192.168.1.15 - - [16/Nov/2026:10:13:29 +0530] "GET /api/v1/report HTTP/1.1" 500 532 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"</pre></div>
+
+<h2 id="inplace">In-place editing: -i (GNU vs BSD)</h2>
+<p><code>-i</code> writes the result back into the file. It is how scripts change configuration files. <strong>Practice on a copy.</strong></p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">cp datasets/app.conf app.conf
+sed -i 's/^APP_ENV=.*/APP_ENV=staging/' app.conf          # GNU sed (Linux)
+grep APP_ENV app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>APP_ENV=staging</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -i.bak 's/^APP_PORT=.*/APP_PORT=9090/' app.conf     # keep a backup (GNU and BSD)
+grep -H APP_PORT app.conf app.conf.bak</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>app.conf:APP_PORT=9090
+app.conf.bak:APP_PORT=8080</pre></div>
+<div class="table-wrap"><table>
+<tr><th>Goal</th><th>GNU sed (Linux)</th><th>BSD sed (macOS)</th></tr>
+<tr><td>in place, no backup</td><td><code>sed -i 's/a/b/' f</code></td><td><code>sed -i '' 's/a/b/' f</code></td></tr>
+<tr><td>in place, backup <code>f.bak</code></td><td><code>sed -i.bak 's/a/b/' f</code></td><td><code>sed -i.bak 's/a/b/' f</code> (same, portable)</td></tr>
+<tr><td>one-line <code>a</code>/<code>i</code>/<code>c</code></td><td><code>sed '1i text'</code></td><td>needs <code>1i\</code> + newline + <code>text</code></td></tr>
+<tr><td><code>\+ \? \|</code> in BRE</td><td>supported</td><td>not supported, use <code>-E</code></td></tr>
+<tr><td><code>\U \L \u</code> case conversion in replacement</td><td>supported</td><td>not supported</td></tr>
+<tr><td><code>first~step</code>, <code>addr,+N</code>, <code>0,/re/</code></td><td>supported</td><td>not supported</td></tr>
+</table></div>
+<div class="callout warn"><span class="ct">macOS trap</span>On macOS, <code>sed -i 's/a/b/' file</code> takes <code>'s/a/b/'</code> as the backup <em>suffix</em> and then fails with <em>"invalid command code"</em>. Portable scripts use <code>sed -i.bak ... &amp;&amp; rm file.bak</code>, or install GNU sed (<code>brew install gnu-sed</code>, run as <code>gsed</code>).</div>
+<div class="callout tip"><span class="ct">Tip</span><code>-i</code> replaces the file with a new one (new inode). Symlinks are replaced by regular files unless you add <code>--follow-symlinks</code> (GNU), and file ownership can change if run as root. For critical files, test without <code>-i</code> first, then <code>diff</code> the result.</div>
+
+<h2 id="advanced">Advanced</h2>
+
+<h3 id="a-case">Case conversion: \U \L \u (GNU)</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">head -4 datasets/employees.csv | sed -E 's/^([^,]*),([^,]*),([^,]*)/\1,\2,\U\3/'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>id,name,DEPARTMENT,city,salary,join_date
+101,Aarav Kapoor,ENGINEERING,Delhi,110000,2023-08-11
+102,Priya Sharma,ENGINEERING,Delhi,135000,2023-02-27
+103,Rohan Mehta,ENGINEERING,Mumbai,84000,2025-11-22</pre></div>
+<p><code>\U</code> turns everything after it upper case (until <code>\E</code>); <code>\L</code> lower case; <code>\u</code>/<code>\l</code> only the next character.</p>
+
+<h3 id="a-N">Joining lines with N</h3>
+<p><code>N</code> appends the next line to the pattern space with an embedded <code>\n</code>. <code>$!N</code> means "unless this is the last line":</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed '$!N;s/\n/ | /' datasets/df.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Filesystem      Size  Used Avail Use% Mounted on | /dev/sda1        50G   41G  6.5G  87% /
+/dev/sda2       200G  120G   70G  64% /var | /dev/sdb1       500G  478G   22G  96% /backup
+tmpfs           3.9G  1.2M  3.9G   1% /run | /dev/sdc1       100G   12G   83G  13% /home
+/dev/nvme0n1p1  1.0T  910G   90G  92% /data</pre></div>
+
+<h3 id="a-hold">Hold space: h, G, x</h3>
+<p>The hold space is a second buffer that keeps its content from line to line. <code>h</code> copies pattern → hold, <code>G</code> appends hold → pattern (with a newline), <code>x</code> swaps them. The classic example reverses a file (like <code>tac</code>):</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '1!G;h;$p' datasets/df.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>/dev/nvme0n1p1  1.0T  910G   90G  92% /data
+/dev/sdc1       100G   12G   83G  13% /home
+tmpfs           3.9G  1.2M  3.9G   1% /run
+/dev/sdb1       500G  478G   22G  96% /backup
+/dev/sda2       200G  120G   70G  64% /var
+/dev/sda1        50G   41G  6.5G  87% /
+Filesystem      Size  Used Avail Use% Mounted on</pre></div>
+<p>Trace for the first three lines:</p>
+<div class="table-wrap"><table>
+<tr><th>Line</th><th>After <code>1!G</code> (pattern space)</th><th>After <code>h</code> (hold space)</th></tr>
+<tr><td>1 <code>Filesystem…</code></td><td>Filesystem (G skipped on line 1)</td><td>Filesystem</td></tr>
+<tr><td>2 <code>/dev/sda1…</code></td><td>/dev/sda1 ⏎ Filesystem</td><td>/dev/sda1 ⏎ Filesystem</td></tr>
+<tr><td>3 <code>/dev/sda2…</code></td><td>/dev/sda2 ⏎ /dev/sda1 ⏎ Filesystem</td><td>same</td></tr>
+</table></div>
+<p>On the last line <code>$p</code> prints the whole accumulated, reversed text. A simpler use of <code>x</code>: print each section heading in app.conf next to the line that follows it.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '/^# /{h;n;G;s/\n/   &lt;- /;p;}' datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>APP_NAME=inventory-api   &lt;- # ===== Application configuration =====
+DB_HOST=localhost   &lt;- # Database
+LOG_LEVEL=debug   &lt;- # Logging
+FEATURE_CACHE=off   &lt;- # Features</pre></div>
+<p><code>h</code> saves the heading, <code>n</code> loads the next line, <code>G</code> appends the saved heading, then we tidy and print.</p>
+
+<h3 id="a-w">Splitting a file with w</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n -e '/ 404 /w not_found.log' -e '/ 500 /w server_err.log' datasets/access.log
+wc -l not_found.log server_err.log</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>8 not_found.log
+6 server_err.log
+14 total</pre></div>
+<div class="callout note"><span class="ct">Output format</span>GNU <code>wc -l</code> with several files prints the counts without leading padding, followed by a <code>total</code> line, exactly as shown.</div>
+
+<h3 id="a-vars">Using shell variables in a sed script</h3>
+<p>Switch to <strong>double quotes</strong> so the shell substitutes the variable, and pick a delimiter that cannot appear in the value:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">new_dir="/srv/inventory/logs"
+sed -n "s|^LOG_FILE=.*|LOG_FILE=$new_dir/app.log|p" datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>LOG_FILE=/srv/inventory/logs/app.log</pre></div>
+<p>If the value may contain the delimiter, <code>&amp;</code> or <code>\</code>, escape them first:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">escape_sed() { printf '%s' "$1" | sed -e 's/[\/&amp;|]/\\&amp;/g'; }
+pass='p@ss&amp;w/rd|1'
+sed -n "s|^DB_PASS=.*|DB_PASS=$(escape_sed "$pass")|p" datasets/app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>DB_PASS=p@ss&amp;w/rd|1</pre></div>
+<p>Without escaping, the <code>&amp;</code> would be replaced by the whole matched text and the <code>|</code> would end the replacement early.</p>
+
+<!-- ================= USE CASES ================= -->
+<h2 id="use-cases">Use cases</h2>
+
+<div class="usecase">
+<h3 id="uc1"><span class="uc-tag">Use case 1</span> Preparing a config file for production</h3>
+<p><strong>Scenario:</strong> a deployment script must turn the development <code>app.conf</code> into a production one: set <code>APP_ENV=production</code>, turn debugging off, set the database password from an environment variable (never typed into the script), raise the log level, uncomment <code>LOG_ROTATE</code>, and add a key if it is missing. It must keep a backup and show what changed.</p>
+<div class="code"><div class="code-head">bash · configure.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# configure.sh - harden an app.conf for production with sed
+set -euo pipefail
+
+conf="${1:?usage: configure.sh CONFIG_FILE}"
+: "${DB_PASS:?export DB_PASS before running}"   # read secret from the environment
+
+[[ -w "$conf" ]] || { echo "error: $conf not writable" &gt;&amp;2; exit 1; }
+
+# escape characters that are special in the sed replacement: \ &amp; and our delimiter |
+escape_repl() { printf '%s' "$1" | sed -e 's/[\\&amp;|]/\\&amp;/g'; }
+
+# set_key KEY VALUE : replace KEY=... if present (even commented out), else append it
+set_key() {
+  local key="$1" value
+  value=$(escape_repl "$2")
+  if grep -qE "^#?[[:space:]]*${key}=" "$conf"; then
+    sed -i.tmp -E "s|^#?[[:space:]]*${key}=.*|${key}=${value}|" "$conf"
+  else
+    printf '%s=%s\n' "$key" "$2" &gt;&gt; "$conf"
+  fi
+  rm -f "$conf.tmp"
+}
+
+cp -p "$conf" "$conf.orig"                       # keep the original for diff/rollback
+
+set_key APP_ENV     production
+set_key APP_DEBUG   false
+set_key DB_PASS     "$DB_PASS"
+set_key LOG_LEVEL   warn
+set_key LOG_ROTATE  daily                        # uncomments #LOG_ROTATE=daily
+set_key DB_SSL      required                     # not present -&gt; appended
+
+echo "Changes made to $conf:"
+diff "$conf.orig" "$conf" || true                # diff exits 1 when files differ</code></pre></div>
+<div class="code"><div class="code-head">bash · run it on a copy</div><pre><code class="language-bash">cp datasets/app.conf app.conf
+DB_PASS='S3cure&amp;Pa55|word' ./configure.sh app.conf</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Changes made to app.conf:
+3,4c3,4
+&lt; APP_ENV=development
+&lt; APP_DEBUG=true
+---
+&gt; APP_ENV=production
+&gt; APP_DEBUG=false
+12c12
+&lt; DB_PASS=changeme
+---
+&gt; DB_PASS=S3cure&amp;Pa55|word
+15c15
+&lt; LOG_LEVEL=debug
+---
+&gt; LOG_LEVEL=warn
+17c17
+&lt; #LOG_ROTATE=daily
+---
+&gt; LOG_ROTATE=daily
+22a23
+&gt; DB_SSL=required</pre></div>
+<p><strong>How it works:</strong></p>
+<ul>
+  <li><code>-i.tmp</code> is the portable in-place form: it works identically on GNU and BSD sed; the temporary backup is removed right after.</li>
+  <li><code>^#?[[:space:]]*KEY=</code> matches the key whether it is active or commented out, so the same function both <em>changes</em> and <em>uncomments</em> (<code>#LOG_ROTATE=daily</code> → <code>LOG_ROTATE=daily</code>).</li>
+  <li>The password contains <code>&amp;</code> and <code>|</code>; <code>escape_repl</code> backslash-escapes them, otherwise <code>&amp;</code> would insert the matched text and <code>|</code> would terminate the <code>s</code> command.</li>
+  <li><code>diff</code> returns 1 when files differ; <code>|| true</code> stops <code>set -e</code> from treating that as a failure.</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3 id="uc2"><span class="uc-tag">Use case 2</span> Transforming and masking a CSV file</h3>
+<p><strong>Scenario:</strong> HR wants to share <code>employees.csv</code> with an external auditor. Requirements: semicolon-separated output, names reduced to initials, salaries hidden (only the thousands shown as <code>XXk</code>), dates in Indian <code>DD-MM-YYYY</code> format, the internal <code>id</code> column dropped, and only Engineering and Finance included. A single sed script does all of it.</p>
+<div class="code"><div class="code-head">sed · mask.sed</div><pre><code class="language-sh"># mask.sed - anonymise employees.csv
+# 1. header: rename and drop the id column
+1{
+  s/^id,//
+  s/name/initials/
+  s/salary/salary_band/
+  s/,/;/g
+  p
+  d
+}
+# 2. keep only Engineering and Finance rows
+/,\(Engineering\|Finance\),/!d
+# 3. drop id
+s/^[0-9]*,//
+# 4. "First Last" -&gt; "F.L."
+s/^\([A-Z]\)[a-z]* \([A-Z]\)[a-z]*,/\1.\2.,/
+# 5. salary 110000 -&gt; 110k
+s/,\([0-9]*\)[0-9]\{3\},\([0-9-]*\)$/,\1k,\2/
+# 6. YYYY-MM-DD -&gt; DD-MM-YYYY
+s/\([0-9]\{4\}\)-\([0-9][0-9]\)-\([0-9][0-9]\)$/\3-\2-\1/
+# 7. separators, then print (we run with -n)
+s/,/;/g
+p</code></pre></div>
+<div class="code"><div class="code-head">bash · run it (GNU sed)</div><pre><code class="language-bash">sed -n -f mask.sed datasets/employees.csv | head -8</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>initials;department;city;salary_band;join_date
+A.K.;Engineering;Delhi;110k;11-08-2023
+P.S.;Engineering;Delhi;135k;27-02-2023
+R.M.;Engineering;Mumbai;84k;22-11-2025
+A.I.;Engineering;Pune;131k;03-05-2025
+A.N.;Finance;Hyderabad;94k;24-10-2016
+K.G.;Engineering;Chennai;93k;03-11-2020
+R.G.;Engineering;Pune;115k;01-03-2017</pre></div>
+<p><strong>Line-by-line:</strong></p>
+<ul>
+  <li><strong>Block 1</strong> runs only on line 1 (the header): several substitutions, then <code>p</code> prints it and <code>d</code> ends the cycle so the data rules below never see the header.</li>
+  <li><strong>Rule 2</strong> uses the GNU BRE alternation <code>\|</code> with <code>!d</code>: delete every line that is <em>not</em> Engineering or Finance. (Portable: run sed with <code>-E</code> and write <code>/,(Engineering|Finance),/!d</code>.)</li>
+  <li><strong>Rule 5</strong> captures all digits except the last three, <code>[0-9]*</code> is greedy but must leave exactly three digits for <code>[0-9]\{3\}</code>.</li>
+  <li><strong>Final <code>p</code>:</strong> the script runs under <code>-n</code>, so surviving data lines must be printed explicitly.</li>
+  <li><strong>Order matters:</strong> commas are replaced by semicolons last, because every earlier rule relies on commas to find columns.</li>
+</ul>
+<div class="callout tip"><span class="ct">Check your work</span>Count rows before and after: <code>grep -cE ',(Engineering|Finance),' datasets/employees.csv</code> should equal the output lines minus the header.</div>
+</div>
+
+<div class="usecase">
+<h3 id="uc3"><span class="uc-tag">Use case 3</span> Extracting sections and time windows from logs</h3>
+<p><strong>Scenario:</strong> an incident was reported "around noon". You need (a) every request between 12:00 and 12:59 from <code>access.log</code>, condensed to time, IP, request and status; (b) the same window but only errors; and (c) a reusable function that prints any <code>[section]</code>-style block from a config file.</p>
+<p><strong>(a) A time window with a regex range.</strong> The range opens at the first line stamped <code>2026:12:</code> and closes at the first line stamped <code>2026:13:</code>. That closing line belongs to the next hour, so it is excluded with a nested <code>!p</code>:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '/2026:12:/,/2026:13:/{/2026:13:/!p;}' datasets/access.log \
+  | sed -E 's/^([^ ]+) .*:([0-9]{2}:[0-9]{2}):[0-9]{2} .*"([A-Z]+ [^ ]+) [^"]*" ([0-9]{3}) .*/\2  \1  \3  \4/'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>12:01  185.220.101.3  POST /wp-login.php  200
+12:04  185.220.101.3  GET /admin  403
+12:08  172.16.4.8  GET /api/v1/report  500
+12:22  192.168.1.10  GET /api/v1/users  200
+12:34  10.0.0.5  GET /images/logo.png  200
+12:38  185.220.101.3  GET /.env  404
+12:45  185.220.101.3  GET /xmlrpc.php  403
+12:49  192.168.1.15  GET /blog/post-1  200</pre></div>
+<p><strong>(b) Only errors in that window</strong>: add a second address inside the block:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '/2026:12:/,/2026:13:/{/2026:13:/!{/" [45][0-9][0-9] /p;};}' datasets/access.log | cut -d'"' -f1,2,3 | sed 's/ - - / /'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>185.220.101.3 [16/Nov/2026:12:04:05 +0530] "GET /admin HTTP/1.1" 403 302 
+172.16.4.8 [16/Nov/2026:12:08:31 +0530] "GET /api/v1/report HTTP/1.1" 500 223 
+185.220.101.3 [16/Nov/2026:12:38:17 +0530] "GET /.env HTTP/1.1" 404 545 
+185.220.101.3 [16/Nov/2026:12:45:25 +0530] "GET /xmlrpc.php HTTP/1.1" 403 411 </pre></div>
+<p><strong>(c) A section extractor function.</strong> app.conf uses <code># Heading</code> comments as section markers; the section ends at the next blank line:</p>
+<div class="code"><div class="code-head">bash · section.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# section.sh - print one "# Name" section of a config file, without comments
+set -euo pipefail
+
+print_section() {
+  local file="$1" name="$2"
+  sed -n "/^# ${name}\$/,/^\$/{ /^#/d; /^\$/d; p; }" "$file"
+}
+
+for s in Database Logging Features; do
+  echo "[$s]"
+  print_section datasets/app.conf "$s" | sed 's/^/  /'
+done</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">bash section.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>[Database]
+  DB_HOST=localhost
+  DB_PORT=3306
+  DB_NAME=inventory
+  DB_USER=root
+  DB_PASS=changeme
+[Logging]
+  LOG_LEVEL=debug
+  LOG_FILE=/var/log/inventory/app.log
+[Features]
+  FEATURE_CACHE=off
+  FEATURE_EMAIL=on
+  MAX_UPLOAD_MB=10</pre></div>
+<p><strong>Notes:</strong> <code>/^#/d</code> inside the block also hides commented-out settings such as <code>#LOG_ROTATE=daily</code>, only active settings are shown. Inside double quotes, <code>$</code> must be written <code>\$</code> where we mean the regex anchor, otherwise the shell tries to expand <code>$/</code>. The <code>sed 's/^/  /'</code> at the end indents each line, <code>^</code> matches the empty string at the start of the line, so the substitution inserts text there.</p>
+</div>
+
+<h2 id="gotchas">Gotchas</h2>
+<div class="table-wrap"><table>
+<tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+<tr><td><code>sed -i</code>: "invalid command code" on macOS</td><td>BSD <code>-i</code> needs a suffix argument</td><td><code>sed -i '' ...</code> or portable <code>sed -i.bak ...</code></td></tr>
+<tr><td>Every line printed twice</td><td><code>p</code> without <code>-n</code></td><td><code>sed -n '...p'</code></td></tr>
+<tr><td>Nothing printed at all</td><td><code>-n</code> without any <code>p</code></td><td>add <code>p</code> or the <code>p</code> flag</td></tr>
+<tr><td>Only the first match replaced</td><td>missing <code>g</code> flag</td><td><code>s/a/b/g</code></td></tr>
+<tr><td><code>s/a+/b/</code> does nothing</td><td><code>+</code> is literal in BRE</td><td><code>sed -E 's/a+/b/'</code></td></tr>
+<tr><td>"unknown option to s"</td><td>replacement contains the delimiter (e.g. a path with <code>/</code>)</td><td>use <code>s|..|..|</code> or escape</td></tr>
+<tr><td>Variable not expanded</td><td>single quotes</td><td>double quotes: <code>sed "s/x/$v/"</code></td></tr>
+<tr><td>"unterminated s command" with a variable</td><td>the value contains a newline</td><td>sanitise the value; sed works line by line</td></tr>
+<tr><td>Range never ends</td><td>end regex never matches after the start</td><td>the range runs to end of file, check the end pattern</td></tr>
+<tr><td><code>}</code> error on macOS</td><td>BSD needs <code>;</code> or newline before <code>}</code></td><td>write <code>{cmd;cmd;}</code></td></tr>
+<tr><td><code>\n</code> in replacement prints "n" on macOS</td><td>BSD does not interpret <code>\n</code> there</td><td>use a literal backslash-newline, or GNU sed</td></tr>
+<tr><td>Windows file: <code>$</code> anchor never matches</td><td>lines end in <code>\r</code></td><td><code>sed 's/\r$//'</code> (GNU) or <code>tr -d '\r'</code></td></tr>
+</table></div>
+
+<h2 id="exercises">Practice exercises</h2>
+<details><summary>1. Print lines 5 to 10 of access.log, showing only the IP and the status code.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '5,10p' datasets/access.log | sed -E 's/^([^ ]+) .*" ([0-9]{3}) .*/\1 \2/'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>203.0.113.7 301
+10.0.0.5 200
+10.0.0.5 200
+192.168.1.10 200
+203.0.113.7 404
+192.168.1.10 200</pre></div>
+</details>
+<details><summary>2. Convert app.conf into shell <code>export</code> statements, skipping comments and blank lines.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -e '/^#/d' -e '/^$/d' -e 's/^\([A-Z_]*\)=\(.*\)/export \1="\2"/' datasets/app.conf | head -4</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>export APP_NAME="inventory-api"
+export APP_ENV="development"
+export APP_DEBUG="true"
+export APP_PORT="8080"</pre></div>
+</details>
+<details><summary>3. Change every <code>Support</code> employee's city to <code>Remote</code> (only for Support rows).</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed '/,Support,/s/,Support,[^,]*,/,Support,Remote,/' datasets/employees.csv | grep Support</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>116,Riya Das,Support,Remote,65000,2016-07-24
+119,Manish Nair,Support,Remote,64000,2022-11-27
+120,Neha Verma,Support,Remote,49000,2022-06-11
+124,Simran Mehta,Support,Remote,39000,2024-06-20
+125,Kunal Singh,Support,Remote,75000,2016-04-09</pre></div>
+<p>The address <code>/,Support,/</code> limits the substitution to Support rows; <code>[^,]*</code> matches the old city.</p>
+</details>
+<details><summary>4. Comment out every <code>FEATURE_</code> line (prefix with <code>#</code>).</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed 's/^FEATURE_/#&amp;/' datasets/app.conf | tail -4</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre># Features
+#FEATURE_CACHE=off
+#FEATURE_EMAIL=on
+MAX_UPLOAD_MB=10</pre></div>
+</details>
+<details><summary>5. Remove the request query and protocol, leaving <code>METHOD PATH</code>, for POST requests only.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -nE '/"POST /s/.*"(POST [^ ?]+)[^"]*".*/\1/p' datasets/access.log | sort | uniq -c</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>      3 POST /api/v1/orders
+      2 POST /wp-login.php
+      2 POST /xmlrpc.php</pre></div>
+</details>
+<details><summary>6. Print only the last setting of the Database section.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sed -n '/^# Database/,/^$/p' datasets/app.conf | sed '/^$/d' | sed -n '$p'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>DB_PASS=changeme</pre></div>
+</details>
+
+<h2 id="viva">Viva / exam questions</h2>
+<details><summary>What is the pattern space?</summary><p>The buffer into which sed reads each input line. All commands operate on it; at the end of the script it is printed (unless <code>-n</code>) and the next line is read.</p></details>
+<details><summary>What does <code>sed -n '/start/,/end/p'</code> print?</summary><p>All lines from each line matching <em>start</em> through the next line matching <em>end</em>, inclusive.</p></details>
+<details><summary>Difference between <code>s/x/y/</code> and <code>s/x/y/g</code>?</summary><p>Without <code>g</code> only the first match on each line is replaced; with <code>g</code> all matches are.</p></details>
+<details><summary>How do you edit a file in place and keep a backup?</summary><p><code>sed -i.bak 's/old/new/' file</code>: this form works with both GNU and BSD sed.</p></details>
+<details><summary>What do <code>&amp;</code> and <code>\1</code> mean in the replacement?</summary><p><code>&amp;</code> is the whole matched text; <code>\1</code> is the text captured by the first parenthesised group.</p></details>
+<details><summary>How do you delete blank lines?</summary><p><code>sed '/^$/d'</code>, or <code>sed '/^[[:space:]]*$/d'</code> to include lines with only spaces.</p></details>
+<details><summary>Why use a different delimiter like <code>s|a|b|</code>?</summary><p>When the pattern or replacement contains <code>/</code> (paths, URLs), another delimiter avoids escaping every slash.</p></details>
+<details><summary>Difference between the <code>a</code>, <code>i</code> and <code>c</code> commands?</summary><p><code>a</code> appends text after the addressed line, <code>i</code> inserts before it, <code>c</code> replaces the line.</p></details>
+<details><summary>What is the hold space used for?</summary><p>It is a second buffer that persists across lines, used to remember text (e.g. a heading) or accumulate lines (e.g. reversing a file with <code>1!G;h;$p</code>).</p></details>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="grep.html">grep</a>: find the lines first; the regex syntax is shared.</li>
+  <li><a href="awk.html">awk</a>: better when you need fields, arithmetic or per-group totals.</li>
+  <li><a href="cut-tr.html">cut, tr, …</a>: simpler tools for single-column or single-character jobs.</li>
+  <li><a href="../labs/lab10-wordpress-lamp.html">Lab 10, WordPress on LAMP</a> edits <code>wp-config.php</code> with <code>sed -i</code>.</li>
+  <li><a href="../labs/lab06-access-logs.html">Lab 06, Access log analysis</a> extracts time windows from logs.</li>
+  <li><a href="../labs/lab09-pipes-redirection.html">Lab 09, Pipes &amp; redirection</a>.</li>
+</ul>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

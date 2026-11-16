@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cut, tr, paste, wc, head, tail, tee · CBCS Unit 4 Shell Wiki</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="cut-tr">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Command tutorials / cut, tr &amp; friends</div>
+<h1>cut, tr, paste, wc, head, tail, tee</h1>
+<p class="lead">Small single-purpose filters that you chain in almost every pipeline: <code>cut</code> picks columns, <code>tr</code> translates or deletes characters, <code>paste</code> joins lines side by side, <code>wc</code> counts, <code>head</code>/<code>tail</code> take the start or end, <code>tee</code> saves a copy mid-pipe and <code>column</code> lines everything up.</p>
+<div class="meta-row">
+  <span class="pill">Commands: cut, tr, paste, wc, head, tail, tee, column</span><span class="pill grey">GNU coreutils</span><span class="pill grey">~40 min</span>
+</div>
+
+<h2 id="syntax">Syntax and mental model</h2>
+<div class="code"><div class="code-head">bash · syntax</div><pre><code class="language-bash">cut  -d DELIM -f LIST [file...]     # fields      cut -c LIST [file...]   # characters
+tr   [-d|-s|-c] SET1 [SET2]          # stdin only! no file argument
+paste [-d DELIMS] [-s] file...      # "-" means stdin
+wc   [-l|-w|-c|-m] [file...]
+head [-n N|-c N] [file...]           tail [-n N|-n +N|-c N|-f|-F] [file...]
+tee  [-a] file...                    # stdin -&gt; stdout AND file(s)
+column -t [-s SEP]                   # align into a table</code></pre></div>
+<ul>
+  <li><strong>cut</strong> splits every line on <em>exactly one</em> delimiter character (default TAB) and prints the fields you list. Two spaces in a row mean an empty field between them, which is why <code>cut</code> struggles with space-aligned text (use <code>tr -s ' '</code> first, or <code>awk</code>).</li>
+  <li><strong>tr</strong> works on single characters, not words. It maps the 1st char of SET1 to the 1st char of SET2, and so on. It only reads stdin: write <code>tr a b &lt; file</code>, not <code>tr a b file</code>.</li>
+  <li><strong>paste</strong> is the opposite of <code>cut</code>: it glues line 1 of each file together, then line 2, … With <code>-s</code> it glues all lines of one file into a single line.</li>
+  <li><strong>tee</strong> is a T-junction in the pipe: data continues to stdout and is also written to a file.</li>
+</ul>
+
+<h2 id="options">Options cheat table</h2>
+<div class="table-wrap"><table>
+<tr><th>Command</th><th>Option</th><th>Meaning</th></tr>
+<tr><td>cut</td><td><code>-d ,</code></td><td>Delimiter (one character)</td></tr>
+<tr><td>cut</td><td><code>-f 1,3</code> / <code>-f 2-4</code> / <code>-f 5-</code></td><td>Field list, range, open range</td></tr>
+<tr><td>cut</td><td><code>-c 1-10</code></td><td>Character positions</td></tr>
+<tr><td>cut</td><td><code>--complement</code></td><td>Everything except the listed fields (GNU)</td></tr>
+<tr><td>cut</td><td><code>--output-delimiter=STR</code></td><td>Join output fields with STR (GNU)</td></tr>
+<tr><td>cut</td><td><code>-s</code></td><td>Skip lines without the delimiter</td></tr>
+<tr><td>tr</td><td><code>'a-z' 'A-Z'</code></td><td>Translate ranges</td></tr>
+<tr><td>tr</td><td><code>-d SET</code></td><td>Delete characters in SET</td></tr>
+<tr><td>tr</td><td><code>-s SET</code></td><td>Squeeze repeats of SET into one</td></tr>
+<tr><td>tr</td><td><code>-c</code></td><td>Complement SET1 (every char NOT in it)</td></tr>
+<tr><td>tr</td><td><code>[:alpha:] [:digit:] [:alnum:] [:space:] [:upper:] [:lower:] [:punct:]</code></td><td>Character classes</td></tr>
+<tr><td>paste</td><td><code>-d ','</code></td><td>Delimiter(s) between joined lines (default TAB)</td></tr>
+<tr><td>paste</td><td><code>-s</code></td><td>Serial: join all lines of each file into one</td></tr>
+<tr><td>wc</td><td><code>-l -w -c -m</code></td><td>Lines, words, bytes, characters</td></tr>
+<tr><td>head</td><td><code>-n 5</code> / <code>-n -5</code></td><td>First 5 lines / all but last 5 (GNU)</td></tr>
+<tr><td>tail</td><td><code>-n 5</code> / <code>-n +5</code></td><td>Last 5 lines / from line 5 to end</td></tr>
+<tr><td>head/tail</td><td><code>-c N</code></td><td>Bytes instead of lines</td></tr>
+<tr><td>tail</td><td><code>-f</code> / <code>-F</code></td><td>Follow growing file / follow by name, survive log rotation</td></tr>
+<tr><td>tee</td><td><code>-a</code></td><td>Append instead of overwrite</td></tr>
+<tr><td>column</td><td><code>-t -s ,</code></td><td>Table mode, input separator</td></tr>
+</table></div>
+
+<h2 id="datasets">Datasets used</h2>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/employees.csv</span></div><pre><code>id,name,department,city,salary,join_date
+101,Aarav Kapoor,Engineering,Delhi,110000,2023-08-11
+102,Priya Sharma,Engineering,Delhi,135000,2023-02-27
+103,Rohan Mehta,Engineering,Mumbai,84000,2025-11-22
+104,Ananya Iyer,Engineering,Pune,131000,2025-05-03
+105,Vikram Verma,Sales,Hyderabad,93000,2022-10-20
+106,Sneha Joshi,Sales,Mumbai,73000,2023-05-28
+107,Arjun Nair,Finance,Hyderabad,94000,2016-10-24
+108,Kavya Gupta,Engineering,Chennai,93000,2020-11-03
+109,Rahul Gupta,Engineering,Pune,115000,2017-03-01
+110,Isha Das,Finance,Chennai,93000,2023-05-02
+111,Karan Nair,Sales,Chennai,63000,2023-02-22
+112,Meera Nair,Sales,Chennai,82000,2019-07-04
+113,Aditya Singh,Sales,Pune,62000,2018-02-02
+114,Pooja Nair,Engineering,Hyderabad,127000,2025-05-15
+115,Nikhil Das,Engineering,Chennai,99000,2022-05-17
+116,Riya Das,Support,Bengaluru,65000,2016-07-24
+117,Sanjay Kapoor,HR,Delhi,38000,2017-04-22
+118,Divya Singh,Engineering,Delhi,116000,2016-03-16
+119,Manish Nair,Support,Pune,64000,2022-11-27
+120,Neha Verma,Support,Mumbai,49000,2022-06-11
+121,Yash Iyer,Engineering,Delhi,106000,2023-05-22
+122,Tanvi Joshi,Finance,Bengaluru,84000,2017-06-09
+123,Harsh Verma,HR,Mumbai,92000,2024-01-22
+124,Simran Mehta,Support,Bengaluru,39000,2024-06-20
+125,Kunal Singh,Support,Mumbai,75000,2016-04-09</code></pre></div>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/servers.txt</span></div><pre><code># hostname        ip            user     role
+web01             10.0.1.11     deploy   web
+web02             10.0.1.12     deploy   web
+db01              10.0.1.14     dbadmin  database
+cache01           10.0.1.16     deploy   cache
+mon01             10.0.1.18     ops      monitoring</code></pre></div>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/df.txt</span></div><pre><code>Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1        50G   41G  6.5G  87% /
+/dev/sda2       200G  120G   70G  64% /var
+/dev/sdb1       500G  478G   22G  96% /backup
+tmpfs           3.9G  1.2M  3.9G   1% /run
+/dev/sdc1       100G   12G   83G  13% /home
+/dev/nvme0n1p1  1.0T  910G   90G  92% /data</code></pre></div>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/access.log</span></div><pre><code>192.168.1.10 - - [16/Nov/2026:08:11:14 +0530] "GET /api/v1/users HTTP/1.1" 200 16949 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:08:24:08 +0530] "GET /api/v1/users HTTP/1.1" 200 36641 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:08:25:00 +0530] "GET /index.php HTTP/1.1" 200 34018 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:08:34:54 +0530] "GET /js/app.js HTTP/1.1" 200 36613 "-" "curl/8.4.0"
+203.0.113.7 - - [16/Nov/2026:08:42:53 +0530] "GET /old-page HTTP/1.1" 301 0 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+10.0.0.5 - - [16/Nov/2026:08:55:07 +0530] "GET /about.html HTTP/1.1" 200 15010 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+10.0.0.5 - - [16/Nov/2026:08:57:01 +0530] "GET /blog/post-1 HTTP/1.1" 200 23441 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:09:11:07 +0530] "POST /wp-login.php HTTP/1.1" 200 25707 "https://www.google.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+203.0.113.7 - - [16/Nov/2026:09:25:36 +0530] "GET /.env HTTP/1.1" 404 365 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:09:37:57 +0530] "GET /js/app.js HTTP/1.1" 200 51563 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:09:52:52 +0530] "GET / HTTP/1.1" 200 19117 "https://www.google.com/" "curl/8.4.0"
+10.0.0.5 - - [16/Nov/2026:09:55:58 +0530] "GET /index.php HTTP/1.1" 200 18396 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:10:06:41 +0530] "GET /images/logo.png HTTP/1.1" 200 16943 "https://example.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.15 - - [16/Nov/2026:10:13:29 +0530] "GET /api/v1/report HTTP/1.1" 500 532 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:10:25:30 +0530] "POST /api/v1/orders HTTP/1.1" 200 3003 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.10 - - [16/Nov/2026:10:30:24 +0530] "GET /admin HTTP/1.1" 403 470 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:10:34:21 +0530] "GET /blog/post-2 HTTP/1.1" 200 43029 "-" "curl/8.4.0"
+192.168.1.10 - - [16/Nov/2026:10:39:12 +0530] "GET /api/v1/users HTTP/1.1" 200 36222 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+10.0.0.5 - - [16/Nov/2026:10:49:29 +0530] "GET /index.php HTTP/1.1" 200 9965 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+203.0.113.99 - - [16/Nov/2026:10:51:22 +0530] "GET /missing.html HTTP/1.1" 404 258 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:11:05:13 +0530] "GET /css/style.css HTTP/1.1" 200 26116 "https://example.com/" "curl/8.4.0"
+192.168.1.15 - - [16/Nov/2026:11:14:34 +0530] "GET /images/logo.png HTTP/1.1" 200 1652 "-" "python-requests/2.31.0"
+172.16.4.8 - - [16/Nov/2026:11:26:32 +0530] "GET /api/v1/users HTTP/1.1" 200 51270 "https://www.google.com/" "python-requests/2.31.0"
+192.168.1.15 - - [16/Nov/2026:11:28:46 +0530] "GET /index.php HTTP/1.1" 200 1112 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.99 - - [16/Nov/2026:11:37:38 +0530] "GET /images/logo.png HTTP/1.1" 200 7873 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:11:52:19 +0530] "GET /css/style.css HTTP/1.1" 200 10916 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+185.220.101.3 - - [16/Nov/2026:12:01:51 +0530] "POST /wp-login.php HTTP/1.1" 200 32921 "-" "sqlmap/1.7.11#stable"
+185.220.101.3 - - [16/Nov/2026:12:04:05 +0530] "GET /admin HTTP/1.1" 403 302 "-" "sqlmap/1.7.11#stable"
+172.16.4.8 - - [16/Nov/2026:12:08:31 +0530] "GET /api/v1/report HTTP/1.1" 500 223 "https://example.com/" "python-requests/2.31.0"
+192.168.1.10 - - [16/Nov/2026:12:22:46 +0530] "GET /api/v1/users HTTP/1.1" 200 51089 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+10.0.0.5 - - [16/Nov/2026:12:34:21 +0530] "GET /images/logo.png HTTP/1.1" 200 18270 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+185.220.101.3 - - [16/Nov/2026:12:38:17 +0530] "GET /.env HTTP/1.1" 404 545 "https://www.google.com/" "sqlmap/1.7.11#stable"
+185.220.101.3 - - [16/Nov/2026:12:45:25 +0530] "GET /xmlrpc.php HTTP/1.1" 403 411 "-" "sqlmap/1.7.11#stable"
+192.168.1.15 - - [16/Nov/2026:12:49:58 +0530] "GET /blog/post-1 HTTP/1.1" 200 39455 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:13:00:20 +0530] "GET / HTTP/1.1" 200 42259 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+172.16.4.8 - - [16/Nov/2026:13:01:49 +0530] "GET /missing.html HTTP/1.1" 404 216 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+203.0.113.7 - - [16/Nov/2026:13:06:54 +0530] "GET /index.php HTTP/1.1" 200 9571 "https://example.com/" "python-requests/2.31.0"
+203.0.113.99 - - [16/Nov/2026:13:11:22 +0530] "POST /api/v1/orders HTTP/1.1" 200 7252 "https://example.com/" "python-requests/2.31.0"
+10.0.0.5 - - [16/Nov/2026:13:17:44 +0530] "GET /wp-admin/ HTTP/1.1" 302 0 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:13:29:33 +0530] "GET /js/app.js HTTP/1.1" 200 4872 "https://www.google.com/" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:13:43:32 +0530] "GET /about.html HTTP/1.1" 200 13365 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:13:46:15 +0530] "GET /about.html HTTP/1.1" 200 17271 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+172.16.4.8 - - [16/Nov/2026:14:00:22 +0530] "GET /images/logo.png HTTP/1.1" 200 4215 "-" "python-requests/2.31.0"
+185.220.101.3 - - [16/Nov/2026:14:02:17 +0530] "GET /.env HTTP/1.1" 404 388 "https://example.com/" "sqlmap/1.7.11#stable"
+192.168.1.15 - - [16/Nov/2026:14:10:49 +0530] "GET /blog/post-2 HTTP/1.1" 200 4742 "https://example.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+185.220.101.3 - - [16/Nov/2026:14:11:11 +0530] "POST /xmlrpc.php HTTP/1.1" 403 536 "https://example.com/" "sqlmap/1.7.11#stable"
+192.168.1.10 - - [16/Nov/2026:14:14:09 +0530] "GET /index.php HTTP/1.1" 200 4732 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:14:27:14 +0530] "GET / HTTP/1.1" 200 32146 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+185.220.101.3 - - [16/Nov/2026:14:28:32 +0530] "GET /.env HTTP/1.1" 404 215 "-" "sqlmap/1.7.11#stable"
+172.16.4.8 - - [16/Nov/2026:14:40:23 +0530] "GET /blog/post-2 HTTP/1.1" 200 38234 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:14:51:17 +0530] "GET /js/app.js HTTP/1.1" 200 37942 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:14:56:04 +0530] "GET /api/v1/users HTTP/1.1" 200 16542 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+203.0.113.7 - - [16/Nov/2026:14:58:38 +0530] "GET /contact.html HTTP/1.1" 200 21620 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+203.0.113.7 - - [16/Nov/2026:15:06:47 +0530] "GET /css/style.css HTTP/1.1" 200 7452 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.15 - - [16/Nov/2026:15:15:45 +0530] "GET /api/v1/report HTTP/1.1" 500 215 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:15:20:56 +0530] "GET /missing.html HTTP/1.1" 404 540 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+45.33.32.156 - - [16/Nov/2026:15:32:39 +0530] "GET /contact.html HTTP/1.1" 200 44375 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:15:37:29 +0530] "GET / HTTP/1.1" 200 37156 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+203.0.113.7 - - [16/Nov/2026:15:42:37 +0530] "GET /api/v1/users HTTP/1.1" 200 14242 "https://www.google.com/" "python-requests/2.31.0"
+10.0.0.23 - - [16/Nov/2026:15:51:34 +0530] "GET /admin HTTP/1.1" 403 206 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.15 - - [16/Nov/2026:16:06:03 +0530] "GET / HTTP/1.1" 200 51436 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+198.51.100.42 - - [16/Nov/2026:16:09:08 +0530] "GET /images/logo.png HTTP/1.1" 200 28928 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:16:11:22 +0530] "GET /.env HTTP/1.1" 404 256 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:16:25:56 +0530] "GET /images/logo.png HTTP/1.1" 200 29066 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+10.0.0.5 - - [16/Nov/2026:16:31:31 +0530] "GET /api/v1/report HTTP/1.1" 500 200 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:16:43:29 +0530] "GET / HTTP/1.1" 200 37592 "-" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:16:47:51 +0530] "GET /xmlrpc.php HTTP/1.1" 403 391 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+185.220.101.3 - - [16/Nov/2026:17:00:45 +0530] "GET /xmlrpc.php HTTP/1.1" 403 556 "-" "sqlmap/1.7.11#stable"
+192.168.1.10 - - [16/Nov/2026:17:05:38 +0530] "GET /api/v1/users HTTP/1.1" 200 25970 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:17:09:45 +0530] "GET /admin HTTP/1.1" 403 359 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.10 - - [16/Nov/2026:17:13:53 +0530] "GET /index.php HTTP/1.1" 200 22412 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:17:27:24 +0530] "GET /js/app.js HTTP/1.1" 200 27093 "https://www.google.com/" "python-requests/2.31.0"
+192.168.1.10 - - [16/Nov/2026:17:28:12 +0530] "POST /xmlrpc.php HTTP/1.1" 403 315 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+10.0.0.5 - - [16/Nov/2026:17:38:42 +0530] "GET /api/v1/users HTTP/1.1" 200 21457 "-" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:17:45:36 +0530] "GET /index.php HTTP/1.1" 200 3808 "https://example.com/" "python-requests/2.31.0"
+10.0.0.23 - - [16/Nov/2026:17:45:57 +0530] "POST /api/v1/orders HTTP/1.1" 200 49524 "-" "python-requests/2.31.0"
+10.0.0.5 - - [16/Nov/2026:17:52:29 +0530] "GET /api/v1/report HTTP/1.1" 500 349 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+45.33.32.156 - - [16/Nov/2026:18:04:08 +0530] "GET /api/v1/users HTTP/1.1" 200 20581 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:18:15:50 +0530] "GET /blog/post-2 HTTP/1.1" 200 20276 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:18:19:26 +0530] "GET /api/v1/report HTTP/1.1" 500 526 "-" "python-requests/2.31.0"</code></pre></div>
+<p>All outputs below were produced from the project root with <code>LC_ALL=C</code>. Counts from <code>wc</code> are shown in GNU format.</p>
+
+<h2 id="cut">cut: select columns</h2>
+<h3>Fields from a CSV</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">cut -d, -f2,5 datasets/employees.csv | head -4    # name and salary</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>name,salary
+Aarav Kapoor,110000
+Priya Sharma,135000
+Rohan Mehta,84000</pre></div>
+<p>Fields come out in file order, joined by the same delimiter. <code>-f5,2</code> prints the same as <code>-f2,5</code>: cut cannot reorder (use <code>awk</code> for that).</p>
+
+<h3>Ranges</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">cut -d, -f2-4 datasets/employees.csv | head -3    # fields 2 to 4
+cut -d, -f5-  datasets/employees.csv | head -3    # field 5 to the end</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>name,department,city
+Aarav Kapoor,Engineering,Delhi
+Priya Sharma,Engineering,Delhi
+salary,join_date
+110000,2023-08-11
+135000,2023-02-27</pre></div>
+
+<h3>--complement and --output-delimiter (GNU)</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">cut -d, -f1,6 --complement datasets/employees.csv | head -3
+cut -d, -f2,3 --output-delimiter=' | ' datasets/employees.csv | head -3</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>name,department,city,salary
+Aarav Kapoor,Engineering,Delhi,110000
+Priya Sharma,Engineering,Delhi,135000
+name | department
+Aarav Kapoor | Engineering
+Priya Sharma | Engineering</pre></div>
+<div class="callout note"><span class="ct">GNU vs BSD</span>macOS <code>cut</code> has neither long option. Portable equivalents: <code>cut -d, -f2-5</code> for the first, and <code>cut -d, -f2,3 | sed 's/,/ | /'</code> or <code>awk -F, '{print $2" | "$3}'</code> for the second.</div>
+
+<h3>Characters with -c</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">cut -c1-15 datasets/access.log | head -2
+cut -d, -f6 datasets/employees.csv | tail -n +2 | cut -c1-4 | sort | uniq -c | head -3   # join year</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>192.168.1.10 -
+192.168.1.10 -
+      4 2016
+      3 2017
+      1 2018</pre></div>
+
+<h3>Space-separated data: cut's weak spot</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">cut -d' ' -f2 datasets/servers.txt                 # empty! many spaces = many empty fields
+tr -s ' ' &lt; datasets/servers.txt | cut -d' ' -f1,2  # squeeze first, then cut</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>hostname
+
+
+
+
+
+# hostname
+web01 10.0.1.11
+web02 10.0.1.12
+db01 10.0.1.14
+cache01 10.0.1.16
+mon01 10.0.1.18</pre></div>
+<p>Single-space logs are fine. In <code>access.log</code> fields are separated by one space, so <code>cut -d' ' -f1,9</code> gives IP and status. The double quote is also a useful delimiter:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">cut -d' ' -f1,9 datasets/access.log | head -2
+cut -d'"' -f2 datasets/access.log | head -2      # the request line
+cut -d'"' -f6 datasets/access.log | head -2      # the user agent</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>192.168.1.10 200
+192.168.1.10 200
+GET /api/v1/users HTTP/1.1
+GET /api/v1/users HTTP/1.1
+Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0</pre></div>
+
+<h2 id="tr">tr: translate, delete, squeeze</h2>
+<h3>Translate</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">head -3 datasets/tags.txt | tr 'a-z' 'A-Z'
+echo "Hello World 2026" | tr '[:lower:]' '[:upper:]'
+echo "/usr/local/bin:/usr/bin:/bin" | tr ':' '\n'      # split PATH
+head -3 datasets/employees.csv | tr ',' '\t'            # CSV -&gt; TSV</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>POSTGRES
+LINUX
+DOCKER
+HELLO WORLD 2026
+/usr/local/bin
+/usr/bin
+/bin
+id	name	department	city	salary	join_date
+101	Aarav Kapoor	Engineering	Delhi	110000	2023-08-11
+102	Priya Sharma	Engineering	Delhi	135000	2023-02-27</pre></div>
+<p>If SET2 is shorter, GNU repeats its last character: <code>echo abcdef | tr abc x</code> gives <code>xxxdef</code>. A classic: ROT13 is <code>tr 'A-Za-z' 'N-ZA-Mn-za-m'</code> (<code>Hello</code> becomes <code>Uryyb</code>).</p>
+
+<h3>Delete with -d</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">echo "Order #A-1029 shipped 3 items" | tr -d '0-9'
+printf 'line1\r\nline2\r\n' | wc -c                 # Windows line endings
+printf 'line1\r\nline2\r\n' | tr -d '\r' | wc -c    # CR removed</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Order #A- shipped  items
+14
+12</pre></div>
+<p><code>tr -d '\r'</code> fixes the famous <code>$'\r': command not found</code> error from scripts edited on Windows.</p>
+
+<h3>Squeeze with -s</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">echo "too    many     spaces" | tr -s ' '
+printf 'a\n\n\nb\n\nc\n' | tr -s '\n'          # remove blank lines</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>too many spaces
+a
+b
+c</pre></div>
+
+<h3>Complement with -c</h3>
+<p><code>-c</code> inverts SET1. <code>-cd</code> = "delete everything except", <code>-cs</code> = "turn every run of non-matching chars into one":</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">echo 'p@ss W0rd!#2026' | tr -cd '[:alnum:]'; echo        # keep letters+digits only
+tr -dc 'A-Za-z0-9' &lt; /dev/urandom | head -c 16; echo      # random 16-char password
+
+# one word per line -&gt; word frequency
+echo "The quick, brown fox; the LAZY dog... the end!" |
+  tr -cs '[:alpha:]' '\n' | tr 'A-Z' 'a-z' | sort | uniq -c | sort -rn | head -3</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>pssW0rd2026
+kQ7ZpX2mVb9LwT4e
+      3 the
+      1 quick
+      1 lazy</pre></div>
+<p>The password line is random and will differ every run. In the word count, ties keep the reverse whole-line order from <code>sort -rn</code>.</p>
+
+<h2 id="paste">paste: join lines side by side</h2>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">cut -d, -f2 datasets/employees.csv | head -4 &gt; names.txt
+cut -d, -f5 datasets/employees.csv | head -4 &gt; pay.txt
+paste names.txt pay.txt          # TAB between
+paste -d: names.txt pay.txt      # custom delimiter</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>name	salary
+Aarav Kapoor	110000
+Priya Sharma	135000
+Rohan Mehta	84000
+name:salary
+Aarav Kapoor:110000
+Priya Sharma:135000
+Rohan Mehta:84000</pre></div>
+<h3>Serial mode: many lines into one</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -v '^#' datasets/servers.txt | cut -d' ' -f1 | paste -sd, -      # comma list of hosts
+cut -d, -f4 datasets/employees.csv | tail -n +2 | sort -u | paste -sd, -
+tail -n +2 datasets/employees.csv | cut -d, -f5 | paste -sd+ - | bc    # total payroll</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>web01,web02,db01,cache01,mon01
+Bengaluru,Chennai,Delhi,Hyderabad,Mumbai,Pune
+2182000</pre></div>
+<p><code>paste -sd+</code> builds <code>110000+135000+…</code> and <code>bc</code> evaluates it. The <code>-</code> tells paste to read stdin.</p>
+<h3>Lines into N columns</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">head -6 datasets/tags.txt | paste - - -     # each "-" reads the next line of stdin</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>postgres	linux	docker
+nginx	bash	docker</pre></div>
+
+<h2 id="wc">wc: count lines, words, bytes</h2>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">wc datasets/tags.txt              # lines words bytes name
+wc -l datasets/*.csv              # several files + total
+wc -l &lt; datasets/access.log       # number only, no filename
+printf 'café\n' | wc -c           # bytes   (é is 2 bytes in UTF-8)
+printf 'café\n' | wc -m           # characters (needs a UTF-8 locale)</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre> 50  50 301 datasets/tags.txt
+  26 datasets/employees.csv
+  31 datasets/sales.csv
+  57 total
+80
+6
+5</pre></div>
+<div class="callout tip"><span class="ct">Tip</span>In scripts use <code>count=$(wc -l &lt; file)</code>: with redirection there is no filename to strip. macOS <code>wc</code> pads numbers with spaces even then, so <code>$(( $(wc -l &lt; f) ))</code> or <code>| tr -d ' '</code> is the portable form. Also remember <code>wc -l</code> counts newline characters: a last line without <code>\n</code> is not counted.</div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -c POST datasets/access.log                       # count matching lines (no wc needed)
+cut -d' ' -f1 datasets/access.log | sort -u | wc -l    # distinct client IPs</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>7
+10</pre></div>
+
+<h2 id="headtail">head and tail</h2>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">tail -n 2 datasets/df.txt            # last 2 lines
+head -c 20 datasets/app.conf; echo   # first 20 bytes
+tail -n +2 datasets/df.txt | head -2 # skip header: start AT line 2</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>/dev/sdc1       100G   12G   83G  13% /home
+/dev/nvme0n1p1  1.0T  910G   90G  92% /data
+# ===== Application
+/dev/sda1        50G   41G  6.5G  87% /
+/dev/sda2       200G  120G   70G  64% /var</pre></div>
+<h3>Print a range of lines</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">tail -n +10 datasets/tags.txt | head -n 3     # lines 10..12
+sed -n '10,12p' datasets/tags.txt             # same thing with sed</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>nginx
+bash
+python
+nginx
+bash
+python</pre></div>
+<h3>All but the last N lines (GNU)</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">head -n -2 datasets/df.txt     # drop the last 2 lines</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1        50G   41G  6.5G  87% /
+/dev/sda2       200G  120G   70G  64% /var
+/dev/sdb1       500G  478G   22G  96% /backup
+tmpfs           3.9G  1.2M  3.9G   1% /run</pre></div>
+<h3>Following a live log: -f and -F</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">tail -f /var/log/nginx/access.log                         # stream new lines, Ctrl+C to stop
+tail -F /var/log/nginx/access.log | grep --line-buffered ' 500 '   # keep following across logrotate
+tail -n 0 -f /var/log/auth.log                            # only lines written from now on</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>10.0.0.5 - - [16/Nov/2026:18:02:11 +0530] "GET /api/v1/report HTTP/1.1" 500 512 "-" "curl/8.4.0"
+10.0.0.5 - - [16/Nov/2026:18:02:40 +0530] "GET /api/v1/report HTTP/1.1" 500 512 "-" "curl/8.4.0"
+^C</pre></div>
+<p><code>-f</code> follows the open file descriptor: when logrotate renames the file, <code>tail -f</code> keeps watching the old, now-silent file. <code>-F</code> re-opens the path by name and retries, so it survives rotation. <code>--line-buffered</code> stops grep from holding output in a buffer.</p>
+
+<h2 id="tee">tee: save and continue</h2>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">echo "first run"  | tee run.log                 # overwrite, also print
+echo "second run" | tee -a run.log &gt; /dev/null   # append, print nothing
+cat run.log</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>first run
+first run
+second run</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash"># save an intermediate stage, keep processing
+awk '{print $9}' datasets/access.log | tee statuses.txt | sort -u | paste -sd' ' -
+wc -l &lt; statuses.txt
+
+# write to a root-owned file: sudo applies to tee, not to the shell redirection
+echo "10.0.1.11 web01" | sudo tee -a /etc/hosts</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>200 301 302 403 404 500
+80</pre></div>
+<div class="callout exam"><span class="ct">Viva</span>"Why does <code>sudo echo x &gt;&gt; /etc/hosts</code> fail?" The redirection is done by <em>your</em> unprivileged shell before sudo runs. <code>echo x | sudo tee -a /etc/hosts</code> works because <code>tee</code> itself runs as root and opens the file.</div>
+
+<h2 id="column">column: align into a table</h2>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">column -t -s, datasets/employees.csv | head -4
+grep -v '^#' datasets/servers.txt | column -t</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>id   name           department   city       salary  join_date
+101  Aarav Kapoor   Engineering  Delhi      110000  2023-08-11
+102  Priya Sharma   Engineering  Delhi      135000  2023-02-27
+103  Rohan Mehta    Engineering  Mumbai     84000   2025-11-22
+web01    10.0.1.11  deploy   web
+web02    10.0.1.12  deploy   web
+db01     10.0.1.14  dbadmin  database
+cache01  10.0.1.16  deploy   cache
+mon01    10.0.1.18  ops      monitoring</pre></div>
+<p><code>column -t</code> splits on whitespace by default; <code>-s,</code> sets the input separator. <code>column</code> lives in the <code>bsdextrautils</code> (Debian/Ubuntu) or <code>util-linux</code> package.</p>
+
+<h2 id="usecases">Use cases</h2>
+
+<div class="usecase"><h3><span class="uc-tag">Use case 1</span> Extract and reformat CSV columns for one department</h3>
+<p>HR wants a name/salary sheet for a single department. Instead of hard-coding field numbers, the script looks them up from the header with <code>tr</code> + <code>grep -n</code> + <code>cut</code>, so it keeps working if columns are re-ordered. <code>tee</code> saves the CSV while <code>column</code> prints a readable table.</p>
+<div class="code"><div class="code-head">bash · csv_extract.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# csv_extract.sh - pull name and salary for one department out of employees.csv
+# usage: ./csv_extract.sh [department] [csv] [outfile]
+set -euo pipefail
+
+dept="${1:-Engineering}"
+csv="${2:-datasets/employees.csv}"
+out="${3:-dept_salaries.csv}"
+[[ -r "$csv" ]] || { echo "error: $csv not readable" &gt;&amp;2; exit 1; }
+
+# look up a column number by its header name (survives column re-ordering)
+header=$(head -n 1 "$csv")
+col() { tr ',' '\n' &lt;&lt;&lt; "$header" | grep -nx "$1" | cut -d: -f1; }
+f_name=$(col name)
+f_sal=$(col salary)
+
+{
+  echo "NAME,SALARY"
+  tail -n +2 "$csv" |
+    grep ",${dept}," |                  # rows for that department
+    cut -d, -f"${f_name},${f_sal}"      # keep name + salary only
+} | tee "$out" | column -t -s,          # save CSV, show aligned table
+
+rows=$(( $(wc -l &lt; "$out") - 1 ))
+echo "----"
+echo "$rows rows saved to $out (name=field $f_name, salary=field $f_sal)"</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">./csv_extract.sh Finance
+cat dept_salaries.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>NAME         SALARY
+Arjun Nair   94000
+Isha Das     93000
+Tanvi Joshi  84000
+----
+3 rows saved to dept_salaries.csv (name=field 2, salary=field 5)
+NAME,SALARY
+Arjun Nair,94000
+Isha Das,93000
+Tanvi Joshi,84000</pre></div>
+<p><strong>Tricky parts.</strong> <code>col()</code> turns the header into one name per line; <code>grep -nx salary</code> matches the whole line exactly and prefixes the line number (<code>5:salary</code>); <code>cut -d: -f1</code> keeps the 5. The <code>{ …; }</code> group sends the header and the data through one <code>tee</code>. <code>grep ",Finance,"</code> with commas on both sides avoids matching a name that merely contains the word. For quoted CSV with embedded commas, switch to a CSV-aware tool.</p>
+</div>
+
+<div class="usecase"><h3><span class="uc-tag">Use case 2</span> Clean and normalise a messy list</h3>
+<p>A colleague emails a host list copied from Excel on Windows: CRLF line endings, mixed case, commas, semicolons, tabs, stray quotes and duplicates. Before you loop over it with ssh, normalise it to one clean hostname per line. Every step is a single <code>tr</code>.</p>
+<div class="code"><div class="code-head">bash · create the messy input</div><pre><code class="language-bash">printf 'WEB01, web02 ;DB01\r\n\r\n  cache01\t\tWeb01\r\nmon01*, db01\r\n\r\nLB-01 ,"web03"\r\n' &gt; messy.txt
+cat -v messy.txt          # -v shows the CR characters as ^M</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>WEB01, web02 ;DB01^M
+^M
+  cache01		Web01^M
+mon01*, db01^M
+^M
+LB-01 ,"web03"^M</pre></div>
+<div class="code"><div class="code-head">bash · clean_hosts.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# clean_hosts.sh - normalise a messy host list (from Excel/Windows/email) into
+#                  one lowercase hostname per line, sorted, no duplicates
+# usage: ./clean_hosts.sh messy.txt &gt; hosts.txt     (or pipe into it)
+set -euo pipefail
+
+raw=$(cat -- "${1:--}")                 # read file (or stdin when no arg) once
+
+printf '%s\n' "$raw" |
+  tr -d '\r' |                          # 1. strip Windows CR characters
+  tr ',;\t ' '\n' |                     # 2. commas, semicolons, tabs, spaces -&gt; newlines
+  tr '[:upper:]' '[:lower:]' |          # 3. lowercase
+  tr -cd 'a-z0-9.\n-' |                 # 4. delete anything not valid in a hostname
+  tr -s '\n' |                          # 5. squeeze runs of newlines (drops blank lines)
+  grep -v '^$' |                        # 6. a leading empty line can survive step 5
+  sort -u                               # 7. sort + de-duplicate</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">./clean_hosts.sh messy.txt | tee hosts.txt
+wc -l &lt; hosts.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>cache01
+db01
+lb-01
+mon01
+web01
+web02
+web03
+7</pre></div>
+<p><strong>How it works.</strong> Step 2 maps four separator characters to newline, so every token lands on its own line. Step 4 is <code>-c</code> + <code>-d</code>: delete the complement of the allowed set, removing <code>*</code> and <code>"</code>; <code>\n</code> must be in the allowed set or all lines would merge, and <code>-</code> goes last so it is not read as a range. Steps 5–6 drop the empty lines created by consecutive separators. Nine raw tokens (with three duplicates of web01) become seven unique hosts.</p>
+</div>
+
+<div class="usecase"><h3><span class="uc-tag">Use case 3</span> Build a quick disk report with cut, paste and column</h3>
+<p>You want an aligned report of mount, size and usage with a status column, saved to a dated file for the record. The script slices columns with <code>cut</code>, generates a new column in a loop, glues them with <code>paste</code>, aligns with <code>column</code> and saves with <code>tee</code>.</p>
+<div class="code"><div class="code-head">bash · disk_report.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# disk_report.sh - aligned disk usage report built from columns with cut/tr/paste/column
+# usage: ./disk_report.sh [df-output-file] [warn%]
+set -euo pipefail
+
+src="${1:-datasets/df.txt}"   # on a live box: df -h &gt; /tmp/df.txt; ./disk_report.sh /tmp/df.txt
+warn="${2:-90}"
+report="disk_report_$(date +%F).txt"
+
+body=$(tail -n +2 "$src" | tr -s ' ')          # drop header, squeeze spaces -&gt; cut works
+
+mounts=$(cut -d' ' -f6 &lt;&lt;&lt; "$body")
+sizes=$(cut -d' ' -f2 &lt;&lt;&lt; "$body")
+pcts=$(cut -d' ' -f5 &lt;&lt;&lt; "$body" | tr -d '%')  # "87%" -&gt; "87"
+
+# build a STATUS column, one line per filesystem
+status=$(while read -r p; do
+           if (( p &gt;= warn )); then echo "CRITICAL"; else echo "ok"; fi
+         done &lt;&lt;&lt; "$pcts")
+
+{
+  echo "MOUNT SIZE USE% STATUS"
+  paste -d' ' &lt;(echo "$mounts") &lt;(echo "$sizes") &lt;(echo "$pcts") &lt;(echo "$status")
+} | column -t | tee "$report"
+
+echo "----"
+echo "$(grep -c CRITICAL "$report") of $(( $(wc -l &lt; "$report") - 1 )) filesystems at or above ${warn}%"</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">./disk_report.sh datasets/df.txt 90</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>MOUNT    SIZE  USE%  STATUS
+/        50G   87    ok
+/var     200G  64    ok
+/backup  500G  96    CRITICAL
+/run     3.9G  1     ok
+/home    100G  13    ok
+/data    1.0T  92    CRITICAL
+----
+2 of 6 filesystems at or above 90%</pre></div>
+<p><strong>Explanation.</strong> <code>tr -s ' '</code> turns the aligned <code>df</code> output into single-space separated fields so <code>cut -d' '</code> can index them. Each column is held in a variable with one value per line; <code>&lt;(echo "$var")</code> (process substitution) presents each as a file to <code>paste</code>, which zips them line by line. <code>column -t</code> then pads everything. The report file is named <code>disk_report_2026-11-16.txt</code> on the day it runs. On real <code>df</code> output, a long device name can wrap onto its own line; use <code>df -hP</code> (POSIX format) to prevent that.</p>
+</div>
+
+<h2 id="gotchas">Gotchas</h2>
+<div class="table-wrap"><table>
+<tr><th>Problem</th><th>Cause and fix</th></tr>
+<tr><td><code>cut -d' '</code> returns empty fields</td><td>Multiple spaces between columns. <code>tr -s ' '</code> first, or use <code>awk '{print $2}'</code>.</td></tr>
+<tr><td><code>cut -d', '</code> error "the delimiter must be a single character"</td><td>cut only takes one character. Use <code>awk -F', '</code>.</td></tr>
+<tr><td><code>cut -f3,1</code> did not reorder</td><td>cut always prints in input order. Use <code>awk -F, -v OFS=, '{print $3,$1}'</code>.</td></tr>
+<tr><td><code>tr 'abc' 'xyz' file</code> error "extra operand"</td><td>tr reads stdin only: <code>tr 'abc' 'xyz' &lt; file</code>.</td></tr>
+<tr><td><code>tr 'hello' 'world'</code> mangles text</td><td>tr maps characters, not strings. Use <code>sed 's/hello/world/g'</code>.</td></tr>
+<tr><td><code>tr a-z A-Z</code> unquoted behaves oddly</td><td>Unquoted brackets/ranges can be glob-expanded by the shell. Always quote sets.</td></tr>
+<tr><td><code>tr</code> and UTF-8</td><td>GNU tr works on bytes, so <code>tr '[:lower:]' '[:upper:]'</code> does not uppercase <code>é</code>. Use <code>sed 's/.*/\U&amp;/'</code> or <code>awk '{print toupper($0)}'</code> in a UTF-8 locale.</td></tr>
+<tr><td><code>wc -l</code> one less than expected</td><td>Last line has no trailing newline.</td></tr>
+<tr><td><code>head -n -5</code> fails on macOS</td><td>Negative counts are GNU only. Portable: <code>sed '$d'</code> repeatedly, or <code>awk</code> with a buffer.</td></tr>
+<tr><td><code>tail -f</code> stops showing lines after rotation</td><td>Use <code>tail -F</code>.</td></tr>
+<tr><td><code>cmd &gt; f | tee</code> shows nothing</td><td>Output already went to the file. Put tee last: <code>cmd | tee f</code>.</td></tr>
+</table></div>
+
+<h2 id="practice">Practice exercises</h2>
+<details><summary>1. Print the names of everyone in Mumbai (employees.csv) using only grep and cut.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep ',Mumbai,' datasets/employees.csv | cut -d, -f2</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Rohan Mehta
+Sneha Joshi
+Neha Verma
+Harsh Verma
+Kunal Singh</pre></div></details>
+<details><summary>2. Produce a single comma-separated line of all distinct HTTP methods in access.log.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">cut -d'"' -f2 datasets/access.log | cut -d' ' -f1 | sort -u | paste -sd, -</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>GET,POST</pre></div></details>
+<details><summary>3. Convert servers.txt (without the comment line) to CSV.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -v '^#' datasets/servers.txt | tr -s ' ' ','</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>web01,10.0.1.11,deploy,web
+web02,10.0.1.12,deploy,web
+db01,10.0.1.14,dbadmin,database
+cache01,10.0.1.16,deploy,cache
+mon01,10.0.1.18,ops,monitoring</pre></div>
+<p><code>tr -s ' ' ','</code> translates spaces to commas and squeezes repeated commas in one go.</p></details>
+<details><summary>4. How many words and characters are in the user-agent strings of access.log combined?</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">cut -d'"' -f6 datasets/access.log | wc -w -c</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>    272    3094</pre></div>
+<p>Reading from a pipe, GNU <code>wc</code> pads each number to width 7.</p></details>
+<details><summary>5. Show lines 3 to 5 of df.txt, with the Use% column only, without the % sign.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">tail -n +3 datasets/df.txt | head -n 3 | tr -s ' ' | cut -d' ' -f5 | tr -d '%'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>64
+96
+1</pre></div></details>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="../labs/lab09-pipes-redirection.html">Lab 09, Pipes &amp; redirection</a> (tee, here-strings, process substitution)</li>
+  <li><a href="../labs/lab08-password-generation.html">Lab 08, Password generation</a> (<code>tr -dc … &lt; /dev/urandom</code>)</li>
+  <li><a href="../labs/lab06-access-logs.html">Lab 06, Access log analysis</a> and <a href="../labs/lab07-email-alerts.html">Lab 07, Email alerts</a></li>
+  <li><a href="sort-uniq.html">sort &amp; uniq</a>, <a href="awk.html">awk</a> (when cut is not enough), <a href="sed.html">sed</a></li>
+  <li><a href="../reference/cheatsheet.html">One-page cheat sheet</a></li>
+</ul>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

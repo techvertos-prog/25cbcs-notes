@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 04 · JSON with jq</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="lab04">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Labs / Lab 04</div>
+<h1>Lab 04: Working with JSON in Bash scripts using jq</h1>
+<p class="lead">Many tools and web APIs send their data as JSON. Bash cannot read JSON by itself, so we use a small helper program called <code>jq</code>. In this lab you learn to print JSON, pick values out of it, filter it, and use those values in simple Bash scripts. For the full jq language see the <a href="../tools/jq.html">jq tutorial</a>.</p>
+<div class="meta-row">
+  <span class="pill">Commands: jq, read, while</span><span class="pill">Difficulty: beginner</span><span class="pill grey">~45 min</span><span class="pill grey">jq 1.7</span>
+</div>
+
+<h2 id="aim">Aim and objectives</h2>
+<p><strong>Aim:</strong> read and use JSON data in Bash scripts with <code>jq</code>.</p>
+<ul>
+  <li>Print a JSON file and pick single values out of it.</li>
+  <li>Print one value from every item of a list, and filter items with <code>select</code>.</li>
+  <li>Use jq's output inside a Bash <code>while read</code> loop.</li>
+  <li>Save JSON data as a CSV file, and change a value in a JSON file safely.</li>
+</ul>
+
+<h2 id="prerequisites">Prerequisites</h2>
+<div class="code"><div class="code-head">bash · install jq</div><pre><code class="language-bash">sudo apt install -y jq     # Ubuntu / Debian   (sudo dnf install -y jq on Fedora / Rocky)
+jq --version               # should print jq-1.6 or newer</code></pre></div>
+<p>Open a terminal in the wiki folder, so that the path <code>datasets/</code> works. Basic Bash (variables, <code>if</code>, <code>while</code>) is enough.</p>
+
+<h2 id="start-here">Start here: simple scripts</h2>
+<p>Each script below adds one new idea. Save it as the given file name, then run it with <code>chmod +x name.sh</code> and <code>./name.sh</code> (or simply <code>bash name.sh</code>).</p>
+
+<h3 id="step1">Step 1: print a JSON file</h3>
+<div class="code"><div class="code-head">bash · j1_pretty.sh</div><pre><code class="language-bash">#!/bin/bash
+# Step 1: print a JSON file in a nice, coloured, indented layout
+# '.' is the simplest jq filter: it means "the whole input, unchanged"
+jq '.' datasets/servers.json | head -15     # head: show only the first 15 lines</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">chmod +x j1_pretty.sh
+./j1_pretty.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{
+  "generated": "2026-11-16T10:00:00Z",
+  "datacenter": "blr-1",
+  "servers": [
+    {
+      "hostname": "web01",
+      "ip": "10.0.1.11",
+      "role": "web",
+      "os": "Ubuntu 22.04",
+      "cpu_pct": 52,
+      "mem_pct": 53,
+      "disk_pct": 78,
+      "status": "running",
+      "tags": [
+        "prod",</pre></div>
+<ul>
+  <li><code>jq '.'</code> reads the JSON and prints it again, nicely indented. <code>.</code> means "the whole input".</li>
+  <li>If the file is not valid JSON, jq prints a <code>parse error</code> instead. So <code>jq '.'</code> is also a quick validity check.</li>
+  <li>Always put the jq filter in <strong>single quotes</strong>, so Bash does not touch it.</li>
+</ul>
+
+<h3 id="step2">Step 2: pick single values</h3>
+<div class="code"><div class="code-head">bash · j2_first.sh</div><pre><code class="language-bash">#!/bin/bash
+# Step 2: pick single values out of the first user
+file="datasets/users.json"
+jq '.[0].name' "$file"              # .[0] = first item of the array, .name = its name
+jq -r '.[0].name' "$file"           # -r = raw: print it without the quotes
+jq -r '.[0].address.city' "$file"   # go deeper: address -&gt; city
+jq 'length' "$file"                 # how many users are in the array?</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">./j2_first.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>"Aarav Verma"
+Aarav Verma
+Mumbai
+12</pre></div>
+<ul>
+  <li><code>users.json</code> is an <em>array</em> (a list). <code>.[0]</code> is the first item; counting starts at 0.</li>
+  <li><code>.name</code> picks a key from an object; you can chain keys: <code>.address.city</code>.</li>
+  <li>Without <code>-r</code> strings keep their quotes. Use <code>-r</code> (raw) whenever the value goes into a Bash variable.</li>
+</ul>
+
+<h3 id="step3">Step 3: one value from every item</h3>
+<div class="code"><div class="code-head">bash · j3_all_names.sh</div><pre><code class="language-bash">#!/bin/bash
+# Step 3: print one value from EVERY user
+# .[] means "each item of the array", | passes each item to .username
+jq -r '.[] | .username' datasets/users.json | head -5</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">./j3_all_names.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>averma
+psharma
+rmehta
+adas
+vdas</pre></div>
+<ul>
+  <li><code>.[]</code> walks through the array and outputs each user one by one.</li>
+  <li>The pipe <code>|</code> <em>inside</em> jq sends each user to the next filter, <code>.username</code>.</li>
+  <li>Result: one username per line, which is easy to use in Bash. <code>head -5</code> just shortens the output.</li>
+</ul>
+
+<h3 id="step4">Step 4: filter with select</h3>
+<div class="code"><div class="code-head">bash · j4_select.sh</div><pre><code class="language-bash">#!/bin/bash
+# Step 4: keep only the items that match a condition
+file="datasets/users.json"
+echo "Inactive users:"
+jq -r '.[] | select(.active == false) | .username' "$file"
+echo "Users in Pune:"
+jq -r '.[] | select(.address.city == "Pune") | .name' "$file"</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">./j4_select.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Inactive users:
+averma
+psharma
+rsingh
+Users in Pune:
+Rohan Mehta
+Isha Nair</pre></div>
+<ul>
+  <li><code>select(condition)</code> keeps an item only if the condition is true, like <code>if</code> for JSON.</li>
+  <li>Compare with <code>==</code>, <code>!=</code>, <code>&gt;</code>, <code>&lt;</code>. Text values need double quotes inside the filter: <code>"Pune"</code>.</li>
+</ul>
+
+<h3 id="step5">Step 5: use jq output in a Bash loop</h3>
+<div class="code"><div class="code-head">bash · j5_loop.sh</div><pre><code class="language-bash">#!/bin/bash
+# Step 5: use jq's output inside a Bash loop
+count=0
+jq -r '.[] | .username' datasets/users.json | while read -r user; do
+    count=$((count + 1))               # add 1 for each user
+    echo "$count. Hello, $user"        # use the value like any Bash variable
+done</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">./j5_loop.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>1. Hello, averma
+2. Hello, psharma
+3. Hello, rmehta
+4. Hello, adas
+5. Hello, vdas
+6. Hello, sdas
+7. Hello, akapoor
+8. Hello, knair
+9. Hello, rsingh
+10. Hello, inair
+11. Hello, kiyer
+12. Hello, msingh</pre></div>
+<ul>
+  <li><code>jq -r</code> prints one username per line; <code>while read -r user</code> reads one line per loop turn.</li>
+  <li>Inside the loop, <code>$user</code> is a normal Bash variable.</li>
+  <li>Use <code>while read</code>, not <code>for x in $(jq …)</code>: the <code>for</code> version splits "Aarav Verma" into two words.</li>
+</ul>
+
+<h2 id="concepts">Concepts</h2>
+
+<h3 id="json-basics">JSON in one minute</h3>
+<p>JSON has <strong>objects</strong> <code>{"key": value}</code>, <strong>arrays</strong> <code>[1, 2, 3]</code>, strings in double quotes, numbers, <code>true</code>/<code>false</code> and <code>null</code>. Objects and arrays can be nested inside each other.</p>
+
+<h3 id="cheat">jq filters and options you need</h3>
+<div class="table-wrap"><table>
+<tr><th>Write</th><th>Meaning</th><th>Example</th></tr>
+<tr><td><code>.</code></td><td>the whole input</td><td><code>jq '.' file.json</code></td></tr>
+<tr><td><code>.key</code></td><td>value of a key</td><td><code>.datacenter</code></td></tr>
+<tr><td><code>.[0]</code></td><td>first item of an array</td><td><code>.servers[0]</code></td></tr>
+<tr><td><code>.[]</code></td><td>every item of an array</td><td><code>.servers[]</code></td></tr>
+<tr><td><code>|</code></td><td>send the result to the next filter</td><td><code>.[] | .name</code></td></tr>
+<tr><td><code>select(…)</code></td><td>keep matching items</td><td><code>select(.cpu_pct &gt; 80)</code></td></tr>
+<tr><td><code>length</code></td><td>number of items</td><td><code>.servers | length</code></td></tr>
+<tr><td><code>[ … ]</code></td><td>collect results into an array</td><td><code>[.[] | select(.active)] | length</code></td></tr>
+<tr><td><code>-r</code></td><td>raw output, no quotes</td><td><code>jq -r '.[0].name'</code></td></tr>
+<tr><td><code>-c</code></td><td>compact, one JSON value per line</td><td><code>jq -c '.[]'</code></td></tr>
+<tr><td><code>--arg name value</code></td><td>pass a Bash variable into jq as <code>$name</code></td><td><code>jq --arg c "$city" '…$c…'</code></td></tr>
+<tr><td><code>-n</code></td><td>no input file: build new JSON</td><td><code>jq -n '{a: 1}'</code></td></tr>
+<tr><td><code>@csv</code></td><td>turn an array into a CSV line</td><td><code>[.name, .age] | @csv</code></td></tr>
+<tr><td><code>// "x"</code></td><td>default value if the key is missing</td><td><code>.phone // "n/a"</code></td></tr>
+</table></div>
+
+<h2 id="datasets">Datasets used</h2>
+<p><code>users.json</code> is an <strong>array</strong> of 12 users. Each user has a nested <code>roles</code> list and <code>address</code> object:</p>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/users.json</span></div><pre><code>[
+  {
+    "id": 1,
+    "username": "averma",
+    "name": "Aarav Verma",
+    "email": "aarav.verma@example.com",
+    "active": false,
+    "roles": [
+      "admin",
+      "editor"
+    ],
+    "address": {
+      "city": "Mumbai",
+      "pincode": "425807"
+    },
+    "last_login": "2026-11-04T14:10:00Z",
+    "storage_mb": 2503
+  },
+  {
+    "id": 2,
+    "username": "psharma",
+    "name": "Priya Sharma",
+    "email": "priya.sharma@example.com",
+    "active": false,
+    "roles": [
+      "viewer"
+    ],
+    "address": {
+      "city": "Delhi",
+      "pincode": "498263"
+    },
+    "last_login": "2026-11-14T04:15:00Z",
+    "storage_mb": 4401
+  },
+  {
+    "id": 3,
+    "username": "rmehta",
+    "name": "Rohan Mehta",
+    "email": "rohan.mehta@example.com",
+    "active": true,
+    "roles": [
+      "editor"
+    ],
+    "address": {
+      "city": "Pune",
+      "pincode": "420702"
+    },
+    "last_login": "2026-11-13T19:43:00Z",
+    "storage_mb": 2022
+  },
+  {
+    "id": 4,
+    "username": "adas",
+    "name": "Ananya Das",
+    "email": "ananya.das@example.com",
+    "active": true,
+    "roles": [
+      "editor"
+    ],
+    "address": {
+      "city": "Mumbai",
+      "pincode": "567223"
+    },
+    "last_login": "2026-11-09T14:16:00Z",
+    "storage_mb": 126
+  },
+  {
+    "id": 5,
+    "username": "vdas",
+    "name": "Vikram Das",
+    "email": "vikram.das@example.com",
+    "active": true,
+    "roles": [
+      "admin"
+    ],
+    "address": {
+      "city": "Mumbai",
+      "pincode": "490588"
+    },
+    "last_login": "2026-11-10T20:27:00Z",
+    "storage_mb": 2098
+  },
+  {
+    "id": 6,
+    "username": "sdas",
+    "name": "Sneha Das",
+    "email": "sneha.das@example.com",
+    "active": true,
+    "roles": [
+      "devops"
+    ],
+    "address": {
+      "city": "Mumbai",
+      "pincode": "427959"
+    },
+    "last_login": "2026-11-08T12:36:00Z",
+    "storage_mb": 2990
+  },
+  {
+    "id": 7,
+    "username": "akapoor",
+    "name": "Arjun Kapoor",
+    "email": "arjun.kapoor@example.com",
+    "active": true,
+    "roles": [
+      "admin",
+      "devops"
+    ],
+    "address": {
+      "city": "Delhi",
+      "pincode": "402123"
+    },
+    "last_login": "2026-11-02T19:47:00Z",
+    "storage_mb": 4119
+  },
+  {
+    "id": 8,
+    "username": "knair",
+    "name": "Kavya Nair",
+    "email": "kavya.nair@example.com",
+    "active": true,
+    "roles": [
+      "billing"
+    ],
+    "address": {
+      "city": "Delhi",
+      "pincode": "457411"
+    },
+    "last_login": "2026-11-07T19:16:00Z",
+    "storage_mb": 1170
+  },
+  {
+    "id": 9,
+    "username": "rsingh",
+    "name": "Rahul Singh",
+    "email": "rahul.singh@example.com",
+    "active": false,
+    "roles": [
+      "viewer"
+    ],
+    "address": {
+      "city": "Mumbai",
+      "pincode": "408747"
+    },
+    "last_login": "2026-11-12T23:08:00Z",
+    "storage_mb": 788
+  },
+  {
+    "id": 10,
+    "username": "inair",
+    "name": "Isha Nair",
+    "email": "isha.nair@example.com",
+    "active": true,
+    "roles": [
+      "billing",
+      "editor"
+    ],
+    "address": {
+      "city": "Pune",
+      "pincode": "541403"
+    },
+    "last_login": "2026-11-12T16:32:00Z",
+    "storage_mb": 2282
+  },
+  {
+    "id": 11,
+    "username": "kiyer",
+    "name": "Karan Iyer",
+    "email": "karan.iyer@example.com",
+    "active": true,
+    "roles": [
+      "billing",
+      "viewer"
+    ],
+    "address": {
+      "city": "Bengaluru",
+      "pincode": "522771"
+    },
+    "last_login": "2026-11-03T04:48:00Z",
+    "storage_mb": 1898
+  },
+  {
+    "id": 12,
+    "username": "msingh",
+    "name": "Meera Singh",
+    "email": "meera.singh@example.com",
+    "active": true,
+    "roles": [
+      "billing",
+      "viewer"
+    ],
+    "address": {
+      "city": "Bengaluru",
+      "pincode": "503436"
+    },
+    "last_login": "2026-11-01T08:34:00Z",
+    "storage_mb": 1062
+  }
+]</code></pre></div>
+<p><code>servers.json</code> is an <strong>object</strong>; its <code>servers</code> key holds an array of 8 servers:</p>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/servers.json</span></div><pre><code>{
+  "generated": "2026-11-16T10:00:00Z",
+  "datacenter": "blr-1",
+  "servers": [
+    {
+      "hostname": "web01",
+      "ip": "10.0.1.11",
+      "role": "web",
+      "os": "Ubuntu 22.04",
+      "cpu_pct": 52,
+      "mem_pct": 53,
+      "disk_pct": 78,
+      "status": "running",
+      "tags": [
+        "prod",
+        "critical"
+      ]
+    },
+    {
+      "hostname": "web02",
+      "ip": "10.0.1.12",
+      "role": "web",
+      "os": "Ubuntu 22.04",
+      "cpu_pct": 8,
+      "mem_pct": 91,
+      "disk_pct": 71,
+      "status": "stopped",
+      "tags": [
+        "critical",
+        "prod"
+      ]
+    },
+    {
+      "hostname": "web03",
+      "ip": "10.0.1.13",
+      "role": "web",
+      "os": "Rocky 9",
+      "cpu_pct": 64,
+      "mem_pct": 58,
+      "disk_pct": 82,
+      "status": "running",
+      "tags": [
+        "critical",
+        "prod"
+      ]
+    },
+    {
+      "hostname": "db01",
+      "ip": "10.0.1.14",
+      "role": "database",
+      "os": "Ubuntu 24.04",
+      "cpu_pct": 43,
+      "mem_pct": 83,
+      "disk_pct": 44,
+      "status": "running",
+      "tags": [
+        "critical",
+        "internal"
+      ]
+    },
+    {
+      "hostname": "db02",
+      "ip": "10.0.1.15",
+      "role": "database",
+      "os": "Ubuntu 22.04",
+      "cpu_pct": 63,
+      "mem_pct": 67,
+      "disk_pct": 83,
+      "status": "stopped",
+      "tags": [
+        "critical",
+        "public"
+      ]
+    },
+    {
+      "hostname": "cache01",
+      "ip": "10.0.1.16",
+      "role": "cache",
+      "os": "Rocky 9",
+      "cpu_pct": 17,
+      "mem_pct": 82,
+      "disk_pct": 82,
+      "status": "running",
+      "tags": [
+        "prod",
+        "backup"
+      ]
+    },
+    {
+      "hostname": "lb01",
+      "ip": "10.0.1.17",
+      "role": "loadbalancer",
+      "os": "Ubuntu 24.04",
+      "cpu_pct": 61,
+      "mem_pct": 76,
+      "disk_pct": 60,
+      "status": "running",
+      "tags": [
+        "prod",
+        "backup"
+      ]
+    },
+    {
+      "hostname": "mon01",
+      "ip": "10.0.1.18",
+      "role": "monitoring",
+      "os": "Rocky 9",
+      "cpu_pct": 87,
+      "mem_pct": 65,
+      "disk_pct": 37,
+      "status": "degraded",
+      "tags": [
+        "backup",
+        "critical"
+      ]
+    }
+  ]
+}</code></pre></div>
+
+<h3 id="into-variables">Saving jq results in Bash variables</h3>
+<div class="code"><div class="code-head">bash · command substitution</div><pre><code class="language-bash">total=$(jq 'length' datasets/users.json)
+dc=$(jq -r '.datacenter' datasets/servers.json)
+echo "There are $total users. Datacenter: $dc"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>There are 12 users. Datacenter: blr-1</pre></div>
+
+<h3 id="passing-variables">Passing a Bash variable into jq</h3>
+<p>Do not paste Bash variables into the filter text. Give them to jq with <code>--arg</code>, then use them as <code>$name</code> inside the filter:</p>
+<div class="code"><div class="code-head">bash · --arg</div><pre><code class="language-bash">city="Delhi"
+jq -r --arg c "$city" '.[] | select(.address.city == $c) | .username' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>psharma
+akapoor
+knair</pre></div>
+
+<h3 id="building-json">Building JSON with jq -n</h3>
+<p>To create new JSON from Bash variables, let jq do it. jq adds the quotes and escaping for you, so the result is always valid JSON, even when a value contains a quote:</p>
+<div class="code"><div class="code-head">bash · jq -n --arg</div><pre><code class="language-bash">name='Ravi "RK" Kumar'
+city="Pune"
+jq -n --arg n "$name" --arg c "$city" '{name: $n, city: $c, active: true}'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{
+  "name": "Ravi \"RK\" Kumar",
+  "city": "Pune",
+  "active": true
+}</pre></div>
+
+<h3 id="missing-keys">Missing keys</h3>
+<p>If a key does not exist, jq prints <code>null</code> instead of an error. Use <code>//</code> to give a default value:</p>
+<div class="code"><div class="code-head">bash · null and default</div><pre><code class="language-bash">jq -r '.[0].phone' datasets/users.json
+jq -r '.[0].phone // "no phone"' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>null
+no phone</pre></div>
+
+<h2 id="use-cases">Use cases</h2>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 1</span> User report with CSV export</h3>
+<p><strong>Scenario:</strong> your manager wants a quick summary of the user list: how many users are active, who the admins are, and a CSV file to open in a spreadsheet.</p>
+<div class="code"><div class="code-head">bash · user_report.sh</div><pre><code class="language-bash">#!/bin/bash
+# user_report.sh - simple report about the users in a JSON file
+# usage: ./user_report.sh [file]
+file="${1:-datasets/users.json}"      # use $1, or the dataset if no argument
+
+if [ ! -f "$file" ]; then             # stop if the file does not exist
+    echo "Error: $file not found"
+    exit 1
+fi
+
+total=$(jq 'length' "$file")
+active=$(jq '[.[] | select(.active == true)] | length' "$file")
+echo "Total users : $total"
+echo "Active      : $active"
+echo "Inactive    : $((total - active))"
+
+echo "--- Admins ---"
+jq -r '.[] | select(.roles | index("admin")) | .username + " (" + .email + ")"' "$file"
+
+# Save a CSV file that opens in Excel / LibreOffice
+jq -r '.[] | [.username, .name, .address.city, .storage_mb] | @csv' "$file" &gt; users.csv
+echo "Saved users.csv ($(wc -l &lt; users.csv) rows)"</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">chmod +x user_report.sh
+./user_report.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Total users : 12
+Active      : 9
+Inactive    : 3
+--- Admins ---
+averma (aarav.verma@example.com)
+vdas (vikram.das@example.com)
+akapoor (arjun.kapoor@example.com)
+Saved users.csv (12 rows)</pre></div>
+<div class="code"><div class="code-head">bash · look at the CSV</div><pre><code class="language-bash">head -3 users.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>"averma","Aarav Verma","Mumbai",2503
+"psharma","Priya Sharma","Delhi",4401
+"rmehta","Rohan Mehta","Pune",2022</pre></div>
+<p><strong>How it works:</strong></p>
+<ul>
+  <li><code>${1:-datasets/users.json}</code> means "use the first argument, or this file if none was given".</li>
+  <li><code>[.[] | select(.active == true)] | length</code> collects the active users into an array and counts it.</li>
+  <li><code>.roles | index("admin")</code> finds "admin" inside the roles list (no match gives <code>null</code>, which counts as false).</li>
+  <li><code>[ … ] | @csv</code> turns each user into one CSV line with correct quotes.</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 2</span> Server health check</h3>
+<p><strong>Scenario:</strong> a monitoring tool saves <code>servers.json</code> every few minutes. Write a script that prints OK, WARN or CRIT for every server, using a limit you can change.</p>
+<div class="code"><div class="code-head">bash · server_check.sh</div><pre><code class="language-bash">#!/bin/bash
+# server_check.sh - warn about servers with high disk or CPU usage
+# usage: ./server_check.sh [limit]      (default limit: 80 percent)
+limit="${1:-80}"
+file="datasets/servers.json"
+problems=0
+
+# jq prints one line per server: name disk cpu status
+jq -r '.servers[] | "\(.hostname) \(.disk_pct) \(.cpu_pct) \(.status)"' "$file" &gt; servers.tmp
+
+while read -r name disk cpu status; do
+    if [ "$status" != "running" ]; then
+        echo "CRIT  $name is $status"
+        problems=$((problems + 1))
+    elif [ "$disk" -gt "$limit" ] || [ "$cpu" -gt "$limit" ]; then
+        echo "WARN  $name disk=${disk}% cpu=${cpu}%"
+        problems=$((problems + 1))
+    else
+        echo "OK    $name"
+    fi
+done &lt; servers.tmp
+
+rm servers.tmp
+echo "Servers with problems: $problems"</code></pre></div>
+<div class="code"><div class="code-head">bash · run with the default limit (80), then with 60</div><pre><code class="language-bash">./server_check.sh
+echo "-----"
+./server_check.sh 60 | tail -4</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>OK    web01
+CRIT  web02 is stopped
+WARN  web03 disk=82% cpu=64%
+OK    db01
+CRIT  db02 is stopped
+WARN  cache01 disk=82% cpu=17%
+OK    lb01
+CRIT  mon01 is degraded
+Servers with problems: 5
+-----
+WARN  cache01 disk=82% cpu=17%
+WARN  lb01 disk=60% cpu=61%
+CRIT  mon01 is degraded
+Servers with problems: 7</pre></div>
+<p><strong>How it works:</strong></p>
+<ul>
+  <li>jq prints <code>name disk cpu status</code> on one line per server; <code>\(.hostname)</code> inserts a value into a string.</li>
+  <li>The lines are saved in <code>servers.tmp</code> and read with <code>while read -r name disk cpu status</code>: <code>read</code> splits each line into four variables.</li>
+  <li>We read from a file (<code>done &lt; servers.tmp</code>) instead of a pipe, so the <code>problems</code> counter still has its value after the loop.</li>
+  <li><code>-gt</code> compares numbers, <code>!=</code> compares text.</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 3</span> Changing a value in a JSON file</h3>
+<p><strong>Scenario:</strong> server <code>web02</code> was repaired. Mark it as <code>running</code> in the JSON file. We practise on a copy, <code>servers.copy.json</code>.</p>
+<div class="code"><div class="code-head">bash · set_status.sh</div><pre><code class="language-bash">#!/bin/bash
+# set_status.sh - change the status of one server inside a JSON file
+# usage: ./set_status.sh HOST STATUS [file]
+host="$1"
+status="$2"
+file="${3:-servers.copy.json}"
+
+if [ -z "$host" ] || [ -z "$status" ]; then
+    echo "Usage: $0 HOST STATUS [file]"
+    exit 1
+fi
+
+# --arg passes the Bash variables into jq safely as $h and $s
+# jq cannot edit a file in place, so write to a temp file first ...
+jq --arg h "$host" --arg s "$status" \
+   '(.servers[] | select(.hostname == $h) | .status) = $s' "$file" &gt; temp.json
+
+# ... and replace the original only if jq succeeded
+if [ $? -eq 0 ]; then
+    mv temp.json "$file"
+    echo "Updated $host -&gt; $status"
+else
+    rm -f temp.json
+    echo "jq failed, $file was not changed"
+fi</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">cp datasets/servers.json servers.copy.json
+./set_status.sh web02 running
+jq -r '.servers[] | select(.hostname == "web02") | .status' servers.copy.json
+./set_status.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Updated web02 -&gt; running
+running
+Usage: ./set_status.sh HOST STATUS [file]</pre></div>
+<p><strong>How it works:</strong></p>
+<ul>
+  <li><code>(… | .status) = $s</code> finds web02's status and sets it to the new value.</li>
+  <li>jq has no "edit in place" option. <code>jq … file &gt; file</code> would <strong>empty the file</strong>, because Bash clears it before jq reads it. So we write to <code>temp.json</code> and then <code>mv</code> it over the original.</li>
+  <li><code>$?</code> holds the exit code of the last command: 0 means jq worked.</li>
+</ul>
+</div>
+
+<details><summary>Optional: going further</summary>
+<p>jq can also do date maths. This finds users who have not logged in for more than 7 days before 16 Nov 2026 (<code>fromdateiso8601</code> turns a date into seconds; 86400 seconds = 1 day):</p>
+<div class="code"><div class="code-head">bash · stale logins</div><pre><code class="language-bash">jq -r '.[] | select(("2026-11-16T00:00:00Z" | fromdateiso8601) - (.last_login | fromdateiso8601) &gt; 7 * 86400) | .username + "  " + .last_login' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>averma  2026-11-04T14:10:00Z
+sdas  2026-11-08T12:36:00Z
+akapoor  2026-11-02T19:47:00Z
+knair  2026-11-07T19:16:00Z
+kiyer  2026-11-03T04:48:00Z
+msingh  2026-11-01T08:34:00Z</pre></div>
+</details>
+
+<h2 id="mistakes">Common mistakes</h2>
+<div class="table-wrap"><table>
+<tr><th>Mistake</th><th>What you see</th><th>Fix</th></tr>
+<tr><td>Forgot <code>-r</code></td><td>Values have quotes: <code>"averma"</code></td><td>Use <code>jq -r</code> when the value goes into Bash.</td></tr>
+<tr><td>Filter in double quotes</td><td>Strange errors, <code>$</code> parts disappear</td><td>Always use single quotes: <code>jq '.name'</code></td></tr>
+<tr><td><code>.name</code> on an array</td><td><code>Cannot index array with string "name"</code></td><td>Go into the array first: <code>.[] | .name</code> or <code>.[0].name</code></td></tr>
+<tr><td>Misspelt key</td><td>Prints <code>null</code></td><td>Check the key names with <code>jq '.[0]'</code> or <code>jq '.[0] | keys'</code>.</td></tr>
+<tr><td><code>for u in $(jq …)</code></td><td>Names split into two words</td><td><code>jq -r … | while read -r u</code></td></tr>
+<tr><td><code>jq … f.json &gt; f.json</code></td><td>File becomes empty</td><td>Write to <code>temp.json</code>, then <code>mv temp.json f.json</code>.</td></tr>
+<tr><td>Forgot <code>chmod +x</code></td><td><code>Permission denied</code></td><td><code>chmod +x script.sh</code> or run <code>bash script.sh</code>.</td></tr>
+<tr><td>Script written on Windows</td><td><code>$'\r': command not found</code></td><td>Remove CRLF endings: <code>sed -i 's/\r$//' script.sh</code> or <code>dos2unix</code>.</td></tr>
+<tr><td><code>jq: command not found</code></td><td>jq not installed</td><td><code>sudo apt install jq</code></td></tr>
+</table></div>
+
+<h2 id="exercises">Practice exercises</h2>
+<details><summary>1. Print the email address of every user.</summary>
+<div class="code"><div class="code-head">bash · solution</div><pre><code class="language-bash">jq -r '.[] | .email' datasets/users.json | head -3</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>aarav.verma@example.com
+priya.sharma@example.com
+rohan.mehta@example.com</pre></div>
+</details>
+<details><summary>2. Print the hostname of every server whose role is "database".</summary>
+<div class="code"><div class="code-head">bash · solution</div><pre><code class="language-bash">jq -r '.servers[] | select(.role == "database") | .hostname' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>db01
+db02</pre></div>
+</details>
+<details><summary>3. Count how many servers are running.</summary>
+<div class="code"><div class="code-head">bash · solution</div><pre><code class="language-bash">jq '[.servers[] | select(.status == "running")] | length' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>5</pre></div>
+</details>
+<details><summary>4. Write a script that asks for a city with read and prints the users who live there.</summary>
+<div class="code"><div class="code-head">bash · city.sh</div><pre><code class="language-bash">#!/bin/bash
+read -p "City: " city
+jq -r --arg c "$city" '.[] | select(.address.city == $c) | .name' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output (typing Mumbai)</div><pre>City: Mumbai
+Aarav Verma
+Ananya Das
+Vikram Das
+Sneha Das
+Rahul Singh</pre></div>
+</details>
+<details><summary>5. Loop over the servers and print "hostname has IP ip" for each one.</summary>
+<div class="code"><div class="code-head">bash · solution</div><pre><code class="language-bash">jq -r '.servers[] | "\(.hostname) \(.ip)"' datasets/servers.json | while read -r host ip; do
+    echo "$host has IP $ip"
+done</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>web01 has IP 10.0.1.11
+web02 has IP 10.0.1.12
+web03 has IP 10.0.1.13
+db01 has IP 10.0.1.14
+db02 has IP 10.0.1.15
+cache01 has IP 10.0.1.16
+lb01 has IP 10.0.1.17
+mon01 has IP 10.0.1.18</pre></div>
+</details>
+
+<h2 id="viva">Viva / exam questions</h2>
+<details><summary>What is jq?</summary><p>A command-line program that reads JSON, lets you pick, filter and change parts of it, and prints the result. Bash has no JSON support, so scripts use jq for this job.</p></details>
+<details><summary>What does <code>jq '.'</code> do?</summary><p>It prints the whole input unchanged but nicely formatted. It also checks that the input is valid JSON.</p></details>
+<details><summary>What is the difference between <code>.[0]</code> and <code>.[]</code>?</summary><p><code>.[0]</code> gives only the first item of an array. <code>.[]</code> gives every item, one after another.</p></details>
+<details><summary>Why do we use <code>-r</code>?</summary><p>Raw output prints strings without the double quotes, which is what Bash variables and other commands expect.</p></details>
+<details><summary>What does <code>select()</code> do?</summary><p>It keeps an item only when the condition inside is true, for example <code>select(.active == true)</code>.</p></details>
+<details><summary>How do you pass a Bash variable into a jq filter?</summary><p>With <code>--arg</code>: <code>jq --arg c "$city" '.[] | select(.address.city == $c)'</code>. Inside the filter the variable is <code>$c</code>.</p></details>
+<details><summary>Why is <code>jq -n --arg</code> better than building JSON with <code>echo</code>?</summary><p>jq adds the correct quotes and escapes special characters, so the JSON is always valid. With <code>echo</code>, a value containing a quote breaks the JSON.</p></details>
+<details><summary>How do you change a value in a JSON file?</summary><p>Run jq with an assignment and write to a temporary file, then move it over the original: <code>jq '.a = 1' f.json &gt; temp.json &amp;&amp; mv temp.json f.json</code>.</p></details>
+<details><summary>What does jq print for a key that does not exist?</summary><p><code>null</code>. Use <code>.key // "default"</code> to print a default value instead.</p></details>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="../tools/jq.html">jq: JSON processor</a> (all filters, <code>map</code>, <code>group_by</code>, more examples)</li>
+  <li><a href="../tools/curl.html">curl: HTTP from the shell</a> (getting JSON from web APIs)</li>
+  <li><a href="lab05-cloudflare-api.html">Lab 05: Cloudflare API</a> (jq with a real web API)</li>
+  <li><a href="lab12-service-health.html">Lab 12: Service health monitoring</a> (also uses <code>servers.json</code>)</li>
+</ul>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

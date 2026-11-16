@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 06 · Access Log Analysis</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="lab06">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Labs / Lab 06</div>
+<h1>Lab 06: Web server access log analysis</h1>
+<p class="lead">Every time someone opens a page, the web server (Apache or Nginx) writes one line into its <strong>access log</strong>. With <code>awk</code>, <code>sort</code>, <code>uniq</code> and <code>grep</code> you can answer questions like "who visits most?", "which pages are missing?" and "is someone attacking us?". All outputs on this page are real, made from <code>datasets/access.log</code>.</p>
+<div class="meta-row">
+  <span class="pill">Commands: awk, sort, uniq, grep, wc</span><span class="pill">Difficulty: beginner</span><span class="pill grey">~45 min</span>
+</div>
+
+<h2 id="aim">Aim and objectives</h2>
+<p><strong>Aim:</strong> analyse a web server access log with shell commands and simple scripts.</p>
+<ul>
+  <li>Know which column of a log line holds the IP, path, status code and size.</li>
+  <li>Count things with the <code>sort | uniq -c | sort -rn</code> pipeline.</li>
+  <li>Find errors (404, 5xx) and signs of attacks.</li>
+  <li>Write short report scripts.</li>
+</ul>
+
+<h2 id="prerequisites">Prerequisites</h2>
+<p>All tools are preinstalled on Linux. On a real server the logs are in <code>/var/log/apache2/access.log</code> or <code>/var/log/nginx/access.log</code> (read them with <code>sudo</code>). Here we use the practice file. Basic <a href="../tools/awk.html">awk</a> helps.</p>
+
+<h2 id="dataset">Dataset</h2>
+<p>80 requests from one day. Each line is one request:</p>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/access.log</span></div><pre><code>192.168.1.10 - - [16/Nov/2026:08:11:14 +0530] "GET /api/v1/users HTTP/1.1" 200 16949 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:08:24:08 +0530] "GET /api/v1/users HTTP/1.1" 200 36641 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:08:25:00 +0530] "GET /index.php HTTP/1.1" 200 34018 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:08:34:54 +0530] "GET /js/app.js HTTP/1.1" 200 36613 "-" "curl/8.4.0"
+203.0.113.7 - - [16/Nov/2026:08:42:53 +0530] "GET /old-page HTTP/1.1" 301 0 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+10.0.0.5 - - [16/Nov/2026:08:55:07 +0530] "GET /about.html HTTP/1.1" 200 15010 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+10.0.0.5 - - [16/Nov/2026:08:57:01 +0530] "GET /blog/post-1 HTTP/1.1" 200 23441 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:09:11:07 +0530] "POST /wp-login.php HTTP/1.1" 200 25707 "https://www.google.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+203.0.113.7 - - [16/Nov/2026:09:25:36 +0530] "GET /.env HTTP/1.1" 404 365 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:09:37:57 +0530] "GET /js/app.js HTTP/1.1" 200 51563 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:09:52:52 +0530] "GET / HTTP/1.1" 200 19117 "https://www.google.com/" "curl/8.4.0"
+10.0.0.5 - - [16/Nov/2026:09:55:58 +0530] "GET /index.php HTTP/1.1" 200 18396 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:10:06:41 +0530] "GET /images/logo.png HTTP/1.1" 200 16943 "https://example.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.15 - - [16/Nov/2026:10:13:29 +0530] "GET /api/v1/report HTTP/1.1" 500 532 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:10:25:30 +0530] "POST /api/v1/orders HTTP/1.1" 200 3003 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.10 - - [16/Nov/2026:10:30:24 +0530] "GET /admin HTTP/1.1" 403 470 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:10:34:21 +0530] "GET /blog/post-2 HTTP/1.1" 200 43029 "-" "curl/8.4.0"
+192.168.1.10 - - [16/Nov/2026:10:39:12 +0530] "GET /api/v1/users HTTP/1.1" 200 36222 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+10.0.0.5 - - [16/Nov/2026:10:49:29 +0530] "GET /index.php HTTP/1.1" 200 9965 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+203.0.113.99 - - [16/Nov/2026:10:51:22 +0530] "GET /missing.html HTTP/1.1" 404 258 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:11:05:13 +0530] "GET /css/style.css HTTP/1.1" 200 26116 "https://example.com/" "curl/8.4.0"
+192.168.1.15 - - [16/Nov/2026:11:14:34 +0530] "GET /images/logo.png HTTP/1.1" 200 1652 "-" "python-requests/2.31.0"
+172.16.4.8 - - [16/Nov/2026:11:26:32 +0530] "GET /api/v1/users HTTP/1.1" 200 51270 "https://www.google.com/" "python-requests/2.31.0"
+192.168.1.15 - - [16/Nov/2026:11:28:46 +0530] "GET /index.php HTTP/1.1" 200 1112 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.99 - - [16/Nov/2026:11:37:38 +0530] "GET /images/logo.png HTTP/1.1" 200 7873 "https://www.google.com/" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:11:52:19 +0530] "GET /css/style.css HTTP/1.1" 200 10916 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+185.220.101.3 - - [16/Nov/2026:12:01:51 +0530] "POST /wp-login.php HTTP/1.1" 200 32921 "-" "sqlmap/1.7.11#stable"
+185.220.101.3 - - [16/Nov/2026:12:04:05 +0530] "GET /admin HTTP/1.1" 403 302 "-" "sqlmap/1.7.11#stable"
+172.16.4.8 - - [16/Nov/2026:12:08:31 +0530] "GET /api/v1/report HTTP/1.1" 500 223 "https://example.com/" "python-requests/2.31.0"
+192.168.1.10 - - [16/Nov/2026:12:22:46 +0530] "GET /api/v1/users HTTP/1.1" 200 51089 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+10.0.0.5 - - [16/Nov/2026:12:34:21 +0530] "GET /images/logo.png HTTP/1.1" 200 18270 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+185.220.101.3 - - [16/Nov/2026:12:38:17 +0530] "GET /.env HTTP/1.1" 404 545 "https://www.google.com/" "sqlmap/1.7.11#stable"
+185.220.101.3 - - [16/Nov/2026:12:45:25 +0530] "GET /xmlrpc.php HTTP/1.1" 403 411 "-" "sqlmap/1.7.11#stable"
+192.168.1.15 - - [16/Nov/2026:12:49:58 +0530] "GET /blog/post-1 HTTP/1.1" 200 39455 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:13:00:20 +0530] "GET / HTTP/1.1" 200 42259 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+172.16.4.8 - - [16/Nov/2026:13:01:49 +0530] "GET /missing.html HTTP/1.1" 404 216 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+203.0.113.7 - - [16/Nov/2026:13:06:54 +0530] "GET /index.php HTTP/1.1" 200 9571 "https://example.com/" "python-requests/2.31.0"
+203.0.113.99 - - [16/Nov/2026:13:11:22 +0530] "POST /api/v1/orders HTTP/1.1" 200 7252 "https://example.com/" "python-requests/2.31.0"
+10.0.0.5 - - [16/Nov/2026:13:17:44 +0530] "GET /wp-admin/ HTTP/1.1" 302 0 "-" "python-requests/2.31.0"
+203.0.113.7 - - [16/Nov/2026:13:29:33 +0530] "GET /js/app.js HTTP/1.1" 200 4872 "https://www.google.com/" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:13:43:32 +0530] "GET /about.html HTTP/1.1" 200 13365 "https://example.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:13:46:15 +0530] "GET /about.html HTTP/1.1" 200 17271 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+172.16.4.8 - - [16/Nov/2026:14:00:22 +0530] "GET /images/logo.png HTTP/1.1" 200 4215 "-" "python-requests/2.31.0"
+185.220.101.3 - - [16/Nov/2026:14:02:17 +0530] "GET /.env HTTP/1.1" 404 388 "https://example.com/" "sqlmap/1.7.11#stable"
+192.168.1.15 - - [16/Nov/2026:14:10:49 +0530] "GET /blog/post-2 HTTP/1.1" 200 4742 "https://example.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+185.220.101.3 - - [16/Nov/2026:14:11:11 +0530] "POST /xmlrpc.php HTTP/1.1" 403 536 "https://example.com/" "sqlmap/1.7.11#stable"
+192.168.1.10 - - [16/Nov/2026:14:14:09 +0530] "GET /index.php HTTP/1.1" 200 4732 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:14:27:14 +0530] "GET / HTTP/1.1" 200 32146 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+185.220.101.3 - - [16/Nov/2026:14:28:32 +0530] "GET /.env HTTP/1.1" 404 215 "-" "sqlmap/1.7.11#stable"
+172.16.4.8 - - [16/Nov/2026:14:40:23 +0530] "GET /blog/post-2 HTTP/1.1" 200 38234 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:14:51:17 +0530] "GET /js/app.js HTTP/1.1" 200 37942 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.15 - - [16/Nov/2026:14:56:04 +0530] "GET /api/v1/users HTTP/1.1" 200 16542 "https://example.com/" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+203.0.113.7 - - [16/Nov/2026:14:58:38 +0530] "GET /contact.html HTTP/1.1" 200 21620 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+203.0.113.7 - - [16/Nov/2026:15:06:47 +0530] "GET /css/style.css HTTP/1.1" 200 7452 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.15 - - [16/Nov/2026:15:15:45 +0530] "GET /api/v1/report HTTP/1.1" 500 215 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+192.168.1.10 - - [16/Nov/2026:15:20:56 +0530] "GET /missing.html HTTP/1.1" 404 540 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+45.33.32.156 - - [16/Nov/2026:15:32:39 +0530] "GET /contact.html HTTP/1.1" 200 44375 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:15:37:29 +0530] "GET / HTTP/1.1" 200 37156 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+203.0.113.7 - - [16/Nov/2026:15:42:37 +0530] "GET /api/v1/users HTTP/1.1" 200 14242 "https://www.google.com/" "python-requests/2.31.0"
+10.0.0.23 - - [16/Nov/2026:15:51:34 +0530] "GET /admin HTTP/1.1" 403 206 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.15 - - [16/Nov/2026:16:06:03 +0530] "GET / HTTP/1.1" 200 51436 "https://www.google.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+198.51.100.42 - - [16/Nov/2026:16:09:08 +0530] "GET /images/logo.png HTTP/1.1" 200 28928 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+192.168.1.10 - - [16/Nov/2026:16:11:22 +0530] "GET /.env HTTP/1.1" 404 256 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:16:25:56 +0530] "GET /images/logo.png HTTP/1.1" 200 29066 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1"
+10.0.0.5 - - [16/Nov/2026:16:31:31 +0530] "GET /api/v1/report HTTP/1.1" 500 200 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:16:43:29 +0530] "GET / HTTP/1.1" 200 37592 "-" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:16:47:51 +0530] "GET /xmlrpc.php HTTP/1.1" 403 391 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+185.220.101.3 - - [16/Nov/2026:17:00:45 +0530] "GET /xmlrpc.php HTTP/1.1" 403 556 "-" "sqlmap/1.7.11#stable"
+192.168.1.10 - - [16/Nov/2026:17:05:38 +0530] "GET /api/v1/users HTTP/1.1" 200 25970 "https://example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+192.168.1.10 - - [16/Nov/2026:17:09:45 +0530] "GET /admin HTTP/1.1" 403 359 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.10 - - [16/Nov/2026:17:13:53 +0530] "GET /index.php HTTP/1.1" 200 22412 "-" "Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0"
+192.168.1.15 - - [16/Nov/2026:17:27:24 +0530] "GET /js/app.js HTTP/1.1" 200 27093 "https://www.google.com/" "python-requests/2.31.0"
+192.168.1.10 - - [16/Nov/2026:17:28:12 +0530] "POST /xmlrpc.php HTTP/1.1" 403 315 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"
+10.0.0.5 - - [16/Nov/2026:17:38:42 +0530] "GET /api/v1/users HTTP/1.1" 200 21457 "-" "curl/8.4.0"
+172.16.4.8 - - [16/Nov/2026:17:45:36 +0530] "GET /index.php HTTP/1.1" 200 3808 "https://example.com/" "python-requests/2.31.0"
+10.0.0.23 - - [16/Nov/2026:17:45:57 +0530] "POST /api/v1/orders HTTP/1.1" 200 49524 "-" "python-requests/2.31.0"
+10.0.0.5 - - [16/Nov/2026:17:52:29 +0530] "GET /api/v1/report HTTP/1.1" 500 349 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+45.33.32.156 - - [16/Nov/2026:18:04:08 +0530] "GET /api/v1/users HTTP/1.1" 200 20581 "https://www.google.com/" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:18:15:50 +0530] "GET /blog/post-2 HTTP/1.1" 200 20276 "-" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+10.0.0.5 - - [16/Nov/2026:18:19:26 +0530] "GET /api/v1/report HTTP/1.1" 500 526 "-" "python-requests/2.31.0"</code></pre></div>
+
+<h2 id="start-here">Start here: simple scripts</h2>
+<p>Save each script, then run it with <code>chmod +x name.sh</code> and <code>./name.sh</code> (or <code>bash name.sh</code>) from the wiki folder.</p>
+
+<h3 id="step1">Step 1: print one column</h3>
+<div class="code"><div class="code-head">bash · l1_ips.sh</div><pre><code class="language-bash">#!/bin/bash
+# Step 1: print the first column (the client IP) of the first 5 lines
+# awk splits every line on spaces; $1 is the first field
+awk '{print $1}' datasets/access.log | head -5</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">chmod +x l1_ips.sh
+./l1_ips.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>192.168.1.10
+192.168.1.10
+192.168.1.10
+192.168.1.10
+203.0.113.7</pre></div>
+<ul>
+  <li>awk splits each line at the spaces into fields <code>$1</code>, <code>$2</code>, <code>$3</code> …</li>
+  <li><code>$1</code> is the client's IP address.</li>
+  <li><code>head -5</code> shows only the first 5 lines of output.</li>
+</ul>
+
+<h3 id="step2">Step 2: count and rank (the most useful pipeline)</h3>
+<div class="code"><div class="code-head">bash · l2_top_ips.sh</div><pre><code class="language-bash">#!/bin/bash
+# Step 2: which IPs sent the most requests?
+awk '{print $1}' datasets/access.log |   # 1. take the IP column
+    sort |                               # 2. put equal IPs next to each other
+    uniq -c |                            # 3. count each group
+    sort -rn |                           # 4. biggest count first
+    head -5                              # 5. keep the top 5</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">./l2_top_ips.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>     18 192.168.1.10
+     14 192.168.1.15
+     13 10.0.0.5
+     11 203.0.113.7
+      8 185.220.101.3</pre></div>
+<ul>
+  <li><code>uniq -c</code> counts lines that are the same, but only when they are <em>next to each other</em>. That is why we <code>sort</code> first.</li>
+  <li><code>sort -rn</code> sorts by number (<code>-n</code>), biggest first (<code>-r</code>).</li>
+  <li>Change <code>$1</code> to another field and the same pipeline counts something else.</li>
+</ul>
+
+<h3 id="step3">Step 3: status codes</h3>
+<div class="code"><div class="code-head">bash · l3_status.sh</div><pre><code class="language-bash">#!/bin/bash
+# Step 3: how many responses of each status code? ($9 = status)
+awk '{print $9}' datasets/access.log | sort | uniq -c | sort -rn</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">./l3_status.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>     55 200
+      9 403
+      8 404
+      6 500
+      1 302
+      1 301</pre></div>
+<ul>
+  <li><code>$9</code> is the HTTP status code: 200 = OK, 301/302 = redirect, 403 = forbidden, 404 = not found, 500 = server error.</li>
+  <li>55 of 80 requests were OK; the 6 server errors (500) need a closer look.</li>
+</ul>
+
+<h3 id="step4">Step 4: which pages were not found?</h3>
+<div class="code"><div class="code-head">bash · l4_404.sh</div><pre><code class="language-bash">#!/bin/bash
+# Step 4: which pages were not found?
+# The pattern $9 == 404 keeps only lines whose status is 404; then print the path ($7)
+awk '$9 == 404 {print $7}' datasets/access.log | sort | uniq -c | sort -rn</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">./l4_404.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>      5 /.env
+      3 /missing.html</pre></div>
+<ul>
+  <li>In awk, <code>condition {action}</code> runs the action only on lines where the condition is true.</li>
+  <li><code>/missing.html</code> is probably a broken link. <code>/.env</code> is a secret config file that attackers look for.</li>
+</ul>
+
+<h2 id="concepts">Concepts</h2>
+
+<h3 id="format">The fields of a log line</h3>
+<p>Most servers use the <em>combined log format</em>. Take this line from the dataset:</p>
+<div class="code"><div class="code-head">one log line</div><pre><code>185.220.101.3 - - [16/Nov/2026:12:01:51 +0530] "POST /wp-login.php HTTP/1.1" 200 32921 "-" "sqlmap/1.7.11#stable"</code></pre></div>
+<div class="table-wrap"><table>
+<tr><th>awk field</th><th>Value</th><th>Meaning</th></tr>
+<tr><td><code>$1</code></td><td><code>185.220.101.3</code></td><td>client IP address</td></tr>
+<tr><td><code>$4</code></td><td><code>[16/Nov/2026:12:01:51</code></td><td>date and time</td></tr>
+<tr><td><code>$6</code></td><td><code>"POST</code></td><td>method (with a leading quote)</td></tr>
+<tr><td><code>$7</code></td><td><code>/wp-login.php</code></td><td>requested page (path)</td></tr>
+<tr><td><code>$9</code></td><td><code>200</code></td><td>status code</td></tr>
+<tr><td><code>$10</code></td><td><code>32921</code></td><td>bytes sent</td></tr>
+<tr><td><code>-F'"'</code> then <code>$6</code></td><td><code>sqlmap/1.7.11#stable</code></td><td>user agent (browser or tool name)</td></tr>
+</table></div>
+<p>The user agent contains spaces, so normal fields cut it into pieces. Splitting the line at the double quote (<code>-F'"'</code>) puts the whole user agent into field 6:</p>
+<div class="code"><div class="code-head">bash · check the fields of the first line</div><pre><code class="language-bash">head -1 datasets/access.log | awk '{print "ip=" $1, "page=" $7, "status=" $9, "bytes=" $10}'
+head -1 datasets/access.log | awk -F'"' '{print "agent=" $6}'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>ip=192.168.1.10 page=/api/v1/users status=200 bytes=16949
+agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) Safari/605.1</pre></div>
+
+<h3 id="cheat">Useful pieces</h3>
+<div class="table-wrap"><table>
+<tr><th>Command</th><th>What it does</th></tr>
+<tr><td><code>awk '{print $7}' log</code></td><td>print one column</td></tr>
+<tr><td><code>awk '$9 == 404' log</code></td><td>keep lines where a column has a value</td></tr>
+<tr><td><code>awk '{sum += $10} END {print sum}' log</code></td><td>add up a column</td></tr>
+<tr><td><code>sort | uniq -c | sort -rn</code></td><td>count and rank</td></tr>
+<tr><td><code>sort -u | wc -l</code></td><td>count different values</td></tr>
+<tr><td><code>grep -c "text" log</code></td><td>count lines that contain text</td></tr>
+<tr><td><code>wc -l &lt; log</code></td><td>count all lines (requests)</td></tr>
+</table></div>
+
+<h3 id="more">More quick questions</h3>
+<div class="code"><div class="code-head">bash · server errors (status 500 and above): time, IP, page</div><pre><code class="language-bash">awk '$9 &gt;= 500 {print $4, $1, $7}' datasets/access.log</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>[16/Nov/2026:10:13:29 192.168.1.15 /api/v1/report
+[16/Nov/2026:12:08:31 172.16.4.8 /api/v1/report
+[16/Nov/2026:15:15:45 192.168.1.15 /api/v1/report
+[16/Nov/2026:16:31:31 10.0.0.5 /api/v1/report
+[16/Nov/2026:17:52:29 10.0.0.5 /api/v1/report
+[16/Nov/2026:18:19:26 10.0.0.5 /api/v1/report</pre></div>
+<div class="code"><div class="code-head">bash · total data sent</div><pre><code class="language-bash">awk '{sum += $10} END {print sum, "bytes"}' datasets/access.log</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>1331796 bytes</pre></div>
+<div class="code"><div class="code-head">bash · requests per hour (characters 14-15 of $4 are the hour)</div><pre><code class="language-bash">awk '{print substr($4, 14, 2)}' datasets/access.log | sort | uniq -c</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>      7 08
+      5 09
+      8 10
+      6 11
+      8 12
+      8 13
+     11 14
+      7 15
+      7 16
+     10 17
+      3 18</pre></div>
+<div class="code"><div class="code-head">bash · most common user agents</div><pre><code class="language-bash">awk -F'"' '{print $6}' datasets/access.log | sort | uniq -c | sort -rn | head -4</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>     17 python-requests/2.31.0
+     17 Googlebot/2.1 (+http://www.google.com/bot.html)
+     12 Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0
+     10 Mozilla/5.0 (X11; Linux x86_64) Firefox/121.0</pre></div>
+
+<h2 id="use-cases">Use cases</h2>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 1</span> Daily traffic report</h3>
+<p><strong>Scenario:</strong> the website owner wants a short summary of the day: number of requests, visitors, data sent, top visitors, status codes and most popular pages.</p>
+<div class="code"><div class="code-head">bash · daily_report.sh</div><pre><code class="language-bash">#!/bin/bash
+# daily_report.sh - short traffic report for an access log
+# usage: ./daily_report.sh [logfile]
+log="${1:-datasets/access.log}"
+
+if [ ! -f "$log" ]; then
+    echo "Error: $log not found"
+    exit 1
+fi
+
+echo "===== Traffic report: $log ====="
+echo "Total requests : $(wc -l &lt; "$log")"
+echo "Unique IPs     : $(awk '{print $1}' "$log" | sort -u | wc -l)"
+echo "Data sent (KB) : $(awk '{sum += $10} END {print int(sum / 1024)}' "$log")"
+
+echo "--- Top 3 IPs ---"
+awk '{print $1}' "$log" | sort | uniq -c | sort -rn | head -3
+
+echo "--- Status codes ---"
+awk '{print $9}' "$log" | sort | uniq -c | sort -rn
+
+echo "--- Top 3 pages ---"
+awk '{print $7}' "$log" | sort | uniq -c | sort -rn | head -3</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">chmod +x daily_report.sh
+./daily_report.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>===== Traffic report: datasets/access.log =====
+Total requests : 80
+Unique IPs     : 10
+Data sent (KB) : 1300
+--- Top 3 IPs ---
+     18 192.168.1.10
+     14 192.168.1.15
+     13 10.0.0.5
+--- Status codes ---
+     55 200
+      9 403
+      8 404
+      6 500
+      1 302
+      1 301
+--- Top 3 pages ---
+     10 /api/v1/users
+      8 /index.php
+      7 /images/logo.png</pre></div>
+<p><strong>How it works:</strong></p>
+<ul>
+  <li><code>$(…)</code> runs a command and puts its output into the <code>echo</code> line.</li>
+  <li><code>sort -u | wc -l</code> counts how many <em>different</em> IPs there are.</li>
+  <li><code>{sum += $10} END {print …}</code> adds the bytes of every line, then prints once at the end. <code>int(sum / 1024)</code> converts to whole kilobytes.</li>
+  <li>The rest is the count-and-rank pipeline from Step 2 on different columns.</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 2</span> Attack detection</h3>
+<p><strong>Scenario:</strong> you suspect someone is scanning the website. Look for a known attack tool (sqlmap), requests for secret files, WordPress login attempts, and IPs that collect many "forbidden" or "not found" errors.</p>
+<div class="code"><div class="code-head">bash · attack_check.sh</div><pre><code class="language-bash">#!/bin/bash
+# attack_check.sh - look for common attack patterns in an access log
+# usage: ./attack_check.sh [logfile]
+log="${1:-datasets/access.log}"
+
+echo "Requests from the sqlmap attack tool:"
+grep -c "sqlmap" "$log"
+
+echo "Requests for secret files (/.env):"
+grep -c "/.env" "$log"
+
+echo "Login attempts (POST /wp-login.php) per IP:"
+grep "POST /wp-login.php" "$log" | awk '{print $1}' | sort | uniq -c
+
+echo "IPs that got 3 or more 403/404 errors:"
+awk '$9 == 403 || $9 == 404 {print $1}' "$log" | sort | uniq -c | sort -rn |
+    while read -r count ip; do
+        if [ "$count" -ge 3 ]; then
+            echo "  SUSPICIOUS: $ip ($count errors)"
+        fi
+    done</code></pre></div>
+<div class="code"><div class="code-head">bash · run</div><pre><code class="language-bash">chmod +x attack_check.sh
+./attack_check.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Requests from the sqlmap attack tool:
+8
+Requests for secret files (/.env):
+5
+Login attempts (POST /wp-login.php) per IP:
+      1 185.220.101.3
+      1 192.168.1.10
+IPs that got 3 or more 403/404 errors:
+  SUSPICIOUS: 185.220.101.3 (7 errors)
+  SUSPICIOUS: 192.168.1.10 (5 errors)</pre></div>
+<p><strong>How it works:</strong></p>
+<ul>
+  <li><code>grep -c</code> counts matching lines instead of printing them.</li>
+  <li><code>$9 == 403 || $9 == 404</code> means "status is 403 OR 404".</li>
+  <li><code>while read -r count ip</code> reads the two columns of <code>uniq -c</code> into two variables, and <code>if [ "$count" -ge 3 ]</code> keeps only IPs with 3 or more errors.</li>
+  <li><code>185.220.101.3</code> uses sqlmap and asks for <code>/.env</code> and <code>/xmlrpc.php</code>: clearly a scanner. <code>192.168.1.10</code> is an internal address, maybe an admin, so check before blocking.</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 3</span> Error-rate monitor</h3>
+<p><strong>Scenario:</strong> users say the site "sometimes fails". Compute what percent of requests got a server error (5xx) and print an alert above a limit.</p>
+<div class="code"><div class="code-head">bash · error_monitor.sh</div><pre><code class="language-bash">#!/bin/bash
+# error_monitor.sh - alert if too many requests failed with a 5xx server error
+# usage: ./error_monitor.sh [logfile] [max_percent]
+log="${1:-datasets/access.log}"
+max="${2:-5}"
+
+total=$(wc -l &lt; "$log")
+errors=$(awk '$9 &gt;= 500' "$log" | wc -l)
+percent=$((errors * 100 / total))          # whole numbers only in Bash
+
+echo "Requests: $total, server errors: $errors ($percent%)"
+
+if [ "$percent" -gt "$max" ]; then
+    echo "ALERT: error rate is above $max%"
+    echo "Failing pages:"
+    awk '$9 &gt;= 500 {print $7}' "$log" | sort | uniq -c
+    exit 1
+else
+    echo "OK: error rate is fine"
+fi</code></pre></div>
+<div class="code"><div class="code-head">bash · run with the default limit (5%), then with 10%</div><pre><code class="language-bash">./error_monitor.sh; echo "exit code: $?"
+./error_monitor.sh datasets/access.log 10; echo "exit code: $?"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Requests: 80, server errors: 6 (7%)
+ALERT: error rate is above 5%
+Failing pages:
+      6 /api/v1/report
+exit code: 1
+Requests: 80, server errors: 6 (7%)
+OK: error rate is fine
+exit code: 0</pre></div>
+<p><strong>How it works:</strong></p>
+<ul>
+  <li><code>awk '$9 &gt;= 500' "$log" | wc -l</code> counts the lines with status 500 or more.</li>
+  <li><code>$((errors * 100 / total))</code> is Bash arithmetic. It only does whole numbers, so 6 × 100 / 80 = 7 (not 7.5). Multiply <em>before</em> dividing, or you get 0.</li>
+  <li><code>exit 1</code> on alert lets another script or cron job notice the problem; <code>echo $?</code> shows the exit code.</li>
+</ul>
+</div>
+
+<details><summary>Optional: going further (live monitoring with tail -f)</summary>
+<p><code>tail -f</code> keeps a file open and prints new lines as the server writes them. Piped into awk, it shows every error the moment it happens. Press <kbd>Ctrl+C</kbd> to stop.</p>
+<div class="code"><div class="code-head">bash · watch_errors.sh</div><pre><code class="language-bash">#!/bin/bash
+# show every 4xx/5xx response as it is written to the log
+tail -f /var/log/nginx/access.log | awk '$9 &gt;= 400 {print $4, $1, $9, $7; fflush()}'</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>[16/Nov/2026:14:02:17 185.220.101.3 404 /.env
+[16/Nov/2026:14:11:11 185.220.101.3 403 /xmlrpc.php
+[16/Nov/2026:14:28:32 185.220.101.3 404 /.env</pre></div>
+<p><code>fflush()</code> makes awk print each line immediately instead of collecting output in a buffer.</p>
+</details>
+
+<h2 id="mistakes">Common mistakes</h2>
+<div class="table-wrap"><table>
+<tr><th>Mistake</th><th>What happens</th><th>Fix</th></tr>
+<tr><td><code>uniq -c</code> without <code>sort</code></td><td>The same IP appears many times with small counts</td><td>Always <code>sort | uniq -c</code>.</td></tr>
+<tr><td><code>sort -r</code> instead of <code>sort -rn</code></td><td>9 is placed above 18 (text order)</td><td>Add <code>-n</code> for numbers.</td></tr>
+<tr><td>Double quotes around the awk program</td><td>Bash replaces <code>$1</code> before awk sees it</td><td>Use single quotes: <code>awk '{print $1}'</code></td></tr>
+<tr><td>Wrong field number</td><td>Empty or strange output</td><td>Print the fields of one line first (see Concepts).</td></tr>
+<tr><td><code>[ $count -ge 3]</code></td><td><code>missing ]</code> error</td><td>Spaces are required: <code>[ "$count" -ge 3 ]</code></td></tr>
+<tr><td><code>[ "$a" = 5 ]</code> vs <code>-eq</code></td><td><code>=</code> compares text, <code>-eq</code> compares numbers</td><td>Use <code>-eq -gt -lt</code> for numbers.</td></tr>
+<tr><td><code>Permission denied</code></td><td>Script not executable, or log needs root</td><td><code>chmod +x script.sh</code>; <code>sudo</code> for <code>/var/log</code>.</td></tr>
+<tr><td>Script written on Windows</td><td><code>$'\r': command not found</code></td><td><code>sed -i 's/\r$//' script.sh</code> or <code>dos2unix script.sh</code></td></tr>
+</table></div>
+
+<h2 id="exercises">Practice exercises</h2>
+<details><summary>1. How many requests used the POST method?</summary>
+<div class="code"><div class="code-head">bash · solution</div><pre><code class="language-bash">grep -c '"POST' datasets/access.log</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>7</pre></div>
+</details>
+<details><summary>2. Which IP received the most 403 (forbidden) responses?</summary>
+<div class="code"><div class="code-head">bash · solution</div><pre><code class="language-bash">awk '$9 == 403 {print $1}' datasets/access.log | sort | uniq -c | sort -rn | head -1</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>      4 185.220.101.3</pre></div>
+</details>
+<details><summary>3. List the 3 most requested pages.</summary>
+<div class="code"><div class="code-head">bash · solution</div><pre><code class="language-bash">awk '{print $7}' datasets/access.log | sort | uniq -c | sort -rn | head -3</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>     10 /api/v1/users
+      8 /index.php
+      7 /images/logo.png</pre></div>
+</details>
+<details><summary>4. Print every request made by 185.220.101.3 (only time, page and status).</summary>
+<div class="code"><div class="code-head">bash · solution</div><pre><code class="language-bash">grep "^185.220.101.3 " datasets/access.log | awk '{print $4, $7, $9}'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>[16/Nov/2026:12:01:51 /wp-login.php 200
+[16/Nov/2026:12:04:05 /admin 403
+[16/Nov/2026:12:38:17 /.env 404
+[16/Nov/2026:12:45:25 /xmlrpc.php 403
+[16/Nov/2026:14:02:17 /.env 404
+[16/Nov/2026:14:11:11 /xmlrpc.php 403
+[16/Nov/2026:14:28:32 /.env 404
+[16/Nov/2026:17:00:45 /xmlrpc.php 403</pre></div>
+</details>
+<details><summary>5. Write a script that takes an IP as $1 and prints how many requests it made.</summary>
+<div class="code"><div class="code-head">bash · solution (count_ip.sh, run here with 10.0.0.5)</div><pre><code class="language-bash">#!/bin/bash
+ip="$1"
+count=$(awk -v ip="$ip" '$1 == ip' datasets/access.log | wc -l)
+echo "$ip made $count requests"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>10.0.0.5 made 13 requests</pre></div>
+<p><code>-v ip="$ip"</code> gives the Bash variable to awk as the awk variable <code>ip</code>.</p>
+</details>
+
+<h2 id="viva">Viva / exam questions</h2>
+<details><summary>What is an access log?</summary><p>A file where the web server writes one line for every request: who asked (IP), when, which page, the status code, the size and the browser.</p></details>
+<details><summary>Which awk fields hold the IP, page and status code?</summary><p><code>$1</code> is the IP, <code>$7</code> the page (path), <code>$9</code> the status code. <code>$10</code> is the size in bytes.</p></details>
+<details><summary>Why must you sort before <code>uniq -c</code>?</summary><p><code>uniq</code> only joins identical lines that are next to each other. Sorting puts identical lines together.</p></details>
+<details><summary>Write a command to show the top 5 IPs.</summary><p><code>awk '{print $1}' access.log | sort | uniq -c | sort -rn | head -5</code></p></details>
+<details><summary>What do status codes 200, 404 and 500 mean?</summary><p>200: OK. 404: page not found. 500: internal server error (a problem on the server).</p></details>
+<details><summary>How do you get the user agent from a log line?</summary><p>Split on double quotes: <code>awk -F'"' '{print $6}'</code>, because the user agent contains spaces.</p></details>
+<details><summary>Name two signs of an attack in an access log.</summary><p>Attack tool names in the user agent (sqlmap, nikto) and requests for files that should never be public, like <code>/.env</code> or <code>/wp-login.php</code> hit many times by one IP.</p></details>
+<details><summary>What does <code>tail -f</code> do?</summary><p>It keeps printing new lines as they are added to a file, so you can watch a log live.</p></details>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="../tools/awk.html">awk: column processing</a></li>
+  <li><a href="../tools/sort-uniq.html">sort &amp; uniq</a></li>
+  <li><a href="../tools/grep.html">grep: search text</a></li>
+  <li><a href="lab07-email-alerts.html">Lab 07: Automated email alerts</a> (mail these reports)</li>
+  <li><a href="lab09-pipes-redirection.html">Lab 09: Pipes &amp; redirection</a></li>
+</ul>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

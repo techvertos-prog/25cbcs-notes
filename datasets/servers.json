@@ -1,0 +1,118 @@
+{
+  "generated": "2026-11-16T10:00:00Z",
+  "datacenter": "blr-1",
+  "servers": [
+    {
+      "hostname": "web01",
+      "ip": "10.0.1.11",
+      "role": "web",
+      "os": "Ubuntu 22.04",
+      "cpu_pct": 52,
+      "mem_pct": 53,
+      "disk_pct": 78,
+      "status": "running",
+      "tags": [
+        "prod",
+        "critical"
+      ]
+    },
+    {
+      "hostname": "web02",
+      "ip": "10.0.1.12",
+      "role": "web",
+      "os": "Ubuntu 22.04",
+      "cpu_pct": 8,
+      "mem_pct": 91,
+      "disk_pct": 71,
+      "status": "stopped",
+      "tags": [
+        "critical",
+        "prod"
+      ]
+    },
+    {
+      "hostname": "web03",
+      "ip": "10.0.1.13",
+      "role": "web",
+      "os": "Rocky 9",
+      "cpu_pct": 64,
+      "mem_pct": 58,
+      "disk_pct": 82,
+      "status": "running",
+      "tags": [
+        "critical",
+        "prod"
+      ]
+    },
+    {
+      "hostname": "db01",
+      "ip": "10.0.1.14",
+      "role": "database",
+      "os": "Ubuntu 24.04",
+      "cpu_pct": 43,
+      "mem_pct": 83,
+      "disk_pct": 44,
+      "status": "running",
+      "tags": [
+        "critical",
+        "internal"
+      ]
+    },
+    {
+      "hostname": "db02",
+      "ip": "10.0.1.15",
+      "role": "database",
+      "os": "Ubuntu 22.04",
+      "cpu_pct": 63,
+      "mem_pct": 67,
+      "disk_pct": 83,
+      "status": "stopped",
+      "tags": [
+        "critical",
+        "public"
+      ]
+    },
+    {
+      "hostname": "cache01",
+      "ip": "10.0.1.16",
+      "role": "cache",
+      "os": "Rocky 9",
+      "cpu_pct": 17,
+      "mem_pct": 82,
+      "disk_pct": 82,
+      "status": "running",
+      "tags": [
+        "prod",
+        "backup"
+      ]
+    },
+    {
+      "hostname": "lb01",
+      "ip": "10.0.1.17",
+      "role": "loadbalancer",
+      "os": "Ubuntu 24.04",
+      "cpu_pct": 61,
+      "mem_pct": 76,
+      "disk_pct": 60,
+      "status": "running",
+      "tags": [
+        "prod",
+        "backup"
+      ]
+    },
+    {
+      "hostname": "mon01",
+      "ip": "10.0.1.18",
+      "role": "monitoring",
+      "os": "Rocky 9",
+      "cpu_pct": 87,
+      "mem_pct": 65,
+      "disk_pct": 37,
+      "status": "degraded",
+      "tags": [
+        "backup",
+        "critical"
+      ]
+    }
+  ]
+}

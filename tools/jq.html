@@ -1,0 +1,1329 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>jq: JSON processor</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="jq">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Command tutorials / jq</div>
+<h1>jq: the command-line JSON processor</h1>
+<p class="lead">APIs, cloud CLIs and config tools all speak JSON, and <code>grep</code>/<code>awk</code> cannot parse it safely. <code>jq</code> can: it selects values, filters arrays, reshapes objects, groups and aggregates, and prints JSON, CSV, TSV or raw text for the rest of your script. This page builds up from <code>.</code> to <code>reduce</code>, using a user list, a server inventory and a real-shaped Cloudflare DNS API response.</p>
+<div class="meta-row"><span class="pill">filters &amp; pipes</span><span class="pill">select · map · group_by</span><span class="pill">@csv · @tsv · --arg</span><span class="pill grey">jq 1.7</span><span class="pill grey">Datasets: users.json, servers.json, cf_dns_records.json</span><span class="pill grey">~90 min</span></div>
+
+<h2 id="syntax">Syntax</h2>
+<div class="code"><div class="code-head">syntax</div><pre><code class="language-bash">jq [OPTIONS] 'FILTER' [FILE...]
+command | jq [OPTIONS] 'FILTER'
+
+jq '.'            file.json      # pretty-print (identity filter)
+jq '.servers[0]'  file.json      # navigate
+jq -r '.[].email' file.json      # raw strings, one per line</code></pre></div>
+<p>Install with <code>sudo apt install jq</code> (Debian/Ubuntu), <code>sudo dnf install jq</code> (RHEL/Rocky) or <code>brew install jq</code> (macOS).</p>
+
+<h2 id="model">How it works: filters and streams</h2>
+<p>A jq program is a <strong>filter</strong>: it takes one JSON value as input and produces <strong>zero, one or many</strong> JSON values as output. Filters are combined with the pipe <code>|</code>, exactly like shell commands, the outputs of the left side become the inputs of the right side, one at a time.</p>
+<div class="output"><div class="out-head">mental model</div><pre>input JSON ──► .servers ──► .[] ──► select(.status == "running") ──► .hostname ──► "web01"
+  (1 value)    (1 array)    (8 objects,      (6 objects pass)          (6 strings)   "web03"
+                             one at a time)                                          ...</pre></div>
+<ul>
+  <li><code>.</code> is the current input. <code>.servers</code> means "the <code>servers</code> key of the input".</li>
+  <li><code>.[]</code> <strong>explodes</strong> an array into a stream of its elements. Most "for each" logic is just <code>.[] | ...</code>.</li>
+  <li>To turn a stream back into an array, wrap it in brackets: <code>[ .[] | ... ]</code> (that is exactly what <code>map(...)</code> does).</li>
+  <li>The comma <code>,</code> runs two filters on the same input and outputs both results.</li>
+</ul>
+
+<h2 id="cheat">Cheat tables</h2>
+<h3 id="cheat-opts">Command-line options</h3>
+<div class="table-wrap"><table>
+<tr><th>Option</th><th>Meaning</th></tr>
+<tr><td><code>-r</code></td><td>raw output: print strings without quotes (essential for shell variables)</td></tr>
+<tr><td><code>-c</code></td><td>compact output: one JSON value per line</td></tr>
+<tr><td><code>-n</code></td><td>null input: do not read input; use <code>input</code>/<code>inputs</code> or build JSON from scratch</td></tr>
+<tr><td><code>-s</code></td><td>slurp: read all inputs into one array</td></tr>
+<tr><td><code>-e</code></td><td>exit status 1 if the last output is <code>false</code> or <code>null</code> (for <code>if</code> tests)</td></tr>
+<tr><td><code>--arg name val</code></td><td>bind <code>$name</code> to a <em>string</em></td></tr>
+<tr><td><code>--argjson name json</code></td><td>bind <code>$name</code> to a parsed JSON value (number, bool, object…)</td></tr>
+<tr><td><code>--tab</code> / <code>--indent n</code></td><td>indent with tabs / n spaces</td></tr>
+<tr><td><code>-S</code></td><td>sort object keys in output</td></tr>
+<tr><td><code>-j</code></td><td>like <code>-r</code> but no newline after each output</td></tr>
+<tr><td><code>--raw-input</code> / <code>-R</code></td><td>read lines of text as JSON strings</td></tr>
+</table></div>
+<h3 id="cheat-filters">Filters and functions</h3>
+<div class="table-wrap"><table>
+<tr><th>Filter</th><th>Meaning</th></tr>
+<tr><td><code>.</code> <code>.key</code> <code>.a.b</code> <code>."odd-key"</code></td><td>identity, object access, nested access, quoted key</td></tr>
+<tr><td><code>.[]</code> <code>.[n]</code> <code>.[-1]</code> <code>.[2:4]</code></td><td>all elements, index, last, slice</td></tr>
+<tr><td><code>|</code> <code>,</code></td><td>pipe, multiple outputs</td></tr>
+<tr><td><code>select(cond)</code></td><td>pass the input through only if cond is true</td></tr>
+<tr><td><code>map(f)</code>, <code>map_values(f)</code></td><td>apply f to each array element / object value</td></tr>
+<tr><td><code>keys</code>, <code>length</code>, <code>has("k")</code>, <code>type</code></td><td>introspection</td></tr>
+<tr><td><code>{a: .x}</code>, <code>[ ... ]</code>, <code>"\(.x)"</code></td><td>object / array construction, string interpolation</td></tr>
+<tr><td><code>sort_by(f)</code> <code>group_by(f)</code> <code>unique_by(f)</code> <code>min_by(f)</code> <code>max_by(f)</code></td><td>array operations by a key</td></tr>
+<tr><td><code>add</code>, <code>any</code>, <code>all</code>, <code>join(s)</code>, <code>flatten</code></td><td>aggregate</td></tr>
+<tr><td><code>to_entries</code>, <code>from_entries</code>, <code>with_entries(f)</code></td><td>object ↔ <code>[{key,value}]</code></td></tr>
+<tr><td><code>del(path)</code>, <code>path |= f</code>, <code>path += n</code></td><td>delete / update in place</td></tr>
+<tr><td><code>if c then a elif c2 then b else d end</code></td><td>conditional</td></tr>
+<tr><td><code>a // b</code></td><td>alternative: a, unless it is null/false/absent, then b</td></tr>
+<tr><td><code>f?</code>, <code>try f catch g</code></td><td>suppress / handle errors</td></tr>
+<tr><td><code>reduce .[] as $x (init; update)</code></td><td>fold a stream into one value</td></tr>
+<tr><td><code>test(re)</code>, <code>capture(re)</code>, <code>sub(re; s)</code>, <code>gsub</code>, <code>split(s)</code>, <code>ascii_downcase</code></td><td>strings and regex</td></tr>
+<tr><td><code>tostring</code>, <code>tonumber</code>, <code>@csv</code> <code>@tsv</code> <code>@json</code> <code>@base64</code> <code>@base64d</code> <code>@uri</code> <code>@sh</code> <code>@html</code></td><td>conversions and output formats</td></tr>
+<tr><td><code>paths</code>, <code>paths(scalars)</code>, <code>getpath(p)</code>, <code>leaf_paths</code></td><td>walk the structure</td></tr>
+<tr><td><code>env</code>, <code>$ENV</code>, <code>input</code>, <code>inputs</code>, <code>now</code>, <code>todate</code>, <code>fromdate</code></td><td>environment, reading inputs, time</td></tr>
+</table></div>
+
+<h2 id="datasets">Datasets used on this page</h2>
+<p>Run every example from the wiki root folder. All outputs are real jq 1.7 output.</p>
+<h3 id="ds-users">users.json: an array of 12 users</h3>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/users.json</span></div><pre><code>[
+  {
+    "id": 1,
+    "username": "averma",
+    "name": "Aarav Verma",
+    "email": "aarav.verma@example.com",
+    "active": false,
+    "roles": [
+      "admin",
+      "editor"
+    ],
+    "address": {
+      "city": "Mumbai",
+      "pincode": "425807"
+    },
+    "last_login": "2026-11-04T14:10:00Z",
+    "storage_mb": 2503
+  },
+  {
+    "id": 2,
+    "username": "psharma",
+    "name": "Priya Sharma",
+    "email": "priya.sharma@example.com",
+    "active": false,
+    "roles": [
+      "viewer"
+    ],
+    "address": {
+      "city": "Delhi",
+      "pincode": "498263"
+    },
+    "last_login": "2026-11-14T04:15:00Z",
+    "storage_mb": 4401
+  },
+  {
+    "id": 3,
+    "username": "rmehta",
+    "name": "Rohan Mehta",
+    "email": "rohan.mehta@example.com",
+    "active": true,
+    "roles": [
+      "editor"
+    ],
+    "address": {
+      "city": "Pune",
+      "pincode": "420702"
+    },
+    "last_login": "2026-11-13T19:43:00Z",
+    "storage_mb": 2022
+  },
+  {
+    "id": 4,
+    "username": "adas",
+    "name": "Ananya Das",
+    "email": "ananya.das@example.com",
+    "active": true,
+    "roles": [
+      "editor"
+    ],
+    "address": {
+      "city": "Mumbai",
+      "pincode": "567223"
+    },
+    "last_login": "2026-11-09T14:16:00Z",
+    "storage_mb": 126
+  },
+  {
+    "id": 5,
+    "username": "vdas",
+    "name": "Vikram Das",
+    "email": "vikram.das@example.com",
+    "active": true,
+    "roles": [
+      "admin"
+    ],
+    "address": {
+      "city": "Mumbai",
+      "pincode": "490588"
+    },
+    "last_login": "2026-11-10T20:27:00Z",
+    "storage_mb": 2098
+  },
+  {
+    "id": 6,
+    "username": "sdas",
+    "name": "Sneha Das",
+    "email": "sneha.das@example.com",
+    "active": true,
+    "roles": [
+      "devops"
+    ],
+    "address": {
+      "city": "Mumbai",
+      "pincode": "427959"
+    },
+    "last_login": "2026-11-08T12:36:00Z",
+    "storage_mb": 2990
+  },
+  {
+    "id": 7,
+    "username": "akapoor",
+    "name": "Arjun Kapoor",
+    "email": "arjun.kapoor@example.com",
+    "active": true,
+    "roles": [
+      "admin",
+      "devops"
+    ],
+    "address": {
+      "city": "Delhi",
+      "pincode": "402123"
+    },
+    "last_login": "2026-11-02T19:47:00Z",
+    "storage_mb": 4119
+  },
+  {
+    "id": 8,
+    "username": "knair",
+    "name": "Kavya Nair",
+    "email": "kavya.nair@example.com",
+    "active": true,
+    "roles": [
+      "billing"
+    ],
+    "address": {
+      "city": "Delhi",
+      "pincode": "457411"
+    },
+    "last_login": "2026-11-07T19:16:00Z",
+    "storage_mb": 1170
+  },
+  {
+    "id": 9,
+    "username": "rsingh",
+    "name": "Rahul Singh",
+    "email": "rahul.singh@example.com",
+    "active": false,
+    "roles": [
+      "viewer"
+    ],
+    "address": {
+      "city": "Mumbai",
+      "pincode": "408747"
+    },
+    "last_login": "2026-11-12T23:08:00Z",
+    "storage_mb": 788
+  },
+  {
+    "id": 10,
+    "username": "inair",
+    "name": "Isha Nair",
+    "email": "isha.nair@example.com",
+    "active": true,
+    "roles": [
+      "billing",
+      "editor"
+    ],
+    "address": {
+      "city": "Pune",
+      "pincode": "541403"
+    },
+    "last_login": "2026-11-12T16:32:00Z",
+    "storage_mb": 2282
+  },
+  {
+    "id": 11,
+    "username": "kiyer",
+    "name": "Karan Iyer",
+    "email": "karan.iyer@example.com",
+    "active": true,
+    "roles": [
+      "billing",
+      "viewer"
+    ],
+    "address": {
+      "city": "Bengaluru",
+      "pincode": "522771"
+    },
+    "last_login": "2026-11-03T04:48:00Z",
+    "storage_mb": 1898
+  },
+  {
+    "id": 12,
+    "username": "msingh",
+    "name": "Meera Singh",
+    "email": "meera.singh@example.com",
+    "active": true,
+    "roles": [
+      "billing",
+      "viewer"
+    ],
+    "address": {
+      "city": "Bengaluru",
+      "pincode": "503436"
+    },
+    "last_login": "2026-11-01T08:34:00Z",
+    "storage_mb": 1062
+  }
+]</code></pre></div>
+<h3 id="ds-servers">servers.json: an object holding a server list</h3>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/servers.json</span></div><pre><code>{
+  "generated": "2026-11-16T10:00:00Z",
+  "datacenter": "blr-1",
+  "servers": [
+    {
+      "hostname": "web01",
+      "ip": "10.0.1.11",
+      "role": "web",
+      "os": "Ubuntu 22.04",
+      "cpu_pct": 52,
+      "mem_pct": 53,
+      "disk_pct": 78,
+      "status": "running",
+      "tags": [
+        "prod",
+        "critical"
+      ]
+    },
+    {
+      "hostname": "web02",
+      "ip": "10.0.1.12",
+      "role": "web",
+      "os": "Ubuntu 22.04",
+      "cpu_pct": 8,
+      "mem_pct": 91,
+      "disk_pct": 71,
+      "status": "stopped",
+      "tags": [
+        "critical",
+        "prod"
+      ]
+    },
+    {
+      "hostname": "web03",
+      "ip": "10.0.1.13",
+      "role": "web",
+      "os": "Rocky 9",
+      "cpu_pct": 64,
+      "mem_pct": 58,
+      "disk_pct": 82,
+      "status": "running",
+      "tags": [
+        "critical",
+        "prod"
+      ]
+    },
+    {
+      "hostname": "db01",
+      "ip": "10.0.1.14",
+      "role": "database",
+      "os": "Ubuntu 24.04",
+      "cpu_pct": 43,
+      "mem_pct": 83,
+      "disk_pct": 44,
+      "status": "running",
+      "tags": [
+        "critical",
+        "internal"
+      ]
+    },
+    {
+      "hostname": "db02",
+      "ip": "10.0.1.15",
+      "role": "database",
+      "os": "Ubuntu 22.04",
+      "cpu_pct": 63,
+      "mem_pct": 67,
+      "disk_pct": 83,
+      "status": "stopped",
+      "tags": [
+        "critical",
+        "public"
+      ]
+    },
+    {
+      "hostname": "cache01",
+      "ip": "10.0.1.16",
+      "role": "cache",
+      "os": "Rocky 9",
+      "cpu_pct": 17,
+      "mem_pct": 82,
+      "disk_pct": 82,
+      "status": "running",
+      "tags": [
+        "prod",
+        "backup"
+      ]
+    },
+    {
+      "hostname": "lb01",
+      "ip": "10.0.1.17",
+      "role": "loadbalancer",
+      "os": "Ubuntu 24.04",
+      "cpu_pct": 61,
+      "mem_pct": 76,
+      "disk_pct": 60,
+      "status": "running",
+      "tags": [
+        "prod",
+        "backup"
+      ]
+    },
+    {
+      "hostname": "mon01",
+      "ip": "10.0.1.18",
+      "role": "monitoring",
+      "os": "Rocky 9",
+      "cpu_pct": 87,
+      "mem_pct": 65,
+      "disk_pct": 37,
+      "status": "degraded",
+      "tags": [
+        "backup",
+        "critical"
+      ]
+    }
+  ]
+}</code></pre></div>
+<h3 id="ds-dns">cf_dns_records.json: Cloudflare API v4 "list DNS records" response</h3>
+<p>The real API wraps results in an envelope: <code>success</code>, <code>errors</code>, <code>messages</code>, <code>result</code> (the records) and <code>result_info</code> (pagination).</p>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/cf_dns_records.json</span></div><pre><code>{
+  "result": [
+    {
+      "id": "d918b3e5f2f25eef1f45dbfdf7dc67e0",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "example.com",
+      "type": "A",
+      "content": "203.0.113.10",
+      "proxiable": true,
+      "proxied": true,
+      "ttl": 1,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-08-12T08:52:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "98de8ebba3b5cecea446be72364c911a",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "www.example.com",
+      "type": "A",
+      "content": "203.0.113.10",
+      "proxiable": true,
+      "proxied": true,
+      "ttl": 1,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-01-11T08:31:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "c9776598203c8c25fd235def3e5a87e3",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "api.example.com",
+      "type": "A",
+      "content": "203.0.113.20",
+      "proxiable": true,
+      "proxied": true,
+      "ttl": 1,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-04-12T08:58:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "3748967f961d33ba350843f08de08fc2",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "staging.example.com",
+      "type": "A",
+      "content": "198.51.100.5",
+      "proxiable": true,
+      "proxied": false,
+      "ttl": 300,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-06-14T08:48:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "fbe94499dbc080fd46fb7bf300b9d4a3",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "example.com",
+      "type": "AAAA",
+      "content": "2001:db8::10",
+      "proxiable": true,
+      "proxied": true,
+      "ttl": 1,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-03-14T08:44:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "1c24220e2cabd7e7cc6b66e5402adf9c",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "blog.example.com",
+      "type": "CNAME",
+      "content": "example.com",
+      "proxiable": true,
+      "proxied": true,
+      "ttl": 1,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-01-14T08:10:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "3ce915e7c9d6a63bca3c6f5f5bb5c40c",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "shop.example.com",
+      "type": "CNAME",
+      "content": "shops.myshopify.com",
+      "proxiable": true,
+      "proxied": false,
+      "ttl": 3600,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-01-15T08:26:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "6bc4123ebde13c1b20733f6d0d6a05b3",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "example.com",
+      "type": "MX",
+      "content": "mail.example.com",
+      "proxiable": false,
+      "proxied": false,
+      "ttl": 300,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-02-25T08:38:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z",
+      "priority": 10
+    },
+    {
+      "id": "97fa7f04836390075cae9610c72c1fe3",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "example.com",
+      "type": "TXT",
+      "content": "v=spf1 include:_spf.google.com ~all",
+      "proxiable": false,
+      "proxied": false,
+      "ttl": 300,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-08-26T08:24:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    },
+    {
+      "id": "ba2c98ce0b19f88e9d77a45ef206c269",
+      "zone_id": "023e105f4ecef8ad9ca31a8372d0c353",
+      "zone_name": "example.com",
+      "name": "vpn.example.com",
+      "type": "A",
+      "content": "198.51.100.77",
+      "proxiable": true,
+      "proxied": false,
+      "ttl": 3600,
+      "comment": null,
+      "tags": [],
+      "created_on": "2026-08-10T08:13:00.000000Z",
+      "modified_on": "2026-11-01T12:00:00.000000Z"
+    }
+  ],
+  "success": true,
+  "errors": [],
+  "messages": [],
+  "result_info": {
+    "page": 1,
+    "per_page": 100,
+    "count": 10,
+    "total_count": 10,
+    "total_pages": 1
+  }
+}</code></pre></div>
+
+<h2 id="basics">Basics: navigating JSON</h2>
+
+<h3 id="b-identity">.: identity / pretty-print</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">echo '{"host":"web01","ports":[80,443],"tls":true}' | jq '.'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{
+  "host": "web01",
+  "ports": [
+    80,
+    443
+  ],
+  "tls": true
+}</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">echo '{"host":"web01","ports":[80,443],"tls":true}' | jq -c '.'     # compact</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{"host":"web01","ports":[80,443],"tls":true}</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">echo '{"host":"web01","ports":[80,443]}' | jq --tab '.'             # tab indentation</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{
+    "host": "web01",
+    "ports": [
+        80,
+        443
+    ]
+}</pre></div>
+<p>(Tabs are shown as four spaces here.) <code>jq . file.json</code> is also the quickest JSON validator: invalid JSON gives a parse error and a non-zero exit status.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">echo '{"host": "web01",}' | jq '.'; echo "exit=$?"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>jq: parse error: Expected another key-value pair at line 1, column 18
+exit=5</pre></div>
+
+<h3 id="b-key">.key and .a.b</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq '.datacenter' datasets/servers.json
+jq '.result_info.total_count' datasets/cf_dns_records.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>"blr-1"
+10</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq '.nosuchkey' datasets/servers.json        # missing key -&gt; null, not an error</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>null</pre></div>
+
+<h3 id="b-index">.[n], .[-1] and slices</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq '.[0].username' datasets/users.json
+jq '.[-1].username' datasets/users.json      # last element
+jq -c '.[2:4] | map(.username)' datasets/users.json   # slice: index 2 and 3</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>"averma"
+"msingh"
+["rmehta","adas"]</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq '.servers[0].tags[1]' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>"critical"</pre></div>
+
+<h3 id="b-iter">.[]: iterate</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq '.[].username' datasets/users.json | head -4</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>"averma"
+"psharma"
+"rmehta"
+"adas"</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq '.servers[].hostname' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>"web01"
+"web02"
+"web03"
+"db01"
+"db02"
+"cache01"
+"lb01"
+"mon01"</pre></div>
+
+<h3 id="b-r">-r: raw strings for the shell</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.servers[].hostname' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>web01
+web02
+web03
+db01
+db02
+cache01
+lb01
+mon01</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">for h in $(jq -r '.servers[] | select(.role == "web") | .hostname' datasets/servers.json); do
+  echo "would ssh to $h"
+done</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>would ssh to web01
+would ssh to web02
+would ssh to web03</pre></div>
+<div class="callout exam"><span class="ct">Viva</span>Without <code>-r</code>, jq prints JSON strings <em>with</em> their quotes (<code>"web01"</code>). In a script you almost always want <code>-r</code>.</div>
+
+<h3 id="b-pipe">| and ,: pipes and multiple outputs</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq '.servers[0] | .hostname, .ip' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>"web01"
+"10.0.1.11"</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.[0] | .name, .address.city, .roles[0]' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Aarav Verma
+Mumbai
+admin</pre></div>
+
+<h3 id="b-keys">keys, length, has, type</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '.[0] | keys' datasets/users.json
+jq '.[0].address | length' datasets/users.json      # object: number of keys
+jq 'length' datasets/users.json                     # array: number of elements
+jq '.[0].name | length' datasets/users.json         # string: characters</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>["active","address","email","id","last_login","name","roles","storage_mb","username"]
+2
+12
+11</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq '.[0] | has("email"), has("phone")' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>true
+false</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '.servers[0] | map_values(type)' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{"hostname":"string","ip":"string","role":"string","os":"string","cpu_pct":"number","mem_pct":"number","disk_pct":"number","status":"string","tags":"array"}</pre></div>
+
+<h2 id="intermediate">Intermediate: filter, build, convert</h2>
+
+<h3 id="i-select">select: filtering</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.[] | select(.active == false) | .username' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>averma
+psharma
+rsingh</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.servers[] | select(.cpu_pct &gt; 60 and .status == "running") | "\(.hostname) \(.cpu_pct)%"' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>web03 64%
+lb01 61%</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.[] | select(.roles | index("admin")) | .username' datasets/users.json     # array contains "admin"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>averma
+vdas
+akapoor</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.[] | select(.email | test("^[a-k]")) | .email' datasets/users.json        # regex on a string</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>aarav.verma@example.com
+ananya.das@example.com
+arjun.kapoor@example.com
+kavya.nair@example.com
+isha.nair@example.com
+karan.iyer@example.com</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.result[] | select(.type == "A" or .type == "AAAA") | .name' datasets/cf_dns_records.json | sort -u</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>api.example.com
+example.com
+staging.example.com
+vpn.example.com
+www.example.com</pre></div>
+
+<h3 id="i-map">map: transform every element</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c 'map(.username)' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>["averma","psharma","rmehta","adas","vdas","sdas","akapoor","knair","rsingh","inair","kiyer","msingh"]</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '.servers | map(.disk_pct)' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>[78,71,82,44,83,82,60,37]</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c 'map(select(.address.city == "Pune") | .name)' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>["Rohan Mehta","Isha Nair"]</pre></div>
+
+<h3 id="i-construct">Object and array construction</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '.[] | {user: .username, city: .address.city, admin: (.roles | index("admin") != null)}' datasets/users.json | head -4</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{"user":"averma","city":"Mumbai","admin":true}
+{"user":"psharma","city":"Delhi","admin":false}
+{"user":"rmehta","city":"Pune","admin":false}
+{"user":"adas","city":"Mumbai","admin":false}</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '.servers[] | {hostname, ip}' datasets/servers.json | head -3       # shorthand {hostname} = {hostname: .hostname}</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{"hostname":"web01","ip":"10.0.1.11"}
+{"hostname":"web02","ip":"10.0.1.12"}
+{"hostname":"web03","ip":"10.0.1.13"}</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '[.servers[] | .ip]' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>["10.0.1.11","10.0.1.12","10.0.1.13","10.0.1.14","10.0.1.15","10.0.1.16","10.0.1.17","10.0.1.18"]</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '.servers[0] | {(.hostname): .status}' datasets/servers.json        # computed key in ( )</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{"web01":"running"}</pre></div>
+
+<h3 id="i-interp">String interpolation \( )</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.servers[] | "\(.hostname) (\(.ip)) is \(.status), disk \(.disk_pct)%"' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>web01 (10.0.1.11) is running, disk 78%
+web02 (10.0.1.12) is stopped, disk 71%
+web03 (10.0.1.13) is running, disk 82%
+db01 (10.0.1.14) is running, disk 44%
+db02 (10.0.1.15) is stopped, disk 83%
+cache01 (10.0.1.16) is running, disk 82%
+lb01 (10.0.1.17) is running, disk 60%
+mon01 (10.0.1.18) is degraded, disk 37%</pre></div>
+
+<h3 id="i-formats">Output formats: @csv, @tsv, @base64, @uri, @sh</h3>
+<p>Format strings must receive the right shape: <code>@csv</code> and <code>@tsv</code> take an <strong>array</strong> and produce one line; use them with <code>-r</code>.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.[] | [.id, .username, .email, .active] | @csv' datasets/users.json | head -4</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>1,"averma","aarav.verma@example.com",false
+2,"psharma","priya.sharma@example.com",false
+3,"rmehta","rohan.mehta@example.com",true
+4,"adas","ananya.das@example.com",true</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.servers[] | [.hostname, .role, .cpu_pct] | @tsv' datasets/servers.json | head -3</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>web01	web	52
+web02	web	8
+web03	web	64</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.[0] | "\(.username):\(.email)" | @base64' datasets/users.json
+jq -rn '"YXZlcm1hOmFhcmF2LnZlcm1hQGV4YW1wbGUuY29t" | @base64d'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>YXZlcm1hOmFhcmF2LnZlcm1hQGV4YW1wbGUuY29t
+averma:aarav.verma@example.com</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -rn '"name=Aarav Verma&amp;city=Mumbai" | @uri'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>name%3DAarav%20Verma%26city%3DMumbai</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.servers[] | select(.status == "stopped") | @sh "systemctl --host \(.hostname) start app"' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>systemctl --host 'web02' start app
+systemctl --host 'db02' start app</pre></div>
+<p><code>@sh</code> quotes each interpolated value for safe use in a shell command line, the values end up in single quotes.</p>
+
+<h3 id="i-arg">--arg and --argjson: passing shell values</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">role="database"
+jq -r --arg r "$role" '.servers[] | select(.role == $r) | .hostname' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>db01
+db02</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">limit=80
+jq -r --argjson max "$limit" '.servers[] | select(.mem_pct &gt; $max) | "\(.hostname) mem=\(.mem_pct)%"' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>web02 mem=91%
+db01 mem=83%
+cache01 mem=82%</pre></div>
+<div class="callout warn"><span class="ct">String vs number</span><code>--arg max 80</code> makes <code>$max</code> the <em>string</em> <code>"80"</code>, and <code>.mem_pct &gt; "80"</code> is always false in jq (numbers sort before strings). Use <code>--argjson</code> for numbers and booleans, or convert with <code>($max | tonumber)</code>.</div>
+
+<h3 id="i-n">-n: build JSON from scratch</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -n --arg name "vpn.example.com" --arg ip "198.51.100.77" \
+  '{type: "A", name: $name, content: $ip, ttl: 3600, proxied: false}'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{
+  "type": "A",
+  "name": "vpn.example.com",
+  "content": "198.51.100.77",
+  "ttl": 3600,
+  "proxied": false
+}</pre></div>
+<p>This is the safe way to create an API request body: jq handles quoting and escaping, unlike hand-written <code>"{\"name\":\"$name\"}"</code> strings.</p>
+
+<h3 id="i-s">-s: slurp several inputs into one array</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '.servers[] | {h: .hostname, cpu: .cpu_pct}' datasets/servers.json &gt; cpu.jsonl
+head -2 cpu.jsonl
+jq -s 'map(.cpu) | add / length' cpu.jsonl        # average CPU across all lines</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{"h":"web01","cpu":52}
+{"h":"web02","cpu":8}
+49.375</pre></div>
+
+<h3 id="i-e">-e: use jq as a test</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">if jq -e '.success' datasets/cf_dns_records.json &gt; /dev/null; then
+  echo "API call succeeded"
+fi
+jq -e '.servers[] | select(.hostname == "web99")' datasets/servers.json; echo "exit=$?"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>API call succeeded
+exit=4</pre></div>
+<p>With <code>-e</code>, exit status is 1 if the last output was <code>false</code>/<code>null</code> and 4 if there was no output at all.</p>
+
+<h3 id="i-sort">sort_by, group_by, unique_by, min_by, max_by</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.servers | sort_by(.cpu_pct) | reverse | .[:3][] | "\(.cpu_pct) \(.hostname)"' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>87 mon01
+64 web03
+63 db02</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '.servers | group_by(.role) | map({role: .[0].role, count: length})' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>[{"role":"cache","count":1},{"role":"database","count":2},{"role":"loadbalancer","count":1},{"role":"monitoring","count":1},{"role":"web","count":3}]</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r 'unique_by(.address.city) | .[].address.city' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Bengaluru
+Delhi
+Mumbai
+Pune</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '.servers | min_by(.disk_pct), max_by(.disk_pct) | {hostname, disk_pct}' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{"hostname":"mon01","disk_pct":37}
+{"hostname":"db02","disk_pct":83}</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c 'sort_by(.address.city, .username) | map("\(.address.city)/\(.username)") | .[:5]' datasets/users.json    # sort by two keys</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>["Bengaluru/kiyer","Bengaluru/msingh","Delhi/akapoor","Delhi/knair","Delhi/psharma"]</pre></div>
+
+<h3 id="i-add">add, any, all, join, unique</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq 'map(.storage_mb) | add' datasets/users.json                  # sum of numbers
+jq 'map(.storage_mb) | add / length' datasets/users.json         # average
+jq -c 'map(.roles) | add | unique' datasets/users.json           # concatenate arrays, distinct</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>25459
+2121.5833333333335
+["admin","billing","devops","editor","viewer"]</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq '.servers | any(.status == "degraded"), all(.disk_pct &lt; 90)' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>true
+true</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.servers[0].tags | join(",")' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>prod,critical</pre></div>
+
+<h2 id="advanced">Advanced</h2>
+
+<h3 id="a-entries">to_entries, from_entries, with_entries</h3>
+<p>These convert between an object and an array of <code>{"key": …, "value": …}</code> pairs, so you can process <em>keys</em> with ordinary array filters.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '.servers[0] | {hostname, cpu_pct, mem_pct} | to_entries' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>[{"key":"hostname","value":"web01"},{"key":"cpu_pct","value":52},{"key":"mem_pct","value":53}]</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.servers[0] | to_entries[] | select(.key | endswith("_pct")) | "\(.key)=\(.value)"' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>cpu_pct=52
+mem_pct=53
+disk_pct=78</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '.servers[0] | with_entries(select(.value | type == "number"))' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{"cpu_pct":52,"mem_pct":53,"disk_pct":78}</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '.servers[0] | {hostname, ip} | with_entries(.key |= ascii_upcase)' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{"HOSTNAME":"web01","IP":"10.0.1.11"}</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c 'map({key: .username, value: .address.city}) | from_entries' datasets/users.json    # build a lookup object</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{"averma":"Mumbai","psharma":"Delhi","rmehta":"Pune","adas":"Mumbai","vdas":"Mumbai","sdas":"Mumbai","akapoor":"Delhi","knair":"Delhi","rsingh":"Mumbai","inair":"Pune","kiyer":"Bengaluru","msingh":"Bengaluru"}</pre></div>
+
+<h3 id="a-del">del: remove keys or elements</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '.[0] | del(.address, .last_login)' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{"id":1,"username":"averma","name":"Aarav Verma","email":"aarav.verma@example.com","active":false,"roles":["admin","editor"],"storage_mb":2503}</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '.result | map(del(.id, .zone_id, .zone_name, .created_on, .modified_on, .comment, .tags, .proxiable)) | .[0]' datasets/cf_dns_records.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{"name":"example.com","type":"A","content":"203.0.113.10","proxied":true,"ttl":1}</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c 'del(.[] | select(.active == false)) | map(.username)' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>["rmehta","adas","vdas","sdas","akapoor","knair","inair","kiyer","msingh"]</pre></div>
+
+<h3 id="a-update">Update operators: |=, +=, =</h3>
+<p><code>path |= f</code> replaces the value at <code>path</code> with <code>f</code> applied to the old value; <code>+=</code>, <code>-=</code>, <code>*=</code> are arithmetic shortcuts; <code>=</code> sets a value.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '.servers[0] | .hostname |= ascii_upcase | .cpu_pct += 10 | .status = "maintenance"' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{"hostname":"WEB01","ip":"10.0.1.11","role":"web","os":"Ubuntu 22.04","cpu_pct":62,"mem_pct":53,"disk_pct":78,"status":"maintenance","tags":["prod","critical"]}</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '.servers |= map(select(.status != "stopped")) | .servers | map(.hostname)' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>["web01","web03","db01","cache01","lb01","mon01"]</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq '(.servers[] | select(.role == "web") | .tags) += ["frontend"] | .servers[0].tags' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>[
+  "prod",
+  "critical",
+  "frontend"
+]</pre></div>
+<p>Updates return the <strong>whole document</strong> with the change applied, exactly what you need to modify a JSON config file (write to a temp file, then <code>mv</code> it over the original; jq has no in-place option).</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq '.datacenter = "blr-2"' datasets/servers.json &gt; servers.tmp &amp;&amp; mv servers.tmp servers.json
+jq '.datacenter' servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>"blr-2"</pre></div>
+
+<h3 id="a-if">if-then-else</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.servers[] | "\(.hostname): " + (if .disk_pct &gt;= 80 then "DISK HIGH" elif .disk_pct &gt;= 60 then "disk ok" else "disk low use" end)' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>web01: disk ok
+web02: disk ok
+web03: DISK HIGH
+db01: disk low use
+db02: DISK HIGH
+cache01: DISK HIGH
+lb01: disk ok
+mon01: disk low use</pre></div>
+
+<h3 id="a-alt">//: the alternative operator</h3>
+<p><code>a // b</code> yields <code>a</code> unless it is <code>null</code>, <code>false</code> or produces nothing, then <code>b</code>. Ideal for defaults:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.result[] | "\(.name) \(.comment // "-")"' datasets/cf_dns_records.json | head -4</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>example.com -
+www.example.com -
+api.example.com -
+staging.example.com -</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.[0].phone // "no phone on file"' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>no phone on file</pre></div>
+<div class="callout warn"><span class="ct">Careful</span>Because <code>false</code> also triggers the alternative, <code>.proxied // true</code> turns an explicit <code>false</code> into <code>true</code>! Use <code>if .proxied == null then true else .proxied end</code> for booleans.</div>
+
+<h3 id="a-try">? and try/catch: errors</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq '.[0].name.first' datasets/users.json                     # indexing a string -&gt; error</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>jq: error (at datasets/users.json:199): Cannot index string with string "first"</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq '.[0].name.first?' datasets/users.json; echo "exit=$?"    # ? suppresses the error, no output</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>exit=0</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.[0:2][] | try (.name | .first) catch "skipped: \(.)"' datasets/users.json     # catch receives the error message</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>skipped: Cannot index string with string "first"
+skipped: Cannot index string with string "first"</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.[] | (.username | tonumber)? // "not-a-number: \(.username)"' datasets/users.json | head -2</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>not-a-number: averma
+not-a-number: psharma</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '[.[] | .address.city?]  | unique' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>["Bengaluru","Delhi","Mumbai","Pune"]</pre></div>
+
+<h3 id="a-reduce">reduce: fold into one value</h3>
+<p><code>reduce STREAM as $x (INITIAL; UPDATE)</code> starts with INITIAL and runs UPDATE once per item with <code>.</code> as the accumulator:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq 'reduce .[] as $u (0; . + $u.storage_mb)' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>25459</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c 'reduce .[] as $u ({}; .[$u.address.city] += 1)' datasets/users.json        # count per city</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{"Mumbai":5,"Delhi":3,"Pune":2,"Bengaluru":2}</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c 'reduce .servers[] as $s ({}; .[$s.status] += [$s.hostname])' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{"running":["web01","web03","db01","cache01","lb01"],"stopped":["web02","db02"],"degraded":["mon01"]}</pre></div>
+
+<h3 id="a-vars">Variables with as, and functions with def</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.datacenter as $dc | .servers[] | "\($dc)/\(.hostname)"' datasets/servers.json | head -3</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>blr-1/web01
+blr-1/web02
+blr-1/web03</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r 'def gb: . / 1024 | . * 10 | floor / 10;
+       .[] | "\(.username)\t\(.storage_mb | gb) GB"' datasets/users.json | head -4</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>averma	2.4 GB
+psharma	4.2 GB
+rmehta	1.9 GB
+adas	0.1 GB</pre></div>
+
+<h3 id="a-paths">paths and leaf extraction</h3>
+<p><code>paths</code> lists every path in a document; <code>paths(scalars)</code> only the leaves (strings, numbers, booleans, null). <code>getpath</code> reads the value at a path. Together they flatten any JSON into <code>key.path=value</code> lines, great for diffing or grepping configs:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '.[0] | paths' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>["id"]
+["username"]
+["name"]
+["email"]
+["active"]
+["roles"]
+["roles",0]
+["roles",1]
+["address"]
+["address","city"]
+["address","pincode"]
+["last_login"]
+["storage_mb"]</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.[0] | paths(scalars) as $p | "\($p | map(tostring) | join("."))=\(getpath($p))"' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>id=1
+username=averma
+name=Aarav Verma
+email=aarav.verma@example.com
+roles.0=admin
+roles.1=editor
+address.city=Mumbai
+address.pincode=425807
+last_login=2026-11-04T14:10:00Z
+storage_mb=2503</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '[paths(scalars) | map(tostring) | join(".")] | .[:6][]' datasets/cf_dns_records.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>result.0.id
+result.0.zone_id
+result.0.zone_name
+result.0.name
+result.0.type
+result.0.content</pre></div>
+
+<h3 id="a-env">env and $ENV</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">export DEPLOY_ENV=staging
+jq -n '{env: $ENV.DEPLOY_ENV, user: env.USER}'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{
+  "env": "staging",
+  "user": "student"
+}</pre></div>
+<p><code>$ENV.NAME</code> and <code>env.NAME</code> read exported environment variables, an alternative to <code>--arg</code> when the value is already in the environment (e.g. <code>CF_API_TOKEN</code>).</p>
+
+<h3 id="a-inputs">input and inputs</h3>
+<p>With <code>-n</code>, <code>input</code> reads the next JSON value and <code>inputs</code> reads all remaining ones as a stream. That lets you process many values (e.g. JSON lines) without slurping them all into memory:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -n '[inputs | .cpu] | max' cpu.jsonl</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>87</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -n 'input as $first | [inputs] | length as $rest | "first=\($first.h), then \($rest) more"' cpu.jsonl</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>"first=web01, then 7 more"</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -n 'reduce inputs as $r (0; . + $r.cpu)' cpu.jsonl</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>395</pre></div>
+<p>Combining two files: read users.json and servers.json in one program.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -n 'input as $users | input as $inv | {users: ($users | length), servers: ($inv.servers | length)}' datasets/users.json datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{
+  "users": 12,
+  "servers": 8
+}</pre></div>
+
+<h3 id="a-strings">Strings and regex</h3>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.[0:3][] | .email | split("@") | .[0]' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>aarav.verma
+priya.sharma
+rohan.mehta</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.[0:3][] | .name | ascii_downcase | gsub(" "; ".")' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>aarav.verma
+priya.sharma
+rohan.mehta</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '.servers[0].os | capture("(?&lt;distro&gt;[A-Za-z]+) (?&lt;version&gt;[0-9.]+)")' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{"distro":"Ubuntu","version":"22.04"}</pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.[] | .last_login | fromdate | strftime("%d %b %H:%M")' datasets/users.json | head -3</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>04 Nov 14:10
+14 Nov 04:15
+13 Nov 19:43</pre></div>
+
+<!-- ================= USE CASES ================= -->
+<h2 id="use-cases">Use cases</h2>
+
+<div class="usecase">
+<h3 id="uc1"><span class="uc-tag">Use case 1</span> User access audit report</h3>
+<p><strong>Scenario:</strong> security wants a monthly audit of <code>users.json</code> (in real life the output of an identity API): a summary of how many accounts are active, who holds the <em>admin</em> role (and whether those accounts are active), accounts that have not logged in since a cut-off date, and a CSV export for the spreadsheet people.</p>
+<div class="code"><div class="code-head">bash · user_audit.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# user_audit.sh - audit users.json: admins, stale accounts, CSV export
+set -euo pipefail
+
+users="${1:-datasets/users.json}"
+cutoff="${2:-2026-11-05}"              # accounts with no login since this date are "stale"
+out_csv="${3:-user_audit.csv}"
+
+jq -e 'type == "array"' "$users" &gt; /dev/null || { echo "error: $users is not a JSON array" &gt;&amp;2; exit 1; }
+
+echo "== User audit ($users) =="
+jq -r '"Accounts: \(length)  active: \(map(select(.active)) | length)  inactive: \(map(select(.active | not)) | length)"' "$users"
+
+echo
+echo "-- Accounts with the admin role --"
+jq -r '.[] | select(.roles | index("admin"))
+       | [.username, (if .active then "ACTIVE" else "disabled" end), (.roles | join("+"))] | @tsv' "$users" |
+  column -t
+
+echo
+echo "-- Active accounts with no login since $cutoff --"
+jq -r --arg cut "$cutoff" '
+  .[] | select(.active and (.last_login[0:10] &lt; $cut))
+      | "\(.username)\tlast login \(.last_login[0:10])"' "$users"
+
+echo
+echo "-- Role membership --"
+jq -r '[.[] | .roles[]] | group_by(.) | map("\(.[0]): \(length)") | join(", ")' "$users"
+
+# CSV export: header row + one row per user
+jq -r '["id","username","name","email","city","active","roles","storage_mb"],
+       (.[] | [.id, .username, .name, .email, .address.city, .active, (.roles | join(";")), .storage_mb])
+       | @csv' "$users" &gt; "$out_csv"
+echo
+echo "CSV written to $out_csv ($(( $(wc -l &lt; "$out_csv") - 1 )) rows)"</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">bash user_audit.sh datasets/users.json 2026-11-05 user_audit.csv
+head -4 user_audit.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>== User audit (datasets/users.json) ==
+Accounts: 12  active: 9  inactive: 3
+
+-- Accounts with the admin role --
+averma   disabled  admin+editor
+vdas     ACTIVE    admin
+akapoor  ACTIVE    admin+devops
+
+-- Active accounts with no login since 2026-11-05 --
+akapoor	last login 2026-11-02
+kiyer	last login 2026-11-03
+msingh	last login 2026-11-01
+
+-- Role membership --
+admin: 3, billing: 4, devops: 2, editor: 4, viewer: 4
+
+CSV written to user_audit.csv (12 rows)
+"id","username","name","email","city","active","roles","storage_mb"
+1,"averma","Aarav Verma","aarav.verma@example.com","Mumbai",false,"admin;editor",2503
+2,"psharma","Priya Sharma","priya.sharma@example.com","Delhi",false,"viewer",4401
+3,"rmehta","Rohan Mehta","rohan.mehta@example.com","Pune",true,"editor",2022</pre></div>
+<p><strong>How it works:</strong></p>
+<ul>
+  <li><code>jq -e 'type == "array"'</code> validates the input up front: a parse error or wrong shape stops the script with a clear message.</li>
+  <li><code>select(.roles | index("admin"))</code>: <code>index</code> returns the position (0 is still "truthy" in jq; only <code>null</code> and <code>false</code> are falsy) or <code>null</code> if absent.</li>
+  <li><code>.last_login[0:10] &lt; $cut</code>: string slicing gives <code>YYYY-MM-DD</code>; ISO dates compare correctly as strings, so no date parsing is needed.</li>
+  <li>The CSV header and the rows are two filters separated by <code>,</code>, both outputs go through <code>@csv</code>, which quotes strings and escapes embedded quotes properly.</li>
+  <li><code>column -t</code> aligns the TSV output into a table.</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3 id="uc2"><span class="uc-tag">Use case 2</span> Server fleet health summary grouped by role</h3>
+<p><strong>Scenario:</strong> your monitoring system exports <code>servers.json</code> every 5 minutes. Produce (1) a per-role summary with averages and the worst host, (2) a list of problems, anything not running, or with CPU, memory or disk over a threshold, and (3) a machine-readable JSON summary that another tool (or Lab 07's email alert) can consume. The thresholds come from the shell with <code>--argjson</code>.</p>
+<div class="code"><div class="code-head">jq · fleet_health.jq</div><pre><code class="language-jq"># fleet_health.jq - summarise a server inventory
+# usage: jq --argjson cpu 80 --argjson mem 85 --argjson disk 80 -f fleet_health.jq servers.json
+def avg(f): (map(f) | add) / length | . * 10 | round / 10;
+
+def problems:
+  [ if .status != "running" then "status=\(.status)" else empty end,
+    if .cpu_pct  &gt; $cpu  then "cpu=\(.cpu_pct)%"   else empty end,
+    if .mem_pct  &gt; $mem  then "mem=\(.mem_pct)%"   else empty end,
+    if .disk_pct &gt; $disk then "disk=\(.disk_pct)%" else empty end ];
+
+{
+  datacenter: .datacenter,
+  generated:  .generated,
+  total:      (.servers | length),
+  by_role: (.servers | group_by(.role) | map({
+      role:     .[0].role,
+      count:    length,
+      running:  map(select(.status == "running")) | length,
+      avg_cpu:  avg(.cpu_pct),
+      avg_mem:  avg(.mem_pct),
+      max_disk: (max_by(.disk_pct) | "\(.hostname) \(.disk_pct)%")
+  })),
+  alerts: [ .servers[] | {hostname, issues: problems} | select(.issues | length &gt; 0) ]
+}</code></pre></div>
+<div class="code"><div class="code-head">bash · fleet_health.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# fleet_health.sh - human report + JSON summary from servers.json
+set -euo pipefail
+inv="${1:-datasets/servers.json}"
+
+summary=$(jq --argjson cpu 80 --argjson mem 85 --argjson disk 80 -f fleet_health.jq "$inv")
+printf '%s\n' "$summary" &gt; fleet_summary.json            # for other tools
+
+jq -r '"Fleet \(.datacenter) at \(.generated): \(.total) servers\n"' &lt;&lt;&lt; "$summary"
+
+{
+  echo -e "ROLE\tCOUNT\tRUNNING\tAVG_CPU\tAVG_MEM\tFULLEST_DISK"
+  jq -r '.by_role[] | [.role, .count, .running, .avg_cpu, .avg_mem, .max_disk] | @tsv' &lt;&lt;&lt; "$summary"
+} | column -t -s $'\t'
+
+echo
+alerts=$(jq '.alerts | length' &lt;&lt;&lt; "$summary")
+echo "ALERTS ($alerts):"
+jq -r '.alerts[] | "  \(.hostname): \(.issues | join(", "))"' &lt;&lt;&lt; "$summary"
+
+# non-zero exit when there are alerts, so cron/CI can react
+(( alerts == 0 ))</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">bash fleet_health.sh datasets/servers.json; echo "exit=$?"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Fleet blr-1 at 2026-11-16T10:00:00Z: 8 servers
+
+ROLE          COUNT  RUNNING  AVG_CPU  AVG_MEM  FULLEST_DISK
+cache         1      1        17       82       cache01 82%
+database      2      1        53       75       db02 83%
+loadbalancer  1      1        61       76       lb01 60%
+monitoring    1      0        87       65       mon01 37%
+web           3      2        41.3     67.3     web03 82%
+
+ALERTS (5):
+  web02: status=stopped, mem=91%
+  web03: disk=82%
+  db02: status=stopped, disk=83%
+  cache01: disk=82%
+  mon01: status=degraded, cpu=87%
+exit=1</pre></div>
+<div class="code"><div class="code-head">bash · the JSON summary (first role and first alert)</div><pre><code class="language-bash">jq '{by_role: .by_role[0:1], alerts: .alerts[0:1]}' fleet_summary.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{
+  "by_role": [
+    {
+      "role": "cache",
+      "count": 1,
+      "running": 1,
+      "avg_cpu": 17,
+      "avg_mem": 82,
+      "max_disk": "cache01 82%"
+    }
+  ],
+  "alerts": [
+    {
+      "hostname": "web02",
+      "issues": [
+        "status=stopped",
+        "mem=91%"
+      ]
+    }
+  ]
+}</pre></div>
+<p><strong>Key ideas:</strong></p>
+<ul>
+  <li><strong>jq program file</strong> (<code>-f fleet_health.jq</code>): long filters are easier to read in a file with comments; <code>$cpu</code>, <code>$mem</code>, <code>$disk</code> come from <code>--argjson</code> as numbers.</li>
+  <li><code>def avg(f): ...</code> takes a <em>filter</em> as argument, <code>avg(.cpu_pct)</code> runs <code>.cpu_pct</code> on each element.</li>
+  <li><code>problems</code> builds an array from four <code>if … else empty end</code> expressions, <code>empty</code> produces no output, so only real issues end up in the array.</li>
+  <li><code>group_by(.role)</code> returns an array of arrays (one per role); inside <code>map</code>, <code>.[0].role</code> reads the role from the first member of each group.</li>
+  <li>The jq output is kept in a shell variable and queried several times with <code>&lt;&lt;&lt;</code>, the inventory is processed once.</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3 id="uc3"><span class="uc-tag">Use case 3</span> Reshaping and exporting Cloudflare DNS records</h3>
+<p><strong>Scenario:</strong> you fetched all DNS records of a zone from the Cloudflare API (Lab 05). Now you need to: check the API envelope for success; produce a readable table; export a minimal backup JSON that can later be replayed through the API (only <code>type</code>, <code>name</code>, <code>content</code>, <code>ttl</code>, <code>proxied</code>); find records that are exposed without the Cloudflare proxy; and build an index from name to record IDs for update scripts. The live API call would be:</p>
+<div class="code"><div class="code-head">bash · how the dataset is produced (needs a real token)</div><pre><code class="language-bash">curl -s "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?per_page=100" \
+     -H "Authorization: Bearer $CF_API_TOKEN" \
+     -H "Content-Type: application/json" &gt; cf_dns_records.json</code></pre></div>
+<div class="code"><div class="code-head">bash · dns_export.sh</div><pre><code class="language-bash">#!/usr/bin/env bash
+# dns_export.sh - inspect and export a Cloudflare "list DNS records" response
+set -euo pipefail
+resp="${1:-datasets/cf_dns_records.json}"
+
+# 1. Check the envelope: success must be true, otherwise print the API errors
+if ! jq -e '.success == true' "$resp" &gt; /dev/null; then
+  jq -r '.errors[] | "API error \(.code): \(.message)"' "$resp" &gt;&amp;2
+  exit 1
+fi
+jq -r '.result_info | "zone records: \(.count) of \(.total_count) (page \(.page)/\(.total_pages))"' "$resp"
+
+# 2. Human-readable table, sorted by type then name
+echo
+jq -r '.result | sort_by(.type, .name)[]
+       | [.type, .name, .content, (if .ttl == 1 then "auto" else (.ttl | tostring) end),
+          (if .proxied then "proxied" else "DNS-only" end)] | @tsv' "$resp" | column -t -s $'\t'
+
+# 3. Minimal backup that can be POSTed back to the API record by record
+jq '[.result[] | {type, name, content, ttl, proxied}]' "$resp" &gt; dns_backup.json
+echo
+echo "backup: $(jq length dns_backup.json) records -&gt; dns_backup.json"
+
+# 4. Proxiable A/AAAA/CNAME records that are NOT proxied (origin IP exposed)
+echo
+echo "Exposed (proxiable but DNS-only):"
+jq -r '.result[] | select(.proxiable and (.proxied | not)) | "  \(.name) -&gt; \(.content)"' "$resp"
+
+# 5. Lookup index name -&gt; {type: id}, used by update scripts
+jq 'reduce .result[] as $r ({}; .[$r.name][$r.type] = $r.id)' "$resp" &gt; dns_index.json
+echo
+echo "id of the example.com MX record: $(jq -r '."example.com".MX' dns_index.json)"</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">bash dns_export.sh datasets/cf_dns_records.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>zone records: 10 of 10 (page 1/1)
+
+A      api.example.com      203.0.113.20                         auto  proxied
+A      example.com          203.0.113.10                         auto  proxied
+A      staging.example.com  198.51.100.5                         300   DNS-only
+A      vpn.example.com      198.51.100.77                        3600  DNS-only
+A      www.example.com      203.0.113.10                         auto  proxied
+AAAA   example.com          2001:db8::10                         auto  proxied
+CNAME  blog.example.com     example.com                          auto  proxied
+CNAME  shop.example.com     shops.myshopify.com                  3600  DNS-only
+MX     example.com          mail.example.com                     300   DNS-only
+TXT    example.com          v=spf1 include:_spf.google.com ~all  300   DNS-only
+
+backup: 10 records -&gt; dns_backup.json
+
+Exposed (proxiable but DNS-only):
+  staging.example.com -&gt; 198.51.100.5
+  shop.example.com -&gt; shops.myshopify.com
+  vpn.example.com -&gt; 198.51.100.77
+
+id of the example.com MX record: 6bc4123ebde13c1b20733f6d0d6a05b3</pre></div>
+<div class="code"><div class="code-head">bash · inspect the backup and turn it into API request bodies</div><pre><code class="language-bash">jq -c '.[0], .[-1]' dns_backup.json
+jq -c '.[] | select(.type == "CNAME")' dns_backup.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{"type":"A","name":"example.com","content":"203.0.113.10","ttl":1,"proxied":true}
+{"type":"A","name":"vpn.example.com","content":"198.51.100.77","ttl":3600,"proxied":false}
+{"type":"CNAME","name":"blog.example.com","content":"example.com","ttl":1,"proxied":true}
+{"type":"CNAME","name":"shop.example.com","content":"shops.myshopify.com","ttl":3600,"proxied":false}</pre></div>
+<p><strong>Explanation:</strong></p>
+<ul>
+  <li><strong>Envelope check first.</strong> On failure Cloudflare still returns a JSON body, with <code>"success": false</code> and an <code>errors</code> array (plus a 4xx status that <code>curl -s</code> silently accepts unless you add <code>--fail</code>). <code>jq -e '.success == true'</code> turns that into an exit status.</li>
+  <li><code>sort_by(.type, .name)</code> sorts by type, then by name within a type.</li>
+  <li><code>{type, name, content, ttl, proxied}</code>: the object shorthand keeps just those keys, giving exactly the body format the <em>create DNS record</em> endpoint accepts; replaying is <code>jq -c '.[]' dns_backup.json | while read -r body; do curl ... --data "$body"; done</code>.</li>
+  <li><code>select(.proxiable and (.proxied | not))</code>: records that <em>could</em> hide the origin behind Cloudflare but do not; <code>not</code> is a filter in jq, so it is piped into.</li>
+  <li><code>.[$r.name][$r.type] = $r.id</code> inside <code>reduce</code> creates nested objects on the fly; keys with dots must be quoted when read back: <code>."example.com".MX</code>.</li>
+</ul>
+</div>
+
+<h2 id="gotchas">Gotchas</h2>
+<div class="table-wrap"><table>
+<tr><th>Problem</th><th>Why</th><th>Fix</th></tr>
+<tr><td>Strings printed with quotes in shell variables</td><td>default output is JSON</td><td><code>jq -r</code></td></tr>
+<tr><td><code>Cannot index array with "name"</code></td><td>applied <code>.name</code> to an array</td><td>iterate first: <code>.[].name</code> or <code>map(.name)</code></td></tr>
+<tr><td><code>Cannot iterate over null</code></td><td><code>.[]</code> on a missing key</td><td><code>.items[]?</code> or <code>(.items // [])[]</code></td></tr>
+<tr><td>Numeric comparison never true</td><td><code>--arg</code> gives strings</td><td><code>--argjson</code> or <code>tonumber</code></td></tr>
+<tr><td>Shell variable inside the filter breaks</td><td><code>"select(.n == \"$v\")"</code>: quoting/injection</td><td>single-quote the filter, pass <code>--arg v "$v"</code></td></tr>
+<tr><td><code>@csv</code>: "cannot be csv-formatted, only an array can be"</td><td>fed an object or a stream</td><td>wrap the fields in <code>[ ... ]</code></td></tr>
+<tr><td>Keys with dashes/dots fail: <code>.zone-id</code></td><td>parsed as subtraction</td><td><code>."zone-id"</code> or <code>.["zone-id"]</code></td></tr>
+<tr><td><code>// default</code> replaced a real <code>false</code></td><td><code>//</code> treats false like null</td><td>explicit <code>if . == null then … end</code></td></tr>
+<tr><td><code>jq '...' f.json &gt; f.json</code> empties the file</td><td>the shell truncates before jq reads</td><td>write to a temp file, then <code>mv</code> (or use <code>sponge</code>)</td></tr>
+<tr><td>Huge numbers lose precision (IDs)</td><td>jq &lt; 1.7 converted to double</td><td>jq 1.7 preserves literals; still treat IDs as strings</td></tr>
+<tr><td>Different output order of keys</td><td>jq keeps input order</td><td><code>-S</code> to sort keys for diffs</td></tr>
+</table></div>
+
+<h2 id="exercises">Practice exercises</h2>
+<details><summary>1. Print the email of every active user in Mumbai.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.[] | select(.active and .address.city == "Mumbai") | .email' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>ananya.das@example.com
+vikram.das@example.com
+sneha.das@example.com</pre></div>
+</details>
+<details><summary>2. Total storage per city, as a JSON object.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c 'group_by(.address.city) | map({(.[0].address.city): (map(.storage_mb) | add)}) | add' datasets/users.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{"Bengaluru":2960,"Delhi":9690,"Mumbai":8505,"Pune":4304}</pre></div>
+</details>
+<details><summary>3. Hostnames of servers tagged <code>critical</code> that are not running.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.servers[] | select((.tags | index("critical")) and .status != "running") | .hostname' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>web02
+db02
+mon01</pre></div>
+</details>
+<details><summary>4. Count DNS records by type, printed as <code>TYPE COUNT</code> lines.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.result | group_by(.type)[] | "\(.[0].type) \(length)"' datasets/cf_dns_records.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>A 5
+AAAA 1
+CNAME 2
+MX 1
+TXT 1</pre></div>
+</details>
+<details><summary>5. Produce a TSV of username and number of roles, sorted by role count (desc) then username.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r 'sort_by(-(.roles | length), .username)[] | [.username, (.roles | length)] | @tsv' datasets/users.json | head -5</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>akapoor	2
+averma	2
+inair	2
+kiyer	2
+msingh	2</pre></div>
+</details>
+<details><summary>6. Add a field <code>"disk_free_pct"</code> to every server and print the three with the least free disk.</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -c '.servers | map(.disk_free_pct = 100 - .disk_pct) | sort_by(.disk_free_pct)[:3][] | {hostname, disk_free_pct}' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>{"hostname":"db02","disk_free_pct":17}
+{"hostname":"web03","disk_free_pct":18}
+{"hostname":"cache01","disk_free_pct":18}</pre></div>
+</details>
+
+<h2 id="viva">Viva / exam questions</h2>
+<details><summary>What does <code>.[]</code> do?</summary><p>It iterates: outputs each element of an array (or each value of an object) as a separate result in the stream.</p></details>
+<details><summary>Difference between <code>map(f)</code> and <code>.[] | f</code>?</summary><p><code>.[] | f</code> produces a stream of separate values; <code>map(f)</code> is <code>[.[] | f]</code> and collects them into one array.</p></details>
+<details><summary>Why use <code>-r</code>?</summary><p>To output strings without JSON quotes, so they can be used directly as shell values or plain text.</p></details>
+<details><summary>How do you pass a shell variable into jq safely?</summary><p><code>--arg name "$var"</code> (string) or <code>--argjson name "$var"</code> (JSON value), then use <code>$name</code> inside a single-quoted filter.</p></details>
+<details><summary>How do you convert JSON to CSV?</summary><p>Build an array of fields per record and pipe to <code>@csv</code> with <code>-r</code>: <code>jq -r '.[] | [.id, .name] | @csv'</code>.</p></details>
+<details><summary>What does <code>//</code> do?</summary><p>It is the alternative operator: <code>a // b</code> returns <code>a</code> unless <code>a</code> is null, false or empty, in which case it returns <code>b</code>.</p></details>
+<details><summary>What is the difference between <code>-s</code> and <code>-n</code>?</summary><p><code>-s</code> reads all inputs into one array before running the filter; <code>-n</code> reads nothing automatically (input is <code>null</code>) and you pull values with <code>input</code>/<code>inputs</code> or build JSON from arguments.</p></details>
+<details><summary>How do you change a value inside a JSON file?</summary><p>Use an update such as <code>jq '.a.b = 5' f.json &gt; tmp &amp;&amp; mv tmp f.json</code>; jq outputs the whole modified document.</p></details>
+<details><summary>What does <code>group_by(.role)</code> return?</summary><p>An array of arrays: the input array sorted by <code>.role</code> and split into groups with equal role values.</p></details>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="../labs/lab04-json-jq.html">Lab 04, JSON with jq</a>: the lab built around this tool.</li>
+  <li><a href="../labs/lab05-cloudflare-api.html">Lab 05, Cloudflare API</a>: <code>curl</code> + <code>jq</code> against a real API.</li>
+  <li><a href="../labs/lab12-service-health.html">Lab 12, Service health monitoring</a> and <a href="../labs/lab07-email-alerts.html">Lab 07, Email alerts</a> consume JSON summaries.</li>
+  <li><a href="curl.html">curl</a>: fetching JSON from APIs.</li>
+  <li><a href="awk.html">awk</a>: the same grouping/aggregation ideas for plain-text data.</li>
+</ul>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

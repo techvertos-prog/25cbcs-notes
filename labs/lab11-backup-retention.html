@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 11 · Backup and retention</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="lab11">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Labs / Lab 11</div>
+<h1>Lab 11: Backup and retention scripts</h1>
+<p class="lead">Write scripts that back up a website folder and its database into files with the date in the name, check what is inside them, copy them to another machine, and delete old backups automatically so the disk never fills up.</p>
+<div class="meta-row">
+  <span class="pill">Commands: tar, date, mysqldump, find, rsync, cron</span><span class="pill grey">Difficulty: beginner</span><span class="pill grey">~45 min</span>
+</div>
+
+<h2 id="aim">Aim and objectives</h2>
+<ul>
+  <li>Create, list and extract <code>.tar.gz</code> backups with <code>tar</code>.</li>
+  <li>Put the date in a file name with <code>date +%F</code>.</li>
+  <li>Save a MySQL database with <code>mysqldump</code>.</li>
+  <li>Delete old backups with <code>find -mtime +N -delete</code> (the <strong>retention</strong> policy).</li>
+  <li>Copy backups to another server with <code>rsync</code> and run the script every night with <code>cron</code>.</li>
+</ul>
+
+<h2 id="prereq">Prerequisites</h2>
+<ul>
+  <li>Any Linux machine (or macOS) for the tar and find parts. <code>tar</code>, <code>gzip</code> and <code>find</code> are already installed.</li>
+  <li>For the database and remote-copy parts: <code>sudo apt install -y mysql-client rsync</code> and a second machine reachable with ssh (<a href="lab03-remote-execution.html">Lab 03</a>).</li>
+  <li>The scripts back up a small practice folder called <code>website</code>. Make it first:</li>
+</ul>
+<div class="code"><div class="code-head">bash · create a practice folder</div><pre><code class="language-bash">mkdir -p website/css
+echo "&lt;h1&gt;Home&lt;/h1&gt;"  &gt; website/index.html
+echo "&lt;h1&gt;About&lt;/h1&gt;" &gt; website/about.html
+echo "body { font-family: sans-serif; }" &gt; website/css/style.css</code></pre></div>
+
+<h2 id="start-here">Start here: simple scripts</h2>
+
+<h3 id="s1">1. Make a backup with the date in its name</h3>
+<div class="code"><div class="code-head">bash · backup_tar.sh</div><pre><code class="language-bash">#!/bin/bash
+# backup_tar.sh: pack the "website" folder into a .tar.gz with today's date
+
+today=$(date +%F)                     # today's date, e.g. 2026-11-17
+file="website_$today.tar.gz"          # the backup file name
+
+tar -czf "$file" website              # c = create, z = gzip, f = file name
+echo "Created $file"</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">chmod +x backup_tar.sh
+./backup_tar.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Created website_2026-11-17.tar.gz</pre></div>
+<ul>
+  <li><code>date +%F</code> prints today's date as <code>YEAR-MONTH-DAY</code>.</li>
+  <li><code>tar -czf NAME folder</code> packs the folder into one compressed file.</li>
+  <li>The date in the name means each day's backup gets a new file instead of overwriting yesterday's.</li>
+</ul>
+
+<h3 id="s2">2. Look inside a backup</h3>
+<div class="code"><div class="code-head">bash · list_backup.sh</div><pre><code class="language-bash">#!/bin/bash
+# list_backup.sh: show what is inside a backup, without unpacking it
+# usage: ./list_backup.sh FILE.tar.gz
+
+echo "Files in $1:"
+tar -tzf "$1"                         # t = list the contents
+count=$(tar -tzf "$1" | wc -l)        # count the lines
+echo "Total entries: $count"</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">chmod +x list_backup.sh
+./list_backup.sh website_$(date +%F).tar.gz</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Files in website_2026-11-17.tar.gz:
+website/
+website/index.html
+website/about.html
+website/css/
+website/css/style.css
+Total entries: 5</pre></div>
+<ul>
+  <li><code>tar -tzf</code> lists the files inside without unpacking anything.</li>
+  <li><code>$1</code> is the file name you give after the script name.</li>
+  <li>Piping the list into <code>wc -l</code> counts the lines, so you can quickly see whether the backup is empty.</li>
+</ul>
+
+<h3 id="s3">3. Back up a database</h3>
+<div class="code"><div class="code-head">bash · db_dump.sh</div><pre><code class="language-bash">#!/bin/bash
+# db_dump.sh: save the "wordpress" database to a compressed .sql.gz file
+
+file="db_$(date +%F).sql.gz"
+mysqldump --single-transaction wordpress | gzip &gt; "$file"
+echo "Saved database to $file"</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">sudo bash db_dump.sh</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>Saved database to db_2026-11-17.sql.gz</pre></div>
+<ul>
+  <li><code>mysqldump wordpress</code> prints the whole database as SQL commands.</li>
+  <li><code>| gzip &gt; file</code> compresses that text and saves it.</li>
+  <li><code>--single-transaction</code> takes a consistent copy without stopping the website.</li>
+  <li>To restore: <code>gunzip -c db_2026-11-17.sql.gz | sudo mysql wordpress</code>.</li>
+</ul>
+
+<h3 id="s4">4. Find old backups</h3>
+<p>First make some test backups with old dates. <code>touch -t YYYYMMDDhhmm</code> creates an empty file with that date:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">rm -rf backups &amp;&amp; mkdir backups
+touch -t 202611010200 backups/website_2026-11-01_0200.tar.gz
+touch -t 202611050200 backups/website_2026-11-05_0200.tar.gz
+touch -t 202611120200 backups/website_2026-11-12_0200.tar.gz
+touch -t 202611160200 backups/website_2026-11-16_0200.tar.gz
+ls backups</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>website_2026-11-01_0200.tar.gz
+website_2026-11-05_0200.tar.gz
+website_2026-11-12_0200.tar.gz
+website_2026-11-16_0200.tar.gz</pre></div>
+<div class="code"><div class="code-head">bash · find_old.sh</div><pre><code class="language-bash">#!/bin/bash
+# find_old.sh: list backups older than 7 days (only prints, deletes nothing)
+
+echo "Backups older than 7 days:"
+find backups -name "*.tar.gz" -mtime +7 -print</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">chmod +x find_old.sh
+./find_old.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Backups older than 7 days:
+backups/website_2026-11-01_0200.tar.gz
+backups/website_2026-11-05_0200.tar.gz</pre></div>
+<p>(Run on 2026-11-17. On a later day, more files will be listed.)</p>
+<ul>
+  <li><code>-name "*.tar.gz"</code> only looks at backup files.</li>
+  <li><code>-mtime +7</code> means "last changed more than 7 days ago".</li>
+  <li><code>-print</code> only shows the files. When the list looks right, replace <code>-print</code> with <code>-delete</code> to remove them.</li>
+</ul>
+<div class="callout warn"><span class="ct">Always print first</span>Run the <code>find</code> command with <code>-print</code>, check the list, and only then use <code>-delete</code>. A wrong folder name with <code>-delete</code> can remove files you wanted to keep.</div>
+
+<h2 id="concepts">Concepts</h2>
+
+<h3 id="why">Why back up, and what is retention?</h3>
+<ul>
+  <li>A <strong>backup</strong> is a copy you can use if the original is deleted, broken or hacked.</li>
+  <li><strong>Retention</strong> is the rule for how long to keep backups, for example "keep 7 days". Without it, the disk fills up.</li>
+  <li><strong>3-2-1 rule</strong>: keep 3 copies, on 2 different kinds of storage, with 1 copy in another place. A backup on the same disk as the website is lost if that disk fails.</li>
+</ul>
+
+<h3 id="tar">tar options</h3>
+<div class="table-wrap"><table>
+<tr><th>Command</th><th>Meaning</th></tr>
+<tr><td><code>tar -czf backup.tar.gz folder</code></td><td><strong>c</strong>reate a g<strong>z</strong>ip archive, <strong>f</strong>ile name follows</td></tr>
+<tr><td><code>tar -tzf backup.tar.gz</code></td><td>lis<strong>t</strong> the contents</td></tr>
+<tr><td><code>tar -xzf backup.tar.gz</code></td><td>e<strong>x</strong>tract into the current folder</td></tr>
+<tr><td><code>tar -xzf backup.tar.gz -C /tmp/restore</code></td><td>extract into another folder (<code>-C</code> = change to folder first)</td></tr>
+<tr><td><code>tar -czf b.tar.gz --exclude="*.log" folder</code></td><td>skip files matching a pattern</td></tr>
+</table></div>
+<p>Restore one backup into a test folder and compare it with the original:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">mkdir -p restore_test
+tar -xzf website_$(date +%F).tar.gz -C restore_test
+diff -r website restore_test/website &amp;&amp; echo "Restore matches the original"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Restore matches the original</pre></div>
+
+<h3 id="date">Dates in file names</h3>
+<div class="table-wrap"><table>
+<tr><th>Command</th><th>Example output</th></tr>
+<tr><td><code>date +%F</code></td><td><code>2026-11-17</code></td></tr>
+<tr><td><code>date +%F_%H%M</code></td><td><code>2026-11-17_0200</code> (date and time)</td></tr>
+<tr><td><code>date '+%F %T'</code></td><td><code>2026-11-17 02:00:01</code> (good for log lines)</td></tr>
+</table></div>
+<p>Always use year-month-day order. Then sorting the names alphabetically also sorts them by date. <code>17-11-2026</code> would sort in the wrong order.</p>
+
+<h3 id="checksum">Checking a backup with a checksum</h3>
+<p>A checksum is a fingerprint of a file. If even one byte changes, the fingerprint changes.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">sha256sum datasets/app.conf datasets/services.txt &gt; SHA256SUMS
+sha256sum -c SHA256SUMS</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>datasets/app.conf: OK
+datasets/services.txt: OK</pre></div>
+<p><code>-c</code> recomputes every fingerprint and prints <code>OK</code> or <code>FAILED</code>. (On macOS use <code>shasum -a 256</code>.)</p>
+
+<h3 id="cron">Running it every night with cron</h3>
+<p>Open the schedule with <code>crontab -e</code> and add a line. The five fields are minute, hour, day of month, month, day of week.</p>
+<div class="code"><div class="code-head">crontab -e</div><pre><code># every night at 02:00, run the backup and keep its output in a log
+0 2 * * * /home/student/daily_backup.sh &gt;&gt; /home/student/cron.log 2&gt;&amp;1
+# every night at 02:30, delete backups older than 7 days
+30 2 * * * /home/student/cleanup_backups.sh 7 &gt;&gt; /home/student/cron.log 2&gt;&amp;1</code></pre></div>
+<p>Use full paths in cron: cron does not start in your home folder.</p>
+
+<h2 id="dataset">Dataset: a backup folder listing</h2>
+<p><code>backups_listing.txt</code> is the output of <code>ls -l</code> on a real backup folder: one WordPress backup per night for 41 days. Column 5 is the size in bytes, the last column is the file name. The first line (<code>total</code>) is not a file.</p>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/backups_listing.txt</span></div><pre><code>total 2057947
+-rw-r--r-- 1 backup backup  49794834 Oct  7 02:00 wp_2026-10-07_0200.tar.gz
+-rw-r--r-- 1 backup backup  50875711 Oct  8 02:00 wp_2026-10-08_0200.tar.gz
+-rw-r--r-- 1 backup backup  50266155 Oct  9 02:00 wp_2026-10-09_0200.tar.gz
+-rw-r--r-- 1 backup backup  50330244 Oct 10 02:00 wp_2026-10-10_0200.tar.gz
+-rw-r--r-- 1 backup backup  50980081 Oct 11 02:00 wp_2026-10-11_0200.tar.gz
+-rw-r--r-- 1 backup backup  51827341 Oct 12 02:00 wp_2026-10-12_0200.tar.gz
+-rw-r--r-- 1 backup backup  48673013 Oct 13 02:00 wp_2026-10-13_0200.tar.gz
+-rw-r--r-- 1 backup backup  48809043 Oct 14 02:00 wp_2026-10-14_0200.tar.gz
+-rw-r--r-- 1 backup backup  51734200 Oct 15 02:00 wp_2026-10-15_0200.tar.gz
+-rw-r--r-- 1 backup backup  51610991 Oct 16 02:00 wp_2026-10-16_0200.tar.gz
+-rw-r--r-- 1 backup backup  53083839 Oct 17 02:00 wp_2026-10-17_0200.tar.gz
+-rw-r--r-- 1 backup backup  53130259 Oct 18 02:00 wp_2026-10-18_0200.tar.gz
+-rw-r--r-- 1 backup backup  49721738 Oct 19 02:00 wp_2026-10-19_0200.tar.gz
+-rw-r--r-- 1 backup backup  49129564 Oct 20 02:00 wp_2026-10-20_0200.tar.gz
+-rw-r--r-- 1 backup backup  52266294 Oct 21 02:00 wp_2026-10-21_0200.tar.gz
+-rw-r--r-- 1 backup backup  51245114 Oct 22 02:00 wp_2026-10-22_0200.tar.gz
+-rw-r--r-- 1 backup backup  50069463 Oct 23 02:00 wp_2026-10-23_0200.tar.gz
+-rw-r--r-- 1 backup backup  49820599 Oct 24 02:00 wp_2026-10-24_0200.tar.gz
+-rw-r--r-- 1 backup backup  53758888 Oct 25 02:00 wp_2026-10-25_0200.tar.gz
+-rw-r--r-- 1 backup backup  55236983 Oct 26 02:00 wp_2026-10-26_0200.tar.gz
+-rw-r--r-- 1 backup backup  54922175 Oct 27 02:00 wp_2026-10-27_0200.tar.gz
+-rw-r--r-- 1 backup backup  50131317 Oct 28 02:00 wp_2026-10-28_0200.tar.gz
+-rw-r--r-- 1 backup backup  54954883 Oct 29 02:00 wp_2026-10-29_0200.tar.gz
+-rw-r--r-- 1 backup backup  53463230 Oct 30 02:00 wp_2026-10-30_0200.tar.gz
+-rw-r--r-- 1 backup backup  54119996 Oct 31 02:00 wp_2026-10-31_0200.tar.gz
+-rw-r--r-- 1 backup backup  55985499 Nov  1 02:00 wp_2026-11-01_0200.tar.gz
+-rw-r--r-- 1 backup backup  55843714 Nov  2 02:00 wp_2026-11-02_0200.tar.gz
+-rw-r--r-- 1 backup backup      1024 Nov  3 02:00 wp_2026-11-03_0200.tar.gz
+-rw-r--r-- 1 backup backup  52361156 Nov  4 02:00 wp_2026-11-04_0200.tar.gz
+-rw-r--r-- 1 backup backup  56447180 Nov  5 02:00 wp_2026-11-05_0200.tar.gz
+-rw-r--r-- 1 backup backup  51525835 Nov  6 02:00 wp_2026-11-06_0200.tar.gz
+-rw-r--r-- 1 backup backup  56012383 Nov  7 02:00 wp_2026-11-07_0200.tar.gz
+-rw-r--r-- 1 backup backup  52289865 Nov  8 02:00 wp_2026-11-08_0200.tar.gz
+-rw-r--r-- 1 backup backup  52439550 Nov  9 02:00 wp_2026-11-09_0200.tar.gz
+-rw-r--r-- 1 backup backup  52419077 Nov 10 02:00 wp_2026-11-10_0200.tar.gz
+-rw-r--r-- 1 backup backup  53895582 Nov 11 02:00 wp_2026-11-11_0200.tar.gz
+-rw-r--r-- 1 backup backup  54509565 Nov 12 02:00 wp_2026-11-12_0200.tar.gz
+-rw-r--r-- 1 backup backup  57689961 Nov 13 02:00 wp_2026-11-13_0200.tar.gz
+-rw-r--r-- 1 backup backup  53092351 Nov 14 02:00 wp_2026-11-14_0200.tar.gz
+-rw-r--r-- 1 backup backup  56911764 Nov 15 02:00 wp_2026-11-15_0200.tar.gz
+-rw-r--r-- 1 backup backup  55937147 Nov 16 02:00 wp_2026-11-16_0200.tar.gz</code></pre></div>
+<p><strong>Count the backups and add up their size</strong> (<code>NR&gt;1</code> skips the <code>total</code> line):</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk 'NR&gt;1 {count++; bytes += $5} END {print count, "backups,", int(bytes/1024/1024), "MB"}' datasets/backups_listing.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>41 backups, 2009 MB</pre></div>
+<p><strong>Find broken backups</strong>: a real backup is about 50 MB, so anything under 1 MB failed:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk 'NR&gt;1 &amp;&amp; $5 &lt; 1000000 {print "Too small:", $NF, $5, "bytes"}' datasets/backups_listing.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Too small: wp_2026-11-03_0200.tar.gz 1024 bytes</pre></div>
+
+<h2 id="usecases">Use cases</h2>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 1</span> Daily backup script with a log</h3>
+<p><strong>Goal.</strong> One script that cron can run every night: it creates the backup folder if needed, makes a dated backup, checks that <code>tar</code> worked, and writes one line to a log file either way.</p>
+<div class="code"><div class="code-head">bash · daily_backup.sh</div><pre><code class="language-bash">#!/bin/bash
+# daily_backup.sh: back up a folder into a backups folder, with a log
+# usage: ./daily_backup.sh
+
+SOURCE="website"                      # what to back up
+DEST="backups"                        # where to keep the backups
+LOG="backup.log"                      # where to write what happened
+
+mkdir -p "$DEST"                      # create the folder if it is missing
+file="$DEST/website_$(date +%F_%H%M).tar.gz"
+
+echo "Backing up $SOURCE ..."
+tar -czf "$file" "$SOURCE"
+
+if [ $? -eq 0 ]; then                 # $? = exit code of tar (0 = success)
+    size=$(du -h "$file" | cut -f1)
+    echo "OK: $file ($size)"
+    echo "$(date '+%F %T') OK $file" &gt;&gt; "$LOG"
+else
+    echo "ERROR: backup failed"
+    echo "$(date '+%F %T') FAILED $file" &gt;&gt; "$LOG"
+    exit 1
+fi</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">chmod +x daily_backup.sh
+./daily_backup.sh
+cat backup.log</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Backing up website ...
+OK: backups/website_2026-11-17_0009.tar.gz (4.0K)
+2026-11-17 00:09:50 OK backups/website_2026-11-17_0009.tar.gz</pre></div>
+<p><strong>How it works</strong></p>
+<ul>
+  <li>The settings are variables at the top, so you can change what is backed up without touching the rest.</li>
+  <li><code>mkdir -p</code> creates the folder and gives no error if it already exists.</li>
+  <li><code>$?</code> holds the exit code of the last command: <code>0</code> means success. The <code>if</code> uses it to decide what to print and log.</li>
+  <li><code>du -h file | cut -f1</code> gives the size in a human-friendly form, like <code>4.0K</code>.</li>
+  <li><code>&gt;&gt;</code> appends to the log, so old entries are kept.</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 2</span> Cleanup script with a dry-run mode</h3>
+<p><strong>Goal.</strong> Delete backups older than a number of days given on the command line. Because deleting is dangerous, the word <code>dry</code> makes it only show what it would delete.</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash"># test files: two old backups and two new ones
+rm -rf backups &amp;&amp; mkdir backups
+touch -t 202611010200 backups/website_2026-11-01_0200.tar.gz
+touch -t 202611050200 backups/website_2026-11-05_0200.tar.gz
+touch -t 202611120200 backups/website_2026-11-12_0200.tar.gz
+touch -t 202611160200 backups/website_2026-11-16_0200.tar.gz
+ls backups</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>website_2026-11-01_0200.tar.gz
+website_2026-11-05_0200.tar.gz
+website_2026-11-12_0200.tar.gz
+website_2026-11-16_0200.tar.gz</pre></div>
+<div class="code"><div class="code-head">bash · cleanup_backups.sh</div><pre><code class="language-bash">#!/bin/bash
+# cleanup_backups.sh: delete backups older than N days
+# usage: ./cleanup_backups.sh DAYS [dry]      "dry" = only show, delete nothing
+
+DIR="backups"
+DAYS=${1:-7}                          # first argument, or 7 if none given
+MODE=$2
+
+old=$(find "$DIR" -name "*.tar.gz" -mtime +$DAYS)
+count=$(echo "$old" | grep -c "tar.gz")
+
+if [ "$count" -eq 0 ]; then
+    echo "Nothing older than $DAYS days."
+    exit 0
+fi
+
+for file in $old; do
+    if [ "$MODE" = "dry" ]; then
+        echo "would delete: $file"
+    else
+        rm "$file"
+        echo "deleted: $file"
+    fi
+done
+echo "$count file(s) older than $DAYS days"</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">chmod +x cleanup_backups.sh
+./cleanup_backups.sh 7 dry
+./cleanup_backups.sh 7
+./cleanup_backups.sh 7
+ls backups</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>would delete: backups/website_2026-11-01_0200.tar.gz
+would delete: backups/website_2026-11-05_0200.tar.gz
+2 file(s) older than 7 days
+deleted: backups/website_2026-11-01_0200.tar.gz
+deleted: backups/website_2026-11-05_0200.tar.gz
+2 file(s) older than 7 days
+Nothing older than 7 days.
+website_2026-11-12_0200.tar.gz
+website_2026-11-16_0200.tar.gz</pre></div>
+<p><strong>How it works</strong></p>
+<ul>
+  <li><code>${1:-7}</code> uses the first argument, or 7 if you did not give one.</li>
+  <li>The <code>find</code> result is stored in the variable <code>old</code>; <code>grep -c</code> counts how many file names it holds.</li>
+  <li>If there is nothing to do, the script says so and exits with <code>0</code> (success).</li>
+  <li>The <code>for</code> loop goes through the files. <code>[ "$MODE" = "dry" ]</code> compares two strings: in dry mode it only prints.</li>
+  <li>The third run shows that the script is safe to repeat: the old files are already gone.</li>
+</ul>
+<div class="callout note"><span class="ct">File names</span><code>for file in $old</code> splits on spaces. That is fine here because our own script makes the names and they never contain spaces.</div>
+</div>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 3</span> Copy backups to another server with rsync</h3>
+<p><strong>Goal.</strong> Follow the 3-2-1 rule: after the nightly backup, copy the whole <code>backups</code> folder to a second machine. <code>rsync</code> only sends files that are new or changed, so it is fast after the first time.</p>
+<div class="code"><div class="code-head">bash · copy_remote.sh</div><pre><code class="language-bash">#!/bin/bash
+# copy_remote.sh: copy the backups folder to another server with rsync
+
+SERVER="backup@192.0.2.50"            # user@host of the backup server
+REMOTE_DIR="/srv/backups/web01/"
+
+rsync -av backups/ "$SERVER:$REMOTE_DIR"
+
+if [ $? -eq 0 ]; then
+    echo "Copy finished"
+else
+    echo "Copy FAILED"
+    exit 1
+fi</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">bash copy_remote.sh</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>sending incremental file list
+website_2026-11-17_0200.tar.gz
+
+sent 1,284 bytes  received 35 bytes  2,638.00 bytes/sec
+total size is 4,610  speedup is 3.50
+Copy finished</pre></div>
+<p><strong>How it works</strong></p>
+<ul>
+  <li><code>-a</code> (archive) copies folders and keeps dates and permissions; <code>-v</code> lists each file sent.</li>
+  <li>Only the new backup was sent: the older ones were already on the server.</li>
+  <li>The trailing <code>/</code> in <code>backups/</code> means "the contents of backups". Without it, rsync creates <code>backups/backups</code> on the server.</li>
+  <li>It needs ssh keys (Lab 03) so it can run from cron without asking for a password.</li>
+</ul>
+</div>
+
+<details><summary>Optional: going further (keep only the newest N backups)</summary>
+<p>Instead of "older than 7 days", you can keep a fixed number of backups. <code>ls -t</code> lists newest first and <code>tail -n +4</code> prints from line 4 onward, so everything except the newest 3:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">rm -rf backups &amp;&amp; mkdir backups
+touch -t 202611010200 backups/website_2026-11-01_0200.tar.gz
+touch -t 202611050200 backups/website_2026-11-05_0200.tar.gz
+touch -t 202611120200 backups/website_2026-11-12_0200.tar.gz
+touch -t 202611160200 backups/website_2026-11-16_0200.tar.gz
+touch -t 202611170200 backups/website_2026-11-17_0200.tar.gz
+ls -t backups | tail -n +4</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>website_2026-11-05_0200.tar.gz
+website_2026-11-01_0200.tar.gz</pre></div>
+<p>To delete them: <code>cd backups &amp;&amp; ls -t | tail -n +4 | xargs rm</code>. The advantage: if backups stop working for a month, you still keep the last 3 good ones, while an "older than 7 days" rule would eventually delete everything.</p>
+</details>
+
+<h2 id="mistakes">Common mistakes</h2>
+<div class="table-wrap"><table>
+<tr><th>Problem</th><th>Cause</th><th>Fix</th></tr>
+<tr><td><code>Permission denied</code> when running the script</td><td>not executable</td><td><code>chmod +x daily_backup.sh</code> or <code>bash daily_backup.sh</code></td></tr>
+<tr><td><code>tar: Cannot open: No such file or directory</code></td><td>wrong order: <code>tar -cfz</code></td><td><code>f</code> must be last: <code>tar -czf name.tar.gz folder</code></td></tr>
+<tr><td><code>[: =: unary operator expected</code></td><td>variable is empty and not quoted: <code>[ $MODE = dry ]</code></td><td>quote it: <code>[ "$MODE" = "dry" ]</code></td></tr>
+<tr><td><code>[: missing `]'</code></td><td>no spaces: <code>[$? -eq 0]</code></td><td><code>[ $? -eq 0 ]</code></td></tr>
+<tr><td>Comparing numbers with <code>=</code></td><td><code>=</code> compares text</td><td>use <code>-eq</code>, <code>-gt</code>, <code>-lt</code> for numbers</td></tr>
+<tr><td>Today's backup overwrites yesterday's</td><td>no date in the file name</td><td>add <code>$(date +%F)</code></td></tr>
+<tr><td>Script works by hand but not in cron</td><td>relative paths; cron starts in another folder</td><td>use full paths, or <code>cd</code> to the folder at the top of the script</td></tr>
+<tr><td><code>bash\r: No such file or directory</code></td><td>Windows (CRLF) line endings</td><td><code>sed -i 's/\r$//' script.sh</code></td></tr>
+</table></div>
+
+<h2 id="exercises">Practice exercises</h2>
+<ol class="steps">
+<li><strong>Exclude logs.</strong> Change <code>backup_tar.sh</code> so <code>.log</code> files are not included.
+<details><summary>Solution</summary><p>Add <code>--exclude="*.log"</code> before the folder: <code>tar -czf "$file" --exclude="*.log" website</code>.</p></details></li>
+<li><strong>Newest backup.</strong> Using the dataset, print the name of the newest backup.
+<details><summary>Solution</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk 'NR&gt;1 {print $NF}' datasets/backups_listing.txt | sort | tail -1</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>wp_2026-11-16_0200.tar.gz</pre></div>
+<p>Because the names contain year-month-day, a normal <code>sort</code> puts the newest last.</p></details></li>
+<li><strong>Count by month.</strong> Using the dataset, count how many backups were made in October and in November.
+<details><summary>Solution</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">awk 'NR&gt;1 {print $6}' datasets/backups_listing.txt | sort | uniq -c</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>     16 Nov
+     25 Oct</pre></div>
+<p>Column 6 of <code>ls -l</code> is the month name.</p></details></li>
+<li><strong>Backup to a chosen folder.</strong> Make <code>daily_backup.sh</code> take the folder to back up as <code>$1</code>, and stop with a message if that folder does not exist.
+<details><summary>Solution</summary>
+<div class="code"><div class="code-head">bash · top of daily_backup.sh</div><pre><code class="language-bash">SOURCE=$1
+if [ ! -d "$SOURCE" ]; then           # -d = "is a directory"
+    echo "Folder not found: $SOURCE"
+    exit 1
+fi</code></pre></div>
+</details></li>
+</ol>
+
+<h2 id="viva">Viva / exam questions</h2>
+<details><summary>What do the letters in <code>tar -czf</code> mean?</summary><p>c = create, z = compress with gzip, f = the next word is the archive file name.</p></details>
+<details><summary>How do you list a tar file without extracting it?</summary><p><code>tar -tzf file.tar.gz</code>.</p></details>
+<details><summary>Why put <code>date +%F</code> in the backup name?</summary><p>Each backup gets a unique name, so it does not overwrite the previous one, and the year-month-day format sorts in date order.</p></details>
+<details><summary>What does <code>find /backups -mtime +7 -delete</code> do?</summary><p>Finds files last modified more than 7 days ago in <code>/backups</code> and deletes them. Run it with <code>-print</code> first to check.</p></details>
+<details><summary>What is a retention policy?</summary><p>A rule saying how long backups are kept, for example 7 daily backups. It stops backups from filling the disk.</p></details>
+<details><summary>What is the 3-2-1 rule?</summary><p>3 copies of the data, on 2 different types of storage, 1 copy off-site.</p></details>
+<details><summary>Which command backs up a MySQL database?</summary><p><code>mysqldump dbname &gt; file.sql</code>, usually piped through <code>gzip</code>. Restore with <code>mysql dbname &lt; file.sql</code>.</p></details>
+<details><summary>Why use rsync instead of scp for repeated copies?</summary><p>rsync only sends new or changed files, so later copies are much faster.</p></details>
+<details><summary>What does <code>$?</code> contain?</summary><p>The exit code of the last command. 0 means success, anything else means an error.</p></details>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="../tools/find-xargs.html">find &amp; xargs</a> (<code>-mtime</code>, <code>-delete</code>)</li>
+  <li><a href="../tools/awk.html">awk</a> and <a href="../tools/sort-uniq.html">sort &amp; uniq</a></li>
+  <li><a href="lab03-remote-execution.html">Lab 03: Remote execution</a> (ssh keys, rsync)</li>
+  <li><a href="lab07-email-alerts.html">Lab 07: Email alerts</a> (send a mail when a backup fails)</li>
+  <li><a href="lab10-wordpress-lamp.html">Lab 10: WordPress on LAMP</a> (the site to back up)</li>
+</ul>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

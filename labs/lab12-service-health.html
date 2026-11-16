@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 12 · Service health monitoring</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="lab12">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Labs / Lab 12</div>
+<h1>Lab 12: Service health monitoring</h1>
+<p class="lead">Write scripts that check whether services such as nginx and MySQL are running, restart them when they stop, check that a website answers, and print a coloured status list. These are the basic building blocks of every monitoring tool.</p>
+<div class="meta-row">
+  <span class="pill">Commands: systemctl, curl, journalctl, jq, cron</span><span class="pill grey">Difficulty: beginner</span><span class="pill grey">~45 min</span>
+</div>
+
+<h2 id="aim">Aim and objectives</h2>
+<ul>
+  <li>Check if a service is running with <code>systemctl is-active</code>.</li>
+  <li>Restart a stopped service from a script.</li>
+  <li>Check a website's HTTP status code with <code>curl</code>.</li>
+  <li>Check many services with a <code>for</code> loop or from a list file.</li>
+  <li>Run the checks automatically every few minutes with <code>cron</code>.</li>
+</ul>
+
+<h2 id="prereq">Prerequisites</h2>
+<ul>
+  <li>A Linux VM with systemd (Ubuntu) and a service to watch: <code>sudo apt install -y nginx curl jq</code>.</li>
+  <li>Basic Bash: variables, <code>if</code>, <code>for</code>, <code>while read</code>.</li>
+  <li>The parts that read <code>datasets/</code> (the service list and the server inventory) run on any computer.</li>
+</ul>
+
+<h2 id="start-here">Start here: simple scripts</h2>
+
+<h3 id="s1">1. Is the service running?</h3>
+<div class="code"><div class="code-head">bash · is_active.sh</div><pre><code class="language-bash">#!/bin/bash
+# is_active.sh: ask systemd whether nginx is running
+
+systemctl is-active nginx             # prints active, inactive or failed
+echo "exit code: $?"                  # 0 = active, anything else = not active</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">chmod +x is_active.sh
+./is_active.sh
+sudo systemctl stop nginx
+./is_active.sh</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>active
+exit code: 0
+inactive
+exit code: 3</pre></div>
+<ul>
+  <li><code>systemctl is-active NAME</code> prints the state of a service.</li>
+  <li>It also sets the exit code: <code>0</code> when active, non-zero when not. Scripts use this exit code in <code>if</code>.</li>
+  <li><code>$?</code> holds the exit code of the last command.</li>
+</ul>
+
+<h3 id="s2">2. Restart it if it is down</h3>
+<div class="code"><div class="code-head">bash · restart_if_down.sh</div><pre><code class="language-bash">#!/bin/bash
+# restart_if_down.sh: start nginx again if it has stopped
+
+if systemctl is-active --quiet nginx; then     # --quiet: no text, only the exit code
+    echo "nginx is running"
+else
+    echo "nginx is DOWN, restarting..."
+    systemctl restart nginx
+    systemctl is-active nginx                  # show the new state
+fi</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">sudo systemctl stop nginx
+sudo ./restart_if_down.sh
+sudo ./restart_if_down.sh</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>nginx is DOWN, restarting...
+active
+nginx is running</pre></div>
+<ul>
+  <li><code>if command; then</code> runs the command and checks its exit code: 0 means "true".</li>
+  <li><code>--quiet</code> stops <code>systemctl</code> printing, so only our own messages appear.</li>
+  <li>Restarting needs root, so run the script with <code>sudo</code>.</li>
+</ul>
+
+<h3 id="s3">3. Is the website answering?</h3>
+<div class="code"><div class="code-head">bash · check_url.sh</div><pre><code class="language-bash">#!/bin/bash
+# check_url.sh: is the website answering with HTTP 200?
+
+url="https://example.com"
+code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$url")
+
+if [ "$code" = "200" ]; then
+    echo "$url is UP ($code)"
+else
+    echo "$url is DOWN ($code)"
+fi</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">bash check_url.sh</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>https://example.com is UP (200)</pre></div>
+<ul>
+  <li><code>-s</code> = silent, <code>-o /dev/null</code> = throw the page away, <code>-w "%{http_code}"</code> = print only the status code.</li>
+  <li><code>--max-time 10</code> gives up after 10 seconds, so the script never hangs.</li>
+  <li>If the server cannot be reached at all, curl prints <code>000</code>.</li>
+</ul>
+
+<h3 id="s4">4. Check several services with a loop</h3>
+<div class="code"><div class="code-head">bash · loop_services.sh</div><pre><code class="language-bash">#!/bin/bash
+# loop_services.sh: check several services with a for loop
+
+for service in nginx mysql cron; do
+    status=$(systemctl is-active $service)
+    echo "$service: $status"
+done</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">bash loop_services.sh</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>nginx: active
+mysql: inactive
+cron: active</pre></div>
+<ul>
+  <li>The <code>for</code> loop runs the same two lines once for each name in the list.</li>
+  <li><code>status=$(…)</code> saves the command's output in a variable.</li>
+  <li>To watch another service, just add its name to the list.</li>
+</ul>
+
+<h2 id="concepts">Concepts</h2>
+
+<h3 id="healthy">What does "healthy" mean?</h3>
+<div class="table-wrap"><table>
+<tr><th>Check</th><th>Question</th><th>Command</th></tr>
+<tr><td>Service</td><td>Is it running?</td><td><code>systemctl is-active nginx</code></td></tr>
+<tr><td>Website</td><td>Does it answer with 200?</td><td><code>curl -s -o /dev/null -w "%{http_code}" URL</code></td></tr>
+<tr><td>Port</td><td>Is anything listening on port 22?</td><td><code>nc -z 127.0.0.1 22</code></td></tr>
+<tr><td>Process</td><td>Is the program in memory?</td><td><code>pgrep nginx</code></td></tr>
+<tr><td>Disk</td><td>Is the disk almost full?</td><td><code>df -h</code></td></tr>
+</table></div>
+<p>A service can be "active" but still not answer (for example if it is stuck), so a website check is a useful extra.</p>
+
+<h3 id="systemctl">systemctl and journalctl commands</h3>
+<div class="table-wrap"><table>
+<tr><th>Command</th><th>What it does</th></tr>
+<tr><td><code>systemctl status nginx</code></td><td>show the state and the last log lines (for humans)</td></tr>
+<tr><td><code>systemctl is-active nginx</code></td><td>print <code>active</code>/<code>inactive</code>/<code>failed</code> (for scripts)</td></tr>
+<tr><td><code>systemctl is-enabled nginx</code></td><td>will it start at boot? <code>enabled</code>/<code>disabled</code></td></tr>
+<tr><td><code>sudo systemctl start | stop | restart nginx</code></td><td>control the service</td></tr>
+<tr><td><code>journalctl -u nginx -n 20</code></td><td>last 20 log lines of the service: shows <em>why</em> it stopped</td></tr>
+</table></div>
+
+<h3 id="curl">HTTP status codes</h3>
+<div class="table-wrap"><table>
+<tr><th>Code</th><th>Meaning</th></tr>
+<tr><td><code>200</code></td><td>OK</td></tr>
+<tr><td><code>301</code>, <code>302</code></td><td>redirect to another page (usually fine)</td></tr>
+<tr><td><code>404</code></td><td>page not found</td></tr>
+<tr><td><code>500</code>, <code>503</code></td><td>server error / service unavailable</td></tr>
+<tr><td><code>000</code></td><td>no answer at all (curl could not connect, or timed out)</td></tr>
+</table></div>
+<p>Add <code>%{time_total}</code> to also get the response time in seconds:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">curl -s -o /dev/null -w "%{http_code} %{time_total}\n" --max-time 10 https://example.com</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>200 0.284113</pre></div>
+
+<h3 id="disk">A simple disk check</h3>
+<p>The same idea works for resources. On a real server use <code>df -h</code>; here we read a saved copy of its output.</p>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/df.txt</span></div><pre><code>Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1        50G   41G  6.5G  87% /
+/dev/sda2       200G  120G   70G  64% /var
+/dev/sdb1       500G  478G   22G  96% /backup
+tmpfs           3.9G  1.2M  3.9G   1% /run
+/dev/sdc1       100G   12G   83G  13% /home
+/dev/nvme0n1p1  1.0T  910G   90G  92% /data</code></pre></div>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash"># column 5 is "Use%"; +0 turns "87%" into the number 87
+awk 'NR&gt;1 &amp;&amp; $5+0 &gt;= 90 {print "DISK ALMOST FULL:", $6, $5}' datasets/df.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>DISK ALMOST FULL: /backup 96%
+DISK ALMOST FULL: /data 92%</pre></div>
+
+<h3 id="cron">Running checks every 5 minutes with cron</h3>
+<div class="code"><div class="code-head">sudo crontab -e</div><pre><code># minute hour day month weekday   command
+*/5 * * * *   cd /home/student/lab12 &amp;&amp; ./watchdog.sh &gt;&gt; cron.log 2&gt;&amp;1</code></pre></div>
+<p><code>*/5</code> in the minute field means "every 5 minutes". The checks need root (to restart services), so put this line in root's crontab with <code>sudo crontab -e</code>.</p>
+
+<h2 id="datasets">Datasets: the list of checks</h2>
+<p>Instead of writing service names inside the script, we keep them in a text file. Each line has four columns: a name, the check type (<code>systemd</code>, <code>http</code> or <code>port</code>), what to check, and the expected result. To watch something new, you add a line; the script stays the same.</p>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/services.txt</span></div><pre><code># service     type     target                        expect
+nginx         systemd  nginx                         active
+mysql         systemd  mysql                         active
+php-fpm       systemd  php8.3-fpm                    active
+redis         systemd  redis-server                  active
+website       http     https://example.com           200
+api-health    http     https://api.example.com/health 200
+ssh           port     127.0.0.1:22                  open
+mysql-port    port     127.0.0.1:3306                open</code></pre></div>
+<p><strong>Read the file line by line.</strong> <code>while read</code> puts the four columns into four variables:</p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep "systemd" datasets/services.txt | while read name type unit expect; do
+    echo "will check the service $unit (expect: $expect)"
+done</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>will check the service nginx (expect: active)
+will check the service mysql (expect: active)
+will check the service php8.3-fpm (expect: active)
+will check the service redis-server (expect: active)</pre></div>
+<p><strong>Only the websites:</strong></p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep " http " datasets/services.txt | awk '{print $1, $3}'</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>website https://example.com
+api-health https://api.example.com/health</pre></div>
+<p><code>servers.json</code> is an inventory of 8 servers with their status and usage, like the answer from a monitoring API:</p>
+<div class="dataset"><div class="ds-head"><span class="ds-name">datasets/servers.json</span></div><pre><code>{
+  "generated": "2026-11-16T10:00:00Z",
+  "datacenter": "blr-1",
+  "servers": [
+    {
+      "hostname": "web01",
+      "ip": "10.0.1.11",
+      "role": "web",
+      "os": "Ubuntu 22.04",
+      "cpu_pct": 52,
+      "mem_pct": 53,
+      "disk_pct": 78,
+      "status": "running",
+      "tags": [
+        "prod",
+        "critical"
+      ]
+    },
+    {
+      "hostname": "web02",
+      "ip": "10.0.1.12",
+      "role": "web",
+      "os": "Ubuntu 22.04",
+      "cpu_pct": 8,
+      "mem_pct": 91,
+      "disk_pct": 71,
+      "status": "stopped",
+      "tags": [
+        "critical",
+        "prod"
+      ]
+    },
+    {
+      "hostname": "web03",
+      "ip": "10.0.1.13",
+      "role": "web",
+      "os": "Rocky 9",
+      "cpu_pct": 64,
+      "mem_pct": 58,
+      "disk_pct": 82,
+      "status": "running",
+      "tags": [
+        "critical",
+        "prod"
+      ]
+    },
+    {
+      "hostname": "db01",
+      "ip": "10.0.1.14",
+      "role": "database",
+      "os": "Ubuntu 24.04",
+      "cpu_pct": 43,
+      "mem_pct": 83,
+      "disk_pct": 44,
+      "status": "running",
+      "tags": [
+        "critical",
+        "internal"
+      ]
+    },
+    {
+      "hostname": "db02",
+      "ip": "10.0.1.15",
+      "role": "database",
+      "os": "Ubuntu 22.04",
+      "cpu_pct": 63,
+      "mem_pct": 67,
+      "disk_pct": 83,
+      "status": "stopped",
+      "tags": [
+        "critical",
+        "public"
+      ]
+    },
+    {
+      "hostname": "cache01",
+      "ip": "10.0.1.16",
+      "role": "cache",
+      "os": "Rocky 9",
+      "cpu_pct": 17,
+      "mem_pct": 82,
+      "disk_pct": 82,
+      "status": "running",
+      "tags": [
+        "prod",
+        "backup"
+      ]
+    },
+    {
+      "hostname": "lb01",
+      "ip": "10.0.1.17",
+      "role": "loadbalancer",
+      "os": "Ubuntu 24.04",
+      "cpu_pct": 61,
+      "mem_pct": 76,
+      "disk_pct": 60,
+      "status": "running",
+      "tags": [
+        "prod",
+        "backup"
+      ]
+    },
+    {
+      "hostname": "mon01",
+      "ip": "10.0.1.18",
+      "role": "monitoring",
+      "os": "Rocky 9",
+      "cpu_pct": 87,
+      "mem_pct": 65,
+      "disk_pct": 37,
+      "status": "degraded",
+      "tags": [
+        "backup",
+        "critical"
+      ]
+    }
+  ]
+}</code></pre></div>
+<p><strong>Which servers are not running?</strong></p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.servers[] | select(.status != "running") | "\(.hostname) is \(.status)"' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>web02 is stopped
+db02 is stopped
+mon01 is degraded</pre></div>
+<p><strong>How many servers per status?</strong></p>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.servers[].status' datasets/servers.json | sort | uniq -c</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>      1 degraded
+      5 running
+      2 stopped</pre></div>
+
+<h2 id="usecases">Use cases</h2>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 1</span> Service watchdog</h3>
+<p><strong>Goal.</strong> Read every <code>systemd</code> line from <code>services.txt</code>, check each service, restart the ones that are down, and write what happened to a log file. Run it from cron every 5 minutes.</p>
+<div class="code"><div class="code-head">bash · watchdog.sh</div><pre><code class="language-bash">#!/bin/bash
+# watchdog.sh: check every systemd service in services.txt, restart the ones that are down
+# usage: sudo ./watchdog.sh
+
+LIST="datasets/services.txt"
+LOG="watchdog.log"
+
+grep "systemd" "$LIST" | while read name type unit expect; do
+    if systemctl is-active --quiet "$unit"; then
+        echo "OK      $name"
+    else
+        echo "DOWN    $name, restarting $unit"
+        systemctl restart "$unit"
+        sleep 5                                   # give it time to start
+        if systemctl is-active --quiet "$unit"; then
+            echo "FIXED   $name"
+            echo "$(date '+%F %T') $name was down, restarted OK" &gt;&gt; "$LOG"
+        else
+            echo "FAILED  $name is still down!"
+            echo "$(date '+%F %T') $name restart FAILED" &gt;&gt; "$LOG"
+        fi
+    fi
+done</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">chmod +x watchdog.sh
+sudo systemctl stop redis-server       # break something on purpose
+sudo ./watchdog.sh
+cat watchdog.log</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>OK      nginx
+OK      mysql
+OK      php-fpm
+DOWN    redis, restarting redis-server
+FIXED   redis
+2026-11-17 10:05:12 redis was down, restarted OK</pre></div>
+<p><strong>How it works</strong></p>
+<ul>
+  <li><code>grep "systemd"</code> keeps only the service lines; <code>while read</code> splits each line into <code>name type unit expect</code>.</li>
+  <li><code>sleep 5</code> waits a little after the restart, then the script checks again to see if the restart really worked.</li>
+  <li>Only problems are written to the log, so it stays short. <code>&gt;&gt;</code> appends.</li>
+  <li>If a service stays down, look at <code>journalctl -u redis-server -n 20</code> to see why. You could also send an email here (see <a href="lab07-email-alerts.html">Lab 07</a>).</li>
+</ul>
+</div>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 2</span> Website checker that saves results to CSV</h3>
+<p><strong>Goal.</strong> Check every <code>http</code> line of <code>services.txt</code>, show UP or DOWN with the response time, and add one line per website to <code>uptime.csv</code>. Run every minute from cron and you get a history you can open in a spreadsheet.</p>
+<div class="code"><div class="code-head">bash · website_check.sh</div><pre><code class="language-bash">#!/bin/bash
+# website_check.sh: check each website in services.txt and save the results in a CSV file
+
+LIST="datasets/services.txt"
+CSV="uptime.csv"
+
+if [ ! -f "$CSV" ]; then                          # first run: write the header line
+    echo "time,name,url,code,seconds" &gt; "$CSV"
+fi
+
+now=$(date '+%F %T')
+grep " http " "$LIST" | while read name type url expect; do
+    result=$(curl -s -o /dev/null -w "%{http_code} %{time_total}" --max-time 10 "$url")
+    code=$(echo "$result" | cut -d' ' -f1)        # first word: status code
+    secs=$(echo "$result" | cut -d' ' -f2)        # second word: time in seconds
+    if [ "$code" = "$expect" ]; then
+        echo "UP    $name  $code  ${secs}s"
+    else
+        echo "DOWN  $name  $code  ${secs}s"
+    fi
+    echo "$now,$name,$url,$code,$secs" &gt;&gt; "$CSV"
+done</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">bash website_check.sh
+cat uptime.csv</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>UP    website  200  0.284113s
+DOWN  api-health  000  10.001342s
+time,name,url,code,seconds
+2026-11-17 10:05:01,website,https://example.com,200,0.284113
+2026-11-17 10:05:01,api-health,https://api.example.com/health,000,10.001342</pre></div>
+<p><strong>How it works</strong></p>
+<ul>
+  <li><code>[ ! -f "$CSV" ]</code> is true when the file does not exist yet; only then is the header line written.</li>
+  <li>curl prints two values, like <code>200 0.284113</code>. <code>cut -d' ' -f1</code> takes the first word, <code>-f2</code> the second.</li>
+  <li>The status code is compared with the 4th column of the list (<code>expect</code>), so different sites can expect different codes.</li>
+  <li><code>000</code> with about 10 seconds means the site did not answer before <code>--max-time 10</code>.</li>
+</ul>
+<p>Later you can count the DOWN results per site from the CSV, for example with <code>awk -F, '$4 != 200 {print $2}' uptime.csv | sort | uniq -c</code>.</p>
+</div>
+
+<div class="usecase">
+<h3><span class="uc-tag">Use case 3</span> Coloured status list (optional)</h3>
+<p><strong>Goal.</strong> Print every server from <code>servers.json</code> with its status in colour: green for running, yellow for degraded, red for anything else. This one runs on any computer.</p>
+<div class="code"><div class="code-head">bash · status_list.sh</div><pre><code class="language-bash">#!/bin/bash
+# status_list.sh: coloured status list of all servers in servers.json
+
+GREEN="\033[32m"; RED="\033[31m"; YELLOW="\033[33m"; RESET="\033[0m"
+if [ ! -t 1 ]; then                       # not a terminal (a file or a pipe)?
+    GREEN=""; RED=""; YELLOW=""; RESET="" # then do not print colour codes
+fi
+
+jq -r '.servers[] | "\(.hostname) \(.status) \(.cpu_pct)"' datasets/servers.json |
+while read host status cpu; do
+    if [ "$status" = "running" ]; then
+        color=$GREEN
+    elif [ "$status" = "degraded" ]; then
+        color=$YELLOW
+    else
+        color=$RED
+    fi
+    printf "%-8s ${color}%-9s${RESET} cpu %s%%\n" "$host" "$status" "$cpu"
+done</code></pre></div>
+<div class="code"><div class="code-head">bash · run it</div><pre><code class="language-bash">chmod +x status_list.sh
+./status_list.sh</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>web01    running   cpu 52%
+web02    stopped   cpu 8%
+web03    running   cpu 64%
+db01     running   cpu 43%
+db02     stopped   cpu 63%
+cache01  running   cpu 17%
+lb01     running   cpu 61%
+mon01    degraded  cpu 87%</pre></div>
+<p>The output above has no colours because it was saved to this page. In a terminal, <code>running</code> is green, <code>degraded</code> yellow and <code>stopped</code> red.</p>
+<p><strong>How it works</strong></p>
+<ul>
+  <li><code>\033[32m</code> is the "switch to green" code; <code>\033[0m</code> switches back to normal. <code>printf</code> turns <code>\033</code> into the escape character.</li>
+  <li><code>[ ! -t 1 ]</code> is true when the output is not a terminal (a file or a pipe). Then the colour codes are emptied, so no strange characters end up in files.</li>
+  <li><code>jq -r</code> prints one line per server with three words, and <code>while read host status cpu</code> splits them.</li>
+  <li><code>%-8s</code> pads the host name to 8 characters so the columns line up.</li>
+</ul>
+</div>
+
+<details><summary>Optional: going further (check a port without nc)</summary>
+<p>Bash can open a network connection by itself through the special path <code>/dev/tcp/HOST/PORT</code>. This checks the <code>port</code> lines of <code>services.txt</code>:</p>
+<div class="code"><div class="code-head">bash · port_check.sh</div><pre><code class="language-bash">#!/bin/bash
+# port_check.sh: is something listening on each host:port in services.txt?
+grep " port " datasets/services.txt | while read name type target expect; do
+    host=$(echo "$target" | cut -d: -f1)      # 127.0.0.1
+    port=$(echo "$target" | cut -d: -f2)      # 22
+    if timeout 2 bash -c "echo &gt; /dev/tcp/$host/$port" 2&gt;/dev/null; then
+        echo "$name: port $port open"
+    else
+        echo "$name: port $port CLOSED"
+    fi
+done</code></pre></div>
+<div class="output"><div class="out-head">sample output</div><pre>ssh: port 22 open
+mysql-port: port 3306 open</pre></div>
+<p><code>timeout 2</code> stops the attempt after 2 seconds, so a blocked port does not make the script hang.</p>
+</details>
+
+<h2 id="mistakes">Common mistakes</h2>
+<div class="table-wrap"><table>
+<tr><th>Problem</th><th>Cause</th><th>Fix</th></tr>
+<tr><td><code>Permission denied</code></td><td>script not executable</td><td><code>chmod +x watchdog.sh</code> or <code>bash watchdog.sh</code></td></tr>
+<tr><td><code>Failed to restart nginx.service: Access denied</code></td><td>restart needs root</td><td>run with <code>sudo</code></td></tr>
+<tr><td><code>[: missing `]'</code></td><td>no spaces: <code>["$code" = "200"]</code></td><td><code>[ "$code" = "200" ]</code></td></tr>
+<tr><td><code>[: =: unary operator expected</code></td><td>empty variable without quotes</td><td>always quote: <code>"$code"</code></td></tr>
+<tr><td><code>[ $code -eq 200 ]</code> fails when curl gives nothing</td><td><code>-eq</code> needs a number</td><td>compare as text: <code>[ "$code" = "200" ]</code></td></tr>
+<tr><td>Script hangs</td><td>no timeout on curl</td><td>add <code>--max-time 10</code></td></tr>
+<tr><td>Log is full of <code>^[[32m</code></td><td>colour codes written to a file</td><td>only use colours when <code>[ -t 1 ]</code></td></tr>
+<tr><td><code>bash\r: No such file or directory</code></td><td>Windows line endings</td><td><code>sed -i 's/\r$//' watchdog.sh</code></td></tr>
+<tr><td>Works by hand, not from cron</td><td>cron starts in another folder</td><td><code>cd</code> to the script's folder first, or use full paths</td></tr>
+</table></div>
+
+<h2 id="exercises">Practice exercises</h2>
+<ol class="steps">
+<li><strong>High CPU.</strong> From <code>servers.json</code>, print the servers whose <code>cpu_pct</code> is above 60.
+<details><summary>Solution</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">jq -r '.servers[] | select(.cpu_pct &gt; 60) | "\(.hostname) \(.cpu_pct)%"' datasets/servers.json</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>web03 64%
+db02 63%
+lb01 61%
+mon01 87%</pre></div>
+</details></li>
+<li><strong>Count check types.</strong> Count how many checks of each type are in <code>services.txt</code> (skip the comment line).
+<details><summary>Solution</summary>
+<div class="code"><div class="code-head">bash</div><pre><code class="language-bash">grep -v "^#" datasets/services.txt | awk '{print $2}' | sort | uniq -c</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>      2 http
+      2 port
+      4 systemd</pre></div>
+</details></li>
+<li><strong>Is it enabled?</strong> Change <code>loop_services.sh</code> so it also prints whether each service starts at boot.
+<details><summary>Solution</summary>
+<div class="code"><div class="code-head">bash · loop_enabled.sh</div><pre><code class="language-bash">#!/bin/bash
+for service in nginx mysql cron; do
+    active=$(systemctl is-active $service)
+    enabled=$(systemctl is-enabled $service)
+    echo "$service: $active, $enabled"
+done</code></pre></div>
+</details></li>
+<li><strong>Website from the user.</strong> Change <code>check_url.sh</code> so the URL is given as <code>$1</code>, with a usage message if it is missing.
+<details><summary>Solution</summary>
+<div class="code"><div class="code-head">bash · check_url2.sh</div><pre><code class="language-bash">#!/bin/bash
+if [ -z "$1" ]; then                 # -z = "is empty"
+    echo "usage: $0 URL"
+    exit 1
+fi
+code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$1")
+echo "$1 answered $code"</code></pre></div>
+</details></li>
+</ol>
+
+<h2 id="viva">Viva / exam questions</h2>
+<details><summary>How do you check from a script whether nginx is running?</summary><p><code>systemctl is-active --quiet nginx</code> and test its exit code with <code>if</code>: 0 means running.</p></details>
+<details><summary>What is the difference between <code>is-active</code> and <code>is-enabled</code>?</summary><p><code>is-active</code>: is it running now. <code>is-enabled</code>: will it start automatically at boot.</p></details>
+<details><summary>How do you get only the HTTP status code with curl?</summary><p><code>curl -s -o /dev/null -w "%{http_code}" URL</code>.</p></details>
+<details><summary>What does status code 000 mean in curl?</summary><p>There was no HTTP answer at all: the host could not be reached, refused the connection, or the request timed out.</p></details>
+<details><summary>Why use <code>--max-time</code>?</summary><p>So a slow or dead server cannot make the monitoring script wait forever.</p></details>
+<details><summary>How do you see why a service stopped?</summary><p><code>journalctl -u NAME -n 20</code> shows its last 20 log lines; <code>systemctl status NAME</code> also shows a few.</p></details>
+<details><summary>Why keep the services in a separate file?</summary><p>You can add or remove checks without changing the script, and the same script works on different servers.</p></details>
+<details><summary>How do you run a check every 5 minutes?</summary><p>With cron: <code>*/5 * * * * /path/to/watchdog.sh</code> in <code>crontab -e</code> (root's crontab if it must restart services).</p></details>
+
+<h2 id="related">Related</h2>
+<ul>
+  <li><a href="../tools/curl.html">curl: HTTP from the shell</a></li>
+  <li><a href="../tools/jq.html">jq: JSON processor</a></li>
+  <li><a href="lab02-menus-colors.html">Lab 02: Menus &amp; colors</a> (colour codes)</li>
+  <li><a href="lab07-email-alerts.html">Lab 07: Email alerts</a> (send a mail when a service is down)</li>
+  <li><a href="lab10-wordpress-lamp.html">Lab 10: WordPress on LAMP</a> (the services to watch), <a href="lab11-backup-retention.html">Lab 11: Backup &amp; retention</a></li>
+</ul>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>
