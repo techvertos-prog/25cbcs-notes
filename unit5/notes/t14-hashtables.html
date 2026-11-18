@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>14 · Hashtables</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="t14">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Topics / 14</div>
+<h1>Hashtables</h1>
+<p class="lead">A hashtable stores <strong>key = value</strong> pairs, so you look things up by name instead of by number.</p>
+<div class="meta-row"><span class="pill">Topic 14</span><span class="pill grey">~20 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="t08-variables.html">08 Variables</a><a href="t12-loops.html">12 Loops</a><a href="t13-arrays.html">13 Arrays</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>An array is a numbered list: <code>$a[0]</code>. A hashtable is a labelled list: <code>$h['Name']</code> or <code>$h.Name</code>. Keys are unique and ignore case.</p></div>
+
+<h2 id="create">Create a hashtable</h2>
+<p>Use <code>@{ }</code>. Separate pairs with <code>;</code> or new lines.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$student = @{ Name = 'Aarav'; Class = '10A'; Maths = 92 }
+$student</code></pre></div>
+<div class="output"><div class="out-head">output · key order may differ</div><pre>Name                           Value
+----                           -----
+Class                          10A
+Name                           Aarav
+Maths                          92</pre></div>
+<div class="callout note"><span class="ct">Note</span>A plain hashtable does <strong>not</strong> keep the order you typed. See <code>[ordered]</code> below.</div>
+
+<h2 id="edit">Get, set, add, remove</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$student.Name              # get with a dot
+$student['Maths']          # get with brackets
+$student.Maths = 95        # set (change)
+$student.Science = 85      # set a new key = add
+$student.Add('English', 78)  # add with a method
+$student.Remove('Class')   # remove
+$student.Count</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Aarav
+92
+4</pre></div>
+<div class="callout warn"><span class="ct">Watch out</span><code>.Add()</code> fails if the key already exists. <code>$h['key'] = value</code> adds or overwrites, so it never fails.</div>
+
+<h2 id="keys">Keys, Values and ContainsKey</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$student.Keys | Sort-Object
+$student.ContainsKey('Maths')
+$student.ContainsKey('Class')</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>English
+Maths
+Name
+Science
+True
+False</pre></div>
+<p><code>$student.Values</code> gives just the values the same way.</p>
+
+<h2 id="ordered">[ordered] keeps your order</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$stock = [ordered]@{
+    Keyboard = 25
+    Mouse    = 40
+    Monitor  = 8
+}
+$stock</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Name                           Value
+----                           -----
+Keyboard                       25
+Mouse                          40
+Monitor                        8</pre></div>
+
+<h3 id="loop">Loop with GetEnumerator()</h3>
+<p><code>GetEnumerator()</code> hands you each pair with <code>.Key</code> and <code>.Value</code>.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">foreach ($pair in $stock.GetEnumerator()) {
+    "$($pair.Key) = $($pair.Value)"
+}</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Keyboard = 25
+Mouse = 40
+Monitor = 8</pre></div>
+<div class="callout tip"><span class="ct">Tip</span><code>foreach ($k in $stock.Keys) { "$k = $($stock[$k])" }</code> gives the same result.</div>
+
+<h2 id="object">Hashtable to object</h2>
+<p>Put <code>[pscustomobject]</code> in front to make a real object. It keeps your order and shows as a table.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$obj = [pscustomobject]@{ Name = 'Aarav'; Class = '10A'; Maths = 92 }
+$obj</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Name  Class Maths
+----  ----- -----
+Aarav 10A      92</pre></div>
+<p>Objects work with <code>Sort-Object</code>, <code>Export-Csv</code> and the rest of the pipeline, like the rows from <code>Import-Csv</code>.</p>
+
+<h2 id="splat">Splatting</h2>
+<p>Store parameters in a hashtable, then pass it with <code>@</code> instead of <code>$</code>. Long commands become easy to read.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$params = @{
+    Path       = 'datasets/servers.txt'
+    TotalCount = 2
+}
+Get-Content @params      # same as: Get-Content -Path datasets/servers.txt -TotalCount 2</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>web01
+web02</pre></div>
+
+<h2 id="compare">Array vs hashtable</h2>
+<div class="table-wrap"><table>
+<tr><th></th><th>Array</th><th>Hashtable</th></tr>
+<tr><td>Create</td><td><code>@('a', 'b')</code></td><td><code>@{ k = 'v' }</code></td></tr>
+<tr><td>Look up by</td><td>number: <code>$a[0]</code></td><td>key: <code>$h['k']</code> or <code>$h.k</code></td></tr>
+<tr><td>Order</td><td>Always kept</td><td>Not kept (use <code>[ordered]</code>)</td></tr>
+<tr><td>Duplicates</td><td>Allowed</td><td>Keys must be unique</td></tr>
+<tr><td>Add</td><td><code>$a += 'c'</code></td><td><code>$h['k2'] = 'v2'</code></td></tr>
+<tr><td>Search</td><td><code>$a -contains 'b'</code></td><td><code>$h.ContainsKey('k')</code></td></tr>
+<tr><td>Good for</td><td>Lists: servers, marks</td><td>Lookups: settings, name → price</td></tr>
+</table></div>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Make a hashtable <code>$price</code> with <code>Mouse = 400</code> and <code>Webcam = 2200</code>. Print the Webcam price.</li>
+  <li>Add <code>Router = 3200</code>, then check that <code>Router</code> exists.</li>
+  <li>Loop over it and print lines like <code>Mouse costs 400</code>.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$price = @{ Mouse = 400; Webcam = 2200 }
+$price.Webcam                       # 2200
+$price['Router'] = 3200
+$price.ContainsKey('Router')        # True
+foreach ($p in $price.GetEnumerator()) { "$($p.Key) costs $($p.Value)" }</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li><code>@{ key = value }</code>; read with <code>$h.key</code> or <code>$h['key']</code>.</li>
+  <li><code>.Keys</code>, <code>.Values</code>, <code>.ContainsKey()</code>, <code>.Remove()</code>.</li>
+  <li>Loop pairs with <code>.GetEnumerator()</code>.</li>
+  <li><code>[ordered]</code> keeps order; <code>[pscustomobject]</code> makes an object.</li>
+  <li>Splat with <code>@params</code>.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>What is splatting?</strong> Passing a command's parameters as a hashtable: build <code>$p = @{ Path = '...'; TotalCount = 2 }</code> and call <code>Get-Content @p</code>. Each key becomes a parameter name.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

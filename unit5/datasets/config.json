@@ -1,0 +1,11 @@
+{
+  "AppName": "StudentPortal",
+  "Version": "2.1.0",
+  "Port": 8080,
+  "DebugMode": false,
+  "Admins": ["aarav", "sneha"],
+  "Database": {
+    "Server": "db01",
+    "Name": "portal"
+  }
+}

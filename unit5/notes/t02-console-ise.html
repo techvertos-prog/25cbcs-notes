@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>02 · Console &amp; ISE</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="t02">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Topics / 02</div>
+<h1>Console &amp; ISE</h1>
+<p class="lead">There are three places to work with PowerShell: the console, the old ISE editor, and VS Code.</p>
+<div class="meta-row"><span class="pill">Topic 02</span><span class="pill grey">~15 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="../basics/f2-install-and-open.html">F2 Install &amp; open</a><a href="t01-introduction.html">01 Introduction</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>Use the <strong>console</strong> to type quick commands. Use an <strong>editor</strong> (VS Code, or the ISE on old setups) to write and run scripts.</p></div>
+
+<h2 id="console">The console</h2>
+<p>The console is a window with a <strong>prompt</strong>. The prompt shows the current folder.</p>
+<div class="output"><div class="out-head">the prompt · sample, yours will differ</div><pre>PS C:\Users\aarav\unit5&gt; </pre></div>
+<ul>
+  <li><code>PS</code> means you are in PowerShell (not CMD).</li>
+  <li><code>C:\Users\aarav\unit5</code> is the current folder.</li>
+  <li><code>&gt;</code> means "type here".</li>
+</ul>
+<div class="callout tip"><span class="ct">Tip</span>On Windows, use <strong>Windows Terminal</strong>. It has tabs, easy copy/paste and can open PowerShell 7, Windows PowerShell 5.1 and CMD side by side.</div>
+
+<h2 id="keys">Useful keys</h2>
+<div class="table-wrap"><table>
+<tr><th>Key</th><th>What it does</th></tr>
+<tr><td><kbd>Tab</kbd></td><td>Completes a command, parameter or file name. Press again for the next match.</td></tr>
+<tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>Previous / next command from history.</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>R</kbd></td><td>Search your command history.</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Stop a running command (or copy, if text is selected).</td></tr>
+<tr><td><kbd>Esc</kbd></td><td>Clear the current line.</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>V</kbd> or right-click</td><td>Paste.</td></tr>
+<tr><td><code>cls</code></td><td>Clear the screen (alias of <code>Clear-Host</code>).</td></tr>
+<tr><td><code>Get-History</code></td><td>List the commands you typed this session.</td></tr>
+</table></div>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-History</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>  Id     Duration CommandLine
+  --     -------- -----------
+   1        0.012 Get-Date
+   2        0.031 Get-Content datasets/servers.txt
+   3        0.004 cls</pre></div>
+<div class="callout note"><span class="ct">Note</span>In Windows Terminal you can also use <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd>. On macOS use <kbd>Cmd</kbd>+<kbd>C</kbd> / <kbd>Cmd</kbd>+<kbd>V</kbd>.</div>
+
+<h2 id="ise">The ISE (old editor)</h2>
+<p>ISE = <strong>Integrated Scripting Environment</strong>. It comes with Windows and works only with <strong>Windows PowerShell 5.1</strong>.</p>
+<div class="code"><div class="code-head">powershell · Windows only</div><pre><code class="language-powershell">powershell_ise          # or search "ISE" in the Start menu</code></pre></div>
+<div class="tiles">
+  <div class="tile"><b>Script pane</b><p>Top. Write and save <code>.ps1</code> files.</p></div>
+  <div class="tile"><b>Console pane</b><p>Bottom. Shows output; you can type commands here too.</p></div>
+  <div class="tile"><b>Commands add-on</b><p>Side. Search cmdlets and fill in parameters with a form.</p></div>
+</div>
+<div class="table-wrap"><table>
+<tr><th>Key</th><th>In the ISE</th></tr>
+<tr><td><kbd>F5</kbd></td><td>Run the whole script.</td></tr>
+<tr><td><kbd>F8</kbd></td><td>Run only the selected lines.</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Space</kbd></td><td>Show IntelliSense suggestions.</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>J</kbd></td><td>Insert a snippet (for example an <code>if</code> block).</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Break</kbd></td><td>Stop a running script.</td></tr>
+</table></div>
+<div class="callout warn"><span class="ct">Watch out</span>The ISE is <strong>no longer developed</strong>. It cannot run PowerShell 7 and does not exist on Linux or macOS. Learn it for the exam, but use VS Code for real work.</div>
+
+<h2 id="vscode">VS Code: the modern replacement</h2>
+<ol class="steps">
+  <li>Install <strong>Visual Studio Code</strong> (free, all platforms).</li>
+  <li>Open Extensions (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>) and install <strong>PowerShell</strong> by Microsoft.</li>
+  <li>Open the <code>unit5</code> folder, create <code>hello.ps1</code>, and press <kbd>F5</kbd>.</li>
+</ol>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">code hello.ps1          # opens (or creates) the file in VS Code</code></pre></div>
+<p>The same keys work: <kbd>F5</kbd> runs the script, <kbd>F8</kbd> runs the selection. Output appears in the PowerShell terminal at the bottom.</p>
+
+<h2 id="which">Which one to use?</h2>
+<div class="table-wrap"><table>
+<tr><th></th><th>Console</th><th>ISE</th><th>VS Code + extension</th></tr>
+<tr><td>Best for</td><td>Quick commands</td><td>Scripts on old Windows PCs</td><td>Writing any script</td></tr>
+<tr><td>PowerShell 7</td><td>Yes</td><td>No (5.1 only)</td><td>Yes</td></tr>
+<tr><td>Linux / macOS</td><td>Yes</td><td>No</td><td>Yes</td></tr>
+<tr><td>Run script / selection</td><td>Type <code>./file.ps1</code></td><td><kbd>F5</kbd> / <kbd>F8</kbd></td><td><kbd>F5</kbd> / <kbd>F8</kbd></td></tr>
+<tr><td>Debugger</td><td>Basic</td><td>Yes</td><td>Yes, best</td></tr>
+<tr><td>Still updated?</td><td>Yes</td><td>No</td><td>Yes</td></tr>
+</table></div>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Type <code>Get-Con</code> and press <kbd>Tab</kbd>. What does it complete to?</li>
+  <li>Run three commands, then list them with history.</li>
+  <li>Press <kbd>↑</kbd> to bring back your last command and run it again.</li>
+  <li>Open VS Code, write <code>Get-Date</code> in a new <code>.ps1</code> file, and run it with <kbd>F5</kbd>.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Content        # Tab completes it; press Tab again to cycle other matches
+Get-History        # or its alias: h</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li>The prompt <code>PS C:\...&gt;</code> shows the current folder.</li>
+  <li><kbd>Tab</kbd> completes, <kbd>↑</kbd> recalls, <kbd>Ctrl</kbd>+<kbd>C</kbd> stops.</li>
+  <li>ISE: 5.1 only, <kbd>F5</kbd> runs the script, <kbd>F8</kbd> runs the selection, no longer developed.</li>
+  <li>VS Code with the PowerShell extension is the modern editor.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>What is the PowerShell ISE?</strong> It is the Integrated Scripting Environment that ships with Windows PowerShell 5.1. It has a script pane and a console pane; <kbd>F5</kbd> runs the script and <kbd>F8</kbd> runs the selected lines. It does not support PowerShell 7, so Microsoft recommends VS Code with the PowerShell extension.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

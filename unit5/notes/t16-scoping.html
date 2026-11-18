@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>16 · Scoping</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="t16">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Topics / 16</div>
+<h1>Scoping</h1>
+<p class="lead">Scope decides where a variable can be seen and changed: the whole session, one script, or one function.</p>
+<div class="meta-row"><span class="pill">Topic 16</span><span class="pill grey">~20 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="t06-writing-scripts.html">06 Writing scripts</a><a href="t08-variables.html">08 Variables</a><a href="t15-functions.html">15 Functions</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>A child scope can <strong>read</strong> its parent's variables. Assigning to one inside the child creates a <strong>new local copy</strong>; the parent's value stays the same.</p></div>
+
+<h2 id="boxes">Scopes are nested boxes</h2>
+<div class="tile"><b>Global</b><p>The PowerShell session: your prompt and your profile.</p>
+  <div class="tile" style="margin-top:10px"><b>Script</b><p>Created each time a <code>.ps1</code> file runs. Gone when it ends.</p>
+    <div class="tile" style="margin-top:10px"><b>Local (function)</b><p>Created each time a function runs. Gone when it returns.</p></div>
+  </div>
+</div>
+<div class="table-wrap"><table>
+<tr><th>Scope</th><th>What it is</th><th>Written as</th></tr>
+<tr><td>Global</td><td>The whole session</td><td><code>$global:x</code></td></tr>
+<tr><td>Script</td><td>The running script file</td><td><code>$script:x</code></td></tr>
+<tr><td>Local</td><td>Wherever the code is running now</td><td><code>$x</code> (default)</td></tr>
+<tr><td>Private</td><td>Like local, but child scopes cannot see it</td><td><code>$private:x</code></td></tr>
+</table></div>
+<div class="callout note"><span class="ct">Note</span>Local is not a separate box. It just means "the current box". At the prompt, local is global.</div>
+
+<h2 id="read">A child can read the parent</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$color = 'blue'
+function Show-Color { "Inside: $color" }
+Show-Color</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Inside: blue</pre></div>
+
+<h2 id="copy">Assigning makes a local copy</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$count = 1
+function Add-One {
+    $count = $count + 1      # new local $count
+    "Inside: $count"
+}
+Add-One
+"Outside: $count"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Inside: 2
+Outside: 1</pre></div>
+<ul class="flow">
+  <li><span>Read $count: finds parent's 1</span></li>
+  <li><span>Assign: makes local $count = 2</span></li>
+  <li class="here"><span>Function ends: local copy is gone</span></li>
+</ul>
+
+<h2 id="modifiers">$script: and $global: modifiers</h2>
+<p>A scope modifier says exactly which box to change.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$count = 1
+function Add-One {
+    $script:count = $script:count + 1
+}
+Add-One
+Add-One
+"Count: $count"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Count: 3</pre></div>
+
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">function Set-Theme { $global:theme = 'dark' }
+Set-Theme
+$theme</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>dark</pre></div>
+
+<p><code>$private:</code> hides a variable from child scopes.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$private:pin = 1234
+function Show-Pin { "PIN: $pin" }
+Show-Pin</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>PIN: </pre></div>
+<div class="callout warn"><span class="ct">Watch out</span>Use <code>$global:</code> rarely. Any script can change a global variable, which makes bugs hard to find.</div>
+
+<h2 id="dot">Dot-sourcing changes scope</h2>
+<p>Running a script gives it its own script scope. Dot-sourcing (<code>. </code> then a space) runs it in <strong>your</strong> scope, so its variables and functions stay. Save this one-line file as <code>setvars.ps1</code> in the unit5 folder:</p>
+<div class="code"><div class="code-head">setvars.ps1</div><pre><code class="language-powershell">$siteName = 'StudentPortal'</code></pre></div>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">./setvars.ps1         # normal run: own scope
+"After run: $siteName"
+. ./setvars.ps1       # dot-source: your scope
+"After dot-source: $siteName"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>After run:
+After dot-source: StudentPortal</pre></div>
+<div class="table-wrap"><table>
+<tr><th>Command</th><th>Runs in</th><th>Variables after it ends</th></tr>
+<tr><td><code>./setvars.ps1</code></td><td>a new script scope</td><td>gone</td></tr>
+<tr><td><code>. ./setvars.ps1</code></td><td>the current scope</td><td>kept</td></tr>
+</table></div>
+<p>This is how a profile or a library file adds functions to your session. See <a href="t19-script-files.html">19 Script files</a>.</p>
+
+<h2 id="best">Best practice: parameters in, values out</h2>
+<p>Don't reach into other scopes. Pass values in as parameters and return the result.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">function Add-One {
+    param([int]$Value)
+    $Value + 1
+}
+$count = 1
+$count = Add-One $count
+$count</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>2</pre></div>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Set <code>$name = 'Rohan'</code>. Write a function that prints it. Does it work?</li>
+  <li>Inside the function, set <code>$name = 'Isha'</code>. What is <code>$name</code> after the call?</li>
+  <li>Change the function so the outside <code>$name</code> really becomes <code>Isha</code>.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$name = 'Rohan'
+function Show-Name { $name }
+Show-Name                              # Rohan (child reads parent)
+
+function Set-Name { $name = 'Isha' }
+Set-Name; $name                        # Rohan (only a local copy changed)
+
+function Set-Name { $script:name = 'Isha' }
+Set-Name; $name                        # Isha
+# Better: function Get-NewName { 'Isha' }; $name = Get-NewName</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li>Scopes nest: global → script → function.</li>
+  <li>Children can read parents; assigning makes a local copy.</li>
+  <li><code>$script:x</code> and <code>$global:x</code> change a specific scope.</li>
+  <li><code>. ./file.ps1</code> runs a file in your scope.</li>
+  <li>Prefer parameters and return values over scope modifiers.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>What is dot-sourcing?</strong> Running a script with a dot and a space in front, <code>. ./lib.ps1</code>. The script runs in the caller's scope, so its variables and functions remain available after it finishes.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

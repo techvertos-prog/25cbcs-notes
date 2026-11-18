@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>08 · Variables</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="t08">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Topics / 08</div>
+<h1>Variables</h1>
+<p class="lead">A variable is a named box that stores a value. In PowerShell every variable name starts with <code>$</code>.</p>
+<div class="meta-row"><span class="pill">Topic 08</span><span class="pill grey">~25 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="../basics/f5-objects.html">F5 Objects</a><a href="t06-writing-scripts.html">06 Writing scripts</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p><code>$name = value</code> stores anything: a number, text, a date, even a whole CSV file. PowerShell picks the type for you, but you can force one with <code>[int]</code>, <code>[string]</code> and so on.</p></div>
+
+<h2 id="create">Create and use</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$name  = "Aarav"
+$marks = 92
+$name
+$marks + 5</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Aarav
+97</pre></div>
+<div class="table-wrap"><table>
+<tr><th>Naming rule</th><th>Example</th></tr>
+<tr><td>Starts with <code>$</code></td><td><code>$total</code></td></tr>
+<tr><td>Letters, digits, <code>_</code> are safe</td><td><code>$max_marks2</code></td></tr>
+<tr><td>Not case-sensitive</td><td><code>$Name</code> is the same as <code>$name</code></td></tr>
+<tr><td>No spaces or dashes (unless in <code>${ }</code>)</td><td><code>${my var}</code> works, but avoid it</td></tr>
+<tr><td>Use clear names</td><td><code>$studentCount</code>, not <code>$x</code></td></tr>
+</table></div>
+
+<h2 id="types">Types</h2>
+<div class="table-wrap"><table>
+<tr><th>Value</th><th>Type (.GetType().Name)</th></tr>
+<tr><td><code>92</code></td><td>Int32</td></tr>
+<tr><td><code>9.5</code></td><td>Double</td></tr>
+<tr><td><code>"hi"</code></td><td>String</td></tr>
+<tr><td><code>$true</code></td><td>Boolean</td></tr>
+<tr><td><code>Get-Date</code></td><td>DateTime</td></tr>
+<tr><td><code>1, 2, 3</code></td><td>Object[] (an array)</td></tr>
+</table></div>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$marks.GetType()</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>IsPublic IsSerial Name                                     BaseType
+-------- -------- ----                                     --------
+True     True     Int32                                    System.ValueType</pre></div>
+
+<h3 id="cast">Casting: force a type</h3>
+<div class="table-wrap"><table>
+<tr><th>Code</th><th>Result</th><th>Why</th></tr>
+<tr><td><code>"42" + 8</code></td><td><code>428</code></td><td>Left side is text, so it joins text.</td></tr>
+<tr><td><code>[int]"42" + 8</code></td><td><code>50</code></td><td>Cast to a number first.</td></tr>
+<tr><td><code>[string]92</code></td><td><code>92</code> (as text)</td><td>Number becomes a string.</td></tr>
+<tr><td><code>[int]7.6</code></td><td><code>8</code></td><td>Rounds to the nearest whole number.</td></tr>
+<tr><td><code>([datetime]"2026-11-17").DayOfWeek</code></td><td><code>Tuesday</code></td><td>Text becomes a real date.</td></tr>
+</table></div>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">[int]$age = 20     # $age is now locked to int
+$age = "21"        # converted to 21 automatically
+$age = "abc"       # error: cannot convert "abc" to Int32</code></pre></div>
+
+<h2 id="strings">Strings</h2>
+<div class="table-wrap"><table>
+<tr><th>Code</th><th>Output</th></tr>
+<tr><td><code>"Hello $name"</code></td><td><code>Hello Aarav</code> (double quotes expand)</td></tr>
+<tr><td><code>'Hello $name'</code></td><td><code>Hello $name</code> (single quotes are literal)</td></tr>
+<tr><td><code>"Cost: `$5"</code></td><td><code>Cost: $5</code> (backtick escapes <code>$</code>)</td></tr>
+</table></div>
+
+<h3 id="subexp">$( ) subexpressions</h3>
+<p>Inside double quotes, only the simple <code>$name</code> expands. Put anything more inside <code>$( )</code>.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">"Length: $name.Length"
+"Length: $($name.Length)"
+"Next year: $($marks + 5)"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Length: Aarav.Length
+Length: 5
+Next year: 97</pre></div>
+
+<h3 id="format">-f formatting</h3>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">"{0} scored {1}" -f $name, $marks
+"{0:N2}" -f 3.14159</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Aarav scored 92
+3.14</pre></div>
+<p><code>{0}</code>, <code>{1}</code> are slots filled in order. <code>:N2</code> means "number with 2 decimals".</p>
+
+<h3 id="here">Here-strings (many lines)</h3>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$card = @"
+Name : $name
+Marks: $marks
+"@
+$card</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Name : Aarav
+Marks: 92</pre></div>
+<p><code>@" "@</code> expands variables; <code>@' '@</code> does not. The closing <code>"@</code> must be at the very start of its line.</p>
+
+<h2 id="auto">Automatic variables</h2>
+<p>PowerShell creates these for you. Read them, don't assign them.</p>
+<div class="tiles">
+  <div class="tile"><b>$_</b><p>Current object in the pipeline (same as <code>$PSItem</code>).</p></div>
+  <div class="tile"><b>$null</b><p>"Nothing". An empty value.</p></div>
+  <div class="tile"><b>$true / $false</b><p>Boolean yes / no.</p></div>
+  <div class="tile"><b>$HOME</b><p>Your home folder.</p></div>
+  <div class="tile"><b>$PSVersionTable</b><p>Version details.</p></div>
+  <div class="tile"><b>$PWD</b><p>Current folder.</p></div>
+</div>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$HOME
+$PSVersionTable.PSVersion.Major</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>C:\Users\aarav
+7</pre></div>
+
+<h2 id="env">Environment variables: $env:</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$env:USERNAME              # Windows (Linux/macOS: $env:USER)
+$env:COURSE = "CBCS"       # set one, for this session only
+$env:COURSE</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>aarav
+CBCS</pre></div>
+<div class="callout tip"><span class="ct">Tip</span><code>Get-ChildItem env:</code> lists every environment variable.</div>
+
+<h2 id="manage">Get-Variable and Remove-Variable</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Variable name</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Name                           Value
+----                           -----
+name                           Aarav</pre></div>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Remove-Variable name
+$null -eq $name</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>True</pre></div>
+<p>Note: give the name <strong>without</strong> <code>$</code> to these cmdlets.</p>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Store your name and age in variables and print <code>I am NAME and I am AGE.</code></li>
+  <li>Print the same line with <code>-f</code>.</li>
+  <li>What does <code>"5" + 5</code> give? And <code>5 + "5"</code>?</li>
+  <li>Load <code>datasets/students.csv</code> into <code>$s</code> and print <code>"There are N students"</code>.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$me = "Priya"; $age = 19
+"I am $me and I am $age."
+"I am {0} and I am {1}." -f $me, $age
+"5" + 5        # 55  (text, because the left side is text)
+5 + "5"        # 10  (number, because the left side is a number)
+$s = Import-Csv datasets/students.csv
+"There are $($s.Count) students"    # There are 8 students</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li><code>$name = value</code>; names are not case-sensitive.</li>
+  <li><code>.GetType()</code> shows the type; <code>[int]</code>, <code>[string]</code>, <code>[datetime]</code> convert.</li>
+  <li><code>"double"</code> expands variables, <code>'single'</code> does not; use <code>$( )</code> for expressions.</li>
+  <li><code>$env:NAME</code> reads environment variables.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>Difference between single and double quotes?</strong> Double-quoted strings expand variables and subexpressions, so <code>"Hi $name"</code> gives <code>Hi Aarav</code>. Single-quoted strings are literal, so <code>'Hi $name'</code> stays <code>Hi $name</code>.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

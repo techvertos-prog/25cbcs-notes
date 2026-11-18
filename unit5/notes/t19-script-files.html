@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>19 · Script files</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="t19">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Topics / 19</div>
+<h1>Script files</h1>
+<p class="lead">Turn loose commands into tidy, reusable scripts that take parameters, find their own files, and share code.</p>
+<div class="meta-row"><span class="pill">Topic 19</span><span class="pill grey">~25 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="t06-writing-scripts.html">06 Writing scripts</a><a href="t07-comments.html">07 Comments</a><a href="t15-functions.html">15 Functions</a><a href="t16-scoping.html">16 Scoping</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>A script works like a function: <code>param()</code> at the top for input, output at the end. Use <code>$PSScriptRoot</code> so it finds its files from any folder.</p></div>
+
+<h2 id="folder">Organise scripts in a folder</h2>
+<div class="code"><div class="code-head">folder layout</div><pre><code>unit5/
+├── datasets/
+│   └── students.csv
+└── scripts/
+    ├── Get-StudentReport.ps1   ← the script you run
+    ├── lib.ps1                 ← shared functions (dot-sourced)
+    └── StudentTools.psm1       ← the same functions as a module</code></pre></div>
+<div class="tiles">
+  <div class="tile"><b>One job per script</b><p>Name it Verb-Noun, like a cmdlet.</p></div>
+  <div class="tile"><b>Shared code in one place</b><p>A library file or a module.</p></div>
+  <div class="tile"><b>No hard-coded paths</b><p>Build paths from <code>$PSScriptRoot</code>.</p></div>
+</div>
+
+<h2 id="params">param() at the top of a script</h2>
+<p><code>param()</code> must be the first code in the file (only comments and <code>#Requires</code> may come before it).</p>
+<div class="code"><div class="code-head">scripts/Get-StudentReport.ps1</div><pre><code class="language-powershell">#Requires -Version 7.0
+param(
+    [Parameter(Mandatory)]
+    [string]$Class,
+
+    [int]$PassMark = 40
+)
+
+$csv = "$PSScriptRoot/../datasets/students.csv"
+
+Import-Csv $csv |
+    Where-Object Class -eq $Class |
+    ForEach-Object {
+        $result = if ([int]$_.Maths -ge $PassMark) { 'Pass' } else { 'Fail' }
+        "$($_.Name): $($_.Maths) $result"
+    }</code></pre></div>
+
+<h3 id="run">Run it with named arguments</h3>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">./scripts/Get-StudentReport.ps1 -Class 10A</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Aarav: 92 Pass
+Priya: 67 Pass
+Kabir: 33 Fail</pre></div>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">./scripts/Get-StudentReport.ps1 -Class 10A -PassMark 70</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Aarav: 92 Pass
+Priya: 67 Fail
+Kabir: 33 Fail</pre></div>
+<p>Leave out <code>-Class</code> and PowerShell asks for it, because it is <code>Mandatory</code>.</p>
+
+<h2 id="root">$PSScriptRoot: paths relative to the script</h2>
+<p><code>$PSScriptRoot</code> is the folder the script file lives in. A plain relative path like <code>datasets/students.csv</code> is relative to <strong>where you are</strong>, which may be a different folder.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Set-Location ..                                   # move out of unit5
+./unit5/scripts/Get-StudentReport.ps1 -Class 10B  # still finds the CSV</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Rohan: 45 Pass
+Sneha: 88 Pass
+Ananya: 99 Pass</pre></div>
+<div class="table-wrap"><table>
+<tr><th>Path written as</th><th>Relative to</th></tr>
+<tr><td><code>datasets/students.csv</code></td><td>your current folder (changes)</td></tr>
+<tr><td><code>"$PSScriptRoot/../datasets/students.csv"</code></td><td>the script's own folder (fixed)</td></tr>
+</table></div>
+<div class="callout note"><span class="ct">Note</span><code>/</code> works as a path separator on Windows too. <code>$PSScriptRoot</code> is empty at the prompt; it only has a value inside a script.</div>
+
+<h2 id="lib">Share code: dot-source a library</h2>
+<div class="code"><div class="code-head">scripts/lib.ps1</div><pre><code class="language-powershell">function Get-Grade {
+    param([int]$Marks)
+    if ($Marks -ge 75) { 'A' } elseif ($Marks -ge 40) { 'B' } else { 'C' }
+}</code></pre></div>
+<p>Dot-source it so its functions land in your scope (see <a href="t16-scoping.html">16 Scoping</a>). Inside another script, write <code>. "$PSScriptRoot/lib.ps1"</code>.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">. ./scripts/lib.ps1
+Get-Grade 82
+Get-Grade 55</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>A
+B</pre></div>
+
+<h3 id="module">A module in brief</h3>
+<p>Save the same code as <code>StudentTools.psm1</code>. A module is loaded with <code>Import-Module</code> and can choose what to share.</p>
+<div class="code"><div class="code-head">scripts/StudentTools.psm1</div><pre><code class="language-powershell">function Get-Grade {
+    param([int]$Marks)
+    if ($Marks -ge 75) { 'A' } elseif ($Marks -ge 40) { 'B' } else { 'C' }
+}
+Export-ModuleMember -Function Get-Grade</code></pre></div>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Import-Module ./scripts/StudentTools.psm1
+Get-Grade 30
+Get-Command -Module StudentTools</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>C
+
+CommandType     Name                                               Version    Source
+-----------     ----                                               -------    ------
+Function        Get-Grade                                          0.0        StudentTools</pre></div>
+<div class="table-wrap"><table>
+<tr><th></th><th>Dot-source <code>.ps1</code></th><th>Module <code>.psm1</code></th></tr>
+<tr><td>Load with</td><td><code>. ./lib.ps1</code></td><td><code>Import-Module ./StudentTools.psm1</code></td></tr>
+<tr><td>Shares</td><td>everything, variables too</td><td>only what you export</td></tr>
+<tr><td>Unload</td><td>not possible</td><td><code>Remove-Module StudentTools</code></td></tr>
+<tr><td>Good for</td><td>small, personal scripts</td><td>tools shared with others</td></tr>
+</table></div>
+<div class="callout tip"><span class="ct">Tip</span>After editing a <code>.psm1</code>, reload it with <code>Import-Module ./scripts/StudentTools.psm1 -Force</code>.</div>
+
+<h2 id="requires">#Requires</h2>
+<p><code>#Requires</code> stops the script <strong>before</strong> it runs if something is missing.</p>
+<div class="table-wrap"><table>
+<tr><th>Line</th><th>Script runs only if…</th></tr>
+<tr><td><code>#Requires -Version 7.0</code></td><td>PowerShell is 7.0 or newer</td></tr>
+<tr><td><code>#Requires -Modules ActiveDirectory</code></td><td>that module is available</td></tr>
+<tr><td><code>#Requires -RunAsAdministrator</code></td><td>the session is elevated (Windows)</td></tr>
+</table></div>
+<div class="callout note"><span class="ct">Note</span>It starts with <code>#</code> but it is not a comment. Write it exactly, with no space after <code>#</code>.</div>
+
+<h2 id="template">A recommended script template</h2>
+<div class="code"><div class="code-head">scripts/Verb-Noun.ps1</div><pre><code class="language-powershell">&lt;#
+.SYNOPSIS
+    One line saying what the script does.
+.EXAMPLE
+    ./scripts/Verb-Noun.ps1 -Path datasets/students.csv
+#&gt;
+#Requires -Version 7.0
+param(
+    [Parameter(Mandatory)]
+    [string]$Path,
+    [int]$Top = 5
+)
+
+$ErrorActionPreference = 'Stop'       # turn errors into catchable ones
+. "$PSScriptRoot/lib.ps1"             # shared functions
+
+try {
+    $data = Import-Csv $Path
+    # ... main work here ...
+    $data | Select-Object -First $Top
+}
+catch {
+    Write-Error "Failed: $($_.Exception.Message)"
+    exit 1                            # non-zero = failure
+}</code></pre></div>
+<ul class="flow">
+  <li><span>Help comment</span></li>
+  <li><span>#Requires</span></li>
+  <li><span>param()</span></li>
+  <li><span>Settings &amp; dot-source</span></li>
+  <li class="here"><span>try / catch main work</span></li>
+</ul>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Create <code>scripts/Get-StudentReport.ps1</code> from above and run it for class <code>10C</code>.</li>
+  <li>Add a <code>[string]$Subject = 'Maths'</code> parameter and use <code>$_.$Subject</code> instead of <code>$_.Maths</code>.</li>
+  <li>Dot-source <code>lib.ps1</code> in the script and print each student's grade too.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">./scripts/Get-StudentReport.ps1 -Class 10C
+# Isha: 76 Pass
+# Vikram: 58 Pass
+
+# Inside the script, after param():
+. "$PSScriptRoot/lib.ps1"
+# ...
+"$($_.Name): $($_.$Subject) $result Grade $(Get-Grade $_.$Subject)"
+
+./scripts/Get-StudentReport.ps1 -Class 10C -Subject English
+# Isha: 81 Pass Grade A
+# Vikram: 39 Fail Grade C</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li><code>param()</code> comes first; run with <code>-Name value</code>.</li>
+  <li><code>[Parameter(Mandatory)]</code> asks; defaults fill gaps.</li>
+  <li><code>$PSScriptRoot</code> = the script's folder; use it for paths.</li>
+  <li><code>. ./lib.ps1</code> shares functions; <code>Import-Module</code> loads a <code>.psm1</code>.</li>
+  <li><code>#Requires</code> checks version, modules or admin before running.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>Why use <code>$PSScriptRoot</code> instead of a relative path?</strong> A relative path depends on the current folder of whoever runs the script. <code>$PSScriptRoot</code> is always the script's own folder, so the script finds its files wherever it is run from.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

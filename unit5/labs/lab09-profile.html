@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 9 · Customise your profile</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="lab09">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Labs / Lab 9</div>
+<h1>Lab 9: Customise your profile</h1>
+<p class="lead">Your profile is a script that runs every time PowerShell starts. Add an alias, a greeting, a function and your own prompt to it.</p>
+<div class="meta-row"><span class="pill">Lab 9</span><span class="pill grey">Beginner</span><span class="pill grey">~30 min</span></div>
+
+<div class="prereq"><span class="ct">Topics used:</span><a href="../notes/t18-profiles.html">18 Profiles</a><a href="../notes/t15-functions.html">15 Functions</a><a href="../notes/t03-cmdlets.html">03 Cmdlets</a></div>
+
+<h2 id="aim">Aim</h2>
+<ul class="check">
+  <li>Find your profile path with <code>$PROFILE</code>.</li>
+  <li>Create the profile file safely.</li>
+  <li>Add an alias, a greeting, a function and a custom prompt.</li>
+  <li>Reload it, and start PowerShell without it.</li>
+</ul>
+
+<h2 id="plan">Plan</h2>
+<ul class="flow">
+  <li><span>Find $PROFILE</span></li>
+  <li><span>Create it</span></li>
+  <li><span>Add items</span></li>
+  <li><span>Custom prompt</span></li>
+  <li><span>Reload &amp; test</span></li>
+</ul>
+
+<h2 id="tasks">Tasks</h2>
+
+<div class="task">
+<span class="task-tag">Task 1</span>
+<h3 id="t1">Check $PROFILE</h3>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">$PROFILE
+Test-Path $PROFILE</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>C:\Users\you\Documents\PowerShell\Microsoft.PowerShell_profile.ps1
+False</pre></div>
+<p><code>False</code> means the file does not exist yet. On macOS and Linux the path is <code>~/.config/powershell/Microsoft.PowerShell_profile.ps1</code>.</p>
+<div class="table-wrap"><table>
+<tr><th>Property</th><th>Runs for</th></tr>
+<tr><td><code>$PROFILE.CurrentUserCurrentHost</code></td><td>You, in this program (same as <code>$PROFILE</code>)</td></tr>
+<tr><td><code>$PROFILE.CurrentUserAllHosts</code></td><td>You, in every PowerShell program (console, VS Code)</td></tr>
+<tr><td><code>$PROFILE.AllUsersAllHosts</code></td><td>Every user (needs admin rights)</td></tr>
+</table></div>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 2</span>
+<h3 id="t2">Create the profile safely</h3>
+<p>Create it only if it is missing, so you never wipe an existing one.</p>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">if (-not (Test-Path $PROFILE)) {
+    New-Item -ItemType File -Path $PROFILE -Force | Out-Null
+    "Profile created"
+} else {
+    Copy-Item $PROFILE "$PROFILE.bak"
+    "Profile exists, backup saved"
+}</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Profile created</pre></div>
+<p><code>-Force</code> also creates any missing folders in the path. Now open it: <code>notepad $PROFILE</code> (Windows) or <code>code $PROFILE</code> (any OS).</p>
+<div class="callout note"><span class="ct">Windows only</span>The profile is a script, so the execution policy must allow it. If you see "running scripts is disabled", run <code>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</code> (see Lab 3).</div>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 3</span>
+<h3 id="t3">Add an alias, a greeting and a function</h3>
+<p>Type this into the profile file and save it.</p>
+<div class="code"><div class="code-head">powershell · Microsoft.PowerShell_profile.ps1</div><pre><code class="language-powershell"># ---- My PowerShell profile ----
+
+# Alias: short name for a cmdlet
+Set-Alias -Name ll -Value Get-ChildItem
+
+# Function: today's date in a friendly format
+function Show-Today {
+    Get-Date -Format 'dddd, dd MMMM yyyy'
+}
+
+# Greeting shown at start-up
+Write-Host "Welcome back, $([Environment]::UserName)!" -ForegroundColor Cyan
+Write-Host "PowerShell $($PSVersionTable.PSVersion) is ready."</code></pre></div>
+<p><code>[Environment]::UserName</code> gives your login name on Windows, macOS and Linux.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 4</span>
+<h3 id="t4">Add a custom prompt</h3>
+<p>The prompt is just a function named <code>prompt</code>. Whatever it returns is shown before your cursor. Add this to the profile too.</p>
+<div class="code"><div class="code-head">powershell · Microsoft.PowerShell_profile.ps1 (add)</div><pre><code class="language-powershell">function prompt {
+    $folder = Split-Path -Leaf (Get-Location)
+    "[$(Get-Date -Format 'HH:mm')] $folder&gt; "
+}</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>[10:42] unit5&gt; </pre></div>
+<p><code>Split-Path -Leaf</code> keeps only the last folder name, so the prompt stays short.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 5</span>
+<h3 id="t5">Reload and test</h3>
+<p>Load the profile into the current session without restarting.</p>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">. $PROFILE
+ll datasets -Name
+Show-Today</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>Welcome back, you!
+PowerShell 7.4.6 is ready.
+app.log
+config.json
+inventory.csv
+numbers.txt
+servers.txt
+students.csv
+Tuesday, 17 November 2026</pre></div>
+<p>Now start a fresh PowerShell that skips the profile:</p>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">pwsh -NoProfile
+ll</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>ll: The term 'll' is not recognized as a name of a cmdlet, function, script file, or executable program.
+Check the spelling of the name, or if a path was included, verify that the path is correct and try again.</pre></div>
+<p><code>-NoProfile</code> is handy when a broken profile stops PowerShell from starting cleanly. Type <code>exit</code> to go back.</p>
+</div>
+
+<h2 id="challenge">Challenge</h2>
+<ol class="steps">
+  <li>Add a function <code>u5</code> that jumps to your <code>unit5</code> folder.</li>
+  <li>Make the prompt show <code>(admin)</code> when PowerShell runs as Administrator (Windows).</li>
+  <li>Move your alias and function into <code>$PROFILE.CurrentUserAllHosts</code> so VS Code gets them too.</li>
+</ol>
+<details><summary>Hint for 1</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">function u5 { Set-Location "$HOME/25cbcs-notes/unit5" }   # change to your own path</code></pre></div>
+</details>
+
+<h2 id="viva">Viva questions</h2>
+<details><summary>What is a PowerShell profile?</summary><p>A script that runs automatically every time PowerShell starts. You use it to load aliases, functions and settings.</p></details>
+<details><summary>Why are aliases made at the prompt lost when you close PowerShell?</summary><p>They live only in that session. Putting them in the profile recreates them each time.</p></details>
+<details><summary>What does <code>. $PROFILE</code> do?</summary><p>It dot-sources the profile, running it in the current session so the changes apply now.</p></details>
+<details><summary>How do you start PowerShell without the profile?</summary><p><code>pwsh -NoProfile</code> (or <code>powershell -NoProfile</code> for Windows PowerShell 5.1).</p></details>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

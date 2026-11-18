@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F5 · Objects in 5 minutes</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="f5">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Fundamentals / F5</div>
+<h1>Objects in 5 minutes</h1>
+<p class="lead">Everything PowerShell gives you is an object: a thing with named facts (properties) and actions (methods).</p>
+<div class="meta-row"><span class="pill">Fundamentals F5</span><span class="pill grey">~15 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="f3-first-commands.html">F3 First commands</a><a href="f4-files-and-folders.html">F4 Files &amp; folders</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>An object is like a <strong>student ID card</strong>: it has labelled fields you can read. Use a dot to read one: <code>$card.Name</code>.</p></div>
+
+<h2 id="card">The student card</h2>
+<div class="tiles">
+  <div class="tile"><b>The card</b><p>One object.</p></div>
+  <div class="tile"><b>Name, Class, Marks</b><p>Properties: facts you <em>read</em>.</p></div>
+  <div class="tile"><b>Print, Renew</b><p>Methods: things the card can <em>do</em>.</p></div>
+</div>
+<p>Each row of <code>datasets/students.csv</code> becomes one such card:</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$card = Import-Csv datasets/students.csv | Select-Object -First 1
+$card</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Name    : Aarav
+Class   : 10A
+Maths   : 92
+Science : 85
+English : 78</pre></div>
+<p>Read one property with a dot:</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$card.Name
+$card.Maths</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Aarav
+92</pre></div>
+
+<h2 id="pm">Properties vs methods</h2>
+<div class="table-wrap"><table>
+<tr><th></th><th>Property</th><th>Method</th></tr>
+<tr><td>Is</td><td>A fact (noun)</td><td>An action (verb)</td></tr>
+<tr><td>Written</td><td><code>.Name</code> (no brackets)</td><td><code>.ToUpper()</code> (with brackets)</td></tr>
+<tr><td>Example</td><td><code>"hello".Length</code></td><td><code>"hello".ToUpper()</code></td></tr>
+</table></div>
+
+<h3 id="text">Even text is an object</h3>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">"hello".Length
+"hello".ToUpper()
+"hello".Replace("l", "L")</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>5
+HELLO
+heLLo</pre></div>
+
+<h3 id="date">A date is an object</h3>
+<p>Wrap a command in <code>( )</code> to use its result as an object.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">(Get-Date).Year
+(Get-Date).DayOfWeek
+(Get-Date).AddDays(7).ToShortDateString()</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>2026
+Tuesday
+24-11-2026</pre></div>
+<div class="callout warn"><span class="ct">Watch out</span>Forget the <code>()</code> on a method and PowerShell shows its description instead of running it.</div>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">"hello".ToUpper</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>OverloadDefinitions
+-------------------
+string ToUpper()
+string ToUpper(cultureinfo culture)</pre></div>
+
+<h2 id="gm">Peek inside: Get-Member</h2>
+<p>Not sure what an object has? Pipe it to <code>Get-Member</code> (alias <code>gm</code>).</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$card | Get-Member</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>   TypeName: System.Management.Automation.PSCustomObject
+
+Name        MemberType   Definition
+----        ----------   ----------
+Equals      Method       bool Equals(System.Object obj)
+GetHashCode Method       int GetHashCode()
+GetType     Method       type GetType()
+ToString    Method       string ToString()
+Class       NoteProperty string Class=10A
+English     NoteProperty string English=78
+Maths       NoteProperty string Maths=92
+Name        NoteProperty string Name=Aarav
+Science     NoteProperty string Science=85</pre></div>
+<div class="table-wrap"><table>
+<tr><th>Column</th><th>Tells you</th></tr>
+<tr><td><code>TypeName</code></td><td>What kind of object it is.</td></tr>
+<tr><td><code>Name</code></td><td>What to type after the dot.</td></tr>
+<tr><td><code>MemberType</code></td><td><code>Method</code> = action, <code>*Property</code> = fact.</td></tr>
+<tr><td><code>Definition</code></td><td>Data type and current value.</td></tr>
+</table></div>
+<p>More in <a href="../notes/t04-help.html">04 Working with help</a>.</p>
+
+<h2 id="why">Why this matters: pipelines</h2>
+<p>Because rows are objects, the next command can ask for a property by name. No cutting text by position.</p>
+<ul class="flow">
+  <li><span>Import-Csv: cards</span></li>
+  <li><span>Where-Object: Maths ≥ 90</span></li>
+  <li><span>Select-Object: Name, Maths</span></li>
+</ul>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Import-Csv datasets/students.csv |
+    Where-Object { [int]$_.Maths -ge 90 } |
+    Select-Object Name, Maths</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Name   Maths
+----   -----
+Aarav  92
+Ananya 99</pre></div>
+<p><code>$_</code> is "the current card". Full story in <a href="../notes/t05-pipelines.html">05 Pipelines</a>.</p>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Print the length of your own name in quotes.</li>
+  <li>Print <code>"powershell"</code> in capitals.</li>
+  <li>Print today's month number using <code>Get-Date</code>.</li>
+  <li>Load the first student into <code>$card</code> and print only the <code>English</code> mark.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">"Aarav".Length                  # 5
+"powershell".ToUpper()          # POWERSHELL
+(Get-Date).Month
+$card = Import-Csv datasets/students.csv | Select-Object -First 1
+$card.English                   # 78</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li>Object = a thing with <strong>properties</strong> (facts) and <strong>methods</strong> (actions).</li>
+  <li>Property: <code>.Name</code>. Method: <code>.ToUpper()</code> with brackets.</li>
+  <li><code>| Get-Member</code> lists everything an object has.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>What is the difference between a property and a method?</strong> A property holds a value about the object, such as <code>"hello".Length</code>. A method is an action the object can perform, called with brackets, such as <code>"hello".ToUpper()</code>.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

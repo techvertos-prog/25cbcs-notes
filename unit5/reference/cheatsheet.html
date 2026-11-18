@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cheat sheet</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="cheatsheet">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Reference / Cheat sheet</div>
+<h1>Cheat sheet</h1>
+<p class="lead">All 19 topics of Unit 5 on one page, as syntax and meaning, for quick revision.</p>
+<div class="meta-row"><span class="pill">Reference</span><span class="pill grey">19 topics</span><span class="pill grey">Printable</span></div>
+
+<div class="prereq"><span class="ct">Full notes:</span><a href="../index.html#topics">All topics</a><a href="datasets.html">Practice files</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>Commands are <strong>Verb-Noun</strong>, data moves as <strong>objects</strong> through <code>|</code>, and variables start with <strong><code>$</code></strong>.</p></div>
+<div class="callout tip"><span class="ct">Print it</span>Press <kbd>Ctrl</kbd>+<kbd>P</kbd> (<kbd>Cmd</kbd>+<kbd>P</kbd> on a Mac). The menu and buttons are hidden on paper.</div>
+
+<h2 id="start">Getting started · 01–04</h2>
+<p><a href="../notes/t01-introduction.html">01 Introduction</a> · <a href="../notes/t02-console-ise.html">02 Console &amp; ISE</a> · <a href="../notes/t03-cmdlets.html">03 Cmdlets</a> · <a href="../notes/t04-help.html">04 Help</a></p>
+<div class="table-wrap"><table>
+<tr><th>Syntax</th><th>Meaning</th></tr>
+<tr><td>PowerShell</td><td>Shell + scripting language from Microsoft, built on .NET, works with objects.</td></tr>
+<tr><td><code>pwsh</code> / <code>powershell</code></td><td>Start PowerShell 7 / Windows PowerShell 5.1.</td></tr>
+<tr><td><code>$PSVersionTable</code></td><td>Show version and edition (<code>Core</code> = 7, <code>Desktop</code> = 5.1).</td></tr>
+<tr><td>Console vs ISE</td><td>Console: type one line at a time. ISE: editor + console for 5.1 only. For 7, use VS Code.</td></tr>
+<tr><td><code>Verb-Noun</code></td><td>Cmdlet naming, e.g. <code>Get-Process</code>, <code>Stop-Service</code>.</td></tr>
+<tr><td><code>Get-Verb</code></td><td>List the approved verbs.</td></tr>
+<tr><td><code>-Name value</code></td><td>Named parameter.</td></tr>
+<tr><td><code>-Recurse</code></td><td>Switch parameter: no value, on when present.</td></tr>
+<tr><td><code>Get-Alias ls</code></td><td>What does an alias point to?</td></tr>
+<tr><td><code>Get-Command *service*</code></td><td>Find commands by name.</td></tr>
+<tr><td><code>Get-Help Get-Process -Examples</code></td><td>Help with examples (<code>-Full</code>, <code>-Online</code> also work).</td></tr>
+<tr><td><code>Update-Help</code></td><td>Download the latest help files (run as admin on 5.1).</td></tr>
+<tr><td><code>... | Get-Member</code></td><td>List an object's type, properties and methods.</td></tr>
+</table></div>
+
+<h2 id="pipe">Pipelines · 05</h2>
+<p><a href="../notes/t05-pipelines.html">05 Pipelines</a></p>
+<div class="table-wrap"><table>
+<tr><th>Syntax</th><th>Meaning</th></tr>
+<tr><td><code>A | B</code></td><td>Send A's output objects into B.</td></tr>
+<tr><td><code>$_</code> or <code>$PSItem</code></td><td>The current object in the pipe.</td></tr>
+<tr><td><code>Where-Object { $_.Qty -eq 0 }</code></td><td>Keep matching objects.</td></tr>
+<tr><td><code>Sort-Object Price -Descending</code></td><td>Sort.</td></tr>
+<tr><td><code>Select-Object -First 3 Name, Qty</code></td><td>Pick objects or properties.</td></tr>
+<tr><td><code>Measure-Object Qty -Sum -Average</code></td><td>Count, sum, average, min, max.</td></tr>
+<tr><td><code>ForEach-Object { $_.Name }</code></td><td>Run code per object.</td></tr>
+<tr><td><code>Format-Table</code> / <code>Format-List</code></td><td>Display only. Put it last.</td></tr>
+<tr><td><code>Export-Csv f.csv -NoTypeInformation</code></td><td>Save objects to CSV.</td></tr>
+<tr><td><code>Out-File f.txt</code></td><td>Save text output to a file.</td></tr>
+</table></div>
+
+<h2 id="scripts">Scripts, comments, script files · 06, 07, 19</h2>
+<p><a href="../notes/t06-writing-scripts.html">06 Writing scripts</a> · <a href="../notes/t07-comments.html">07 Comments</a> · <a href="../notes/t19-script-files.html">19 Script files</a></p>
+<div class="table-wrap"><table>
+<tr><th>Syntax</th><th>Meaning</th></tr>
+<tr><td><code>hello.ps1</code></td><td>A script is a text file ending in <code>.ps1</code>.</td></tr>
+<tr><td><code>.\hello.ps1</code></td><td>Run a script in this folder (the <code>.\</code> is required).</td></tr>
+<tr><td><code>Get-ExecutionPolicy</code></td><td>Show whether scripts may run.</td></tr>
+<tr><td><code>Set-ExecutionPolicy RemoteSigned -Scope CurrentUser</code></td><td>Allow your own scripts (Windows).</td></tr>
+<tr><td><code># text</code></td><td>Single-line comment.</td></tr>
+<tr><td><code>&lt;# ... #&gt;</code></td><td>Block (multi-line) comment.</td></tr>
+<tr><td><code>.SYNOPSIS</code>, <code>.DESCRIPTION</code>, <code>.EXAMPLE</code></td><td>Comment-based help keywords inside <code>&lt;# #&gt;</code>; read with <code>Get-Help</code>.</td></tr>
+<tr><td><code>param([string]$Name)</code></td><td>Script parameters (first line of the script).</td></tr>
+<tr><td><code>.\greet.ps1 -Name Priya</code></td><td>Pass a value to a script parameter.</td></tr>
+<tr><td><code>. .\tools.ps1</code></td><td>Dot-source: load its functions and variables into your session.</td></tr>
+<tr><td><code>$PSScriptRoot</code></td><td>Folder the running script lives in.</td></tr>
+<tr><td><code>.psm1</code> / <code>Import-Module</code></td><td>Module file / load a module.</td></tr>
+</table></div>
+
+<h2 id="vars">Variables &amp; input · 08, 09</h2>
+<p><a href="../notes/t08-variables.html">08 Variables</a> · <a href="../notes/t09-user-input.html">09 User input</a></p>
+<div class="table-wrap"><table>
+<tr><th>Syntax</th><th>Meaning</th></tr>
+<tr><td><code>$name = "Priya"</code></td><td>Create or change a variable.</td></tr>
+<tr><td><code>[int]$age = 20</code></td><td>Variable locked to a type.</td></tr>
+<tr><td><code>$x.GetType().Name</code></td><td>Show a value's type.</td></tr>
+<tr><td><code>"Hi $name"</code></td><td>Double quotes: variables are expanded.</td></tr>
+<tr><td><code>'Hi $name'</code></td><td>Single quotes: text stays exactly as typed.</td></tr>
+<tr><td><code>"Total: $($a + $b)"</code></td><td>Run an expression inside a string.</td></tr>
+<tr><td><code>$true</code>, <code>$false</code>, <code>$null</code></td><td>Built-in values.</td></tr>
+<tr><td><code>Get-Variable</code> / <code>Remove-Variable x</code></td><td>List / delete variables.</td></tr>
+<tr><td><code>$n = Read-Host "Enter name"</code></td><td>Ask the user. Always returns text.</td></tr>
+<tr><td><code>[int](Read-Host "Age")</code></td><td>Convert the answer to a number.</td></tr>
+<tr><td><code>Read-Host "PIN" -AsSecureString</code></td><td>Hide what is typed.</td></tr>
+<tr><td><code>Write-Host "Hi" -ForegroundColor Green</code></td><td>Print coloured text to the screen.</td></tr>
+</table></div>
+
+<h2 id="ops">Operators · 10</h2>
+<p><a href="../notes/t10-operators.html">10 Operators</a></p>
+<div class="table-wrap"><table>
+<tr><th>Syntax</th><th>Meaning</th></tr>
+<tr><td><code>+ - * / %</code></td><td>Add, subtract, multiply, divide, remainder.</td></tr>
+<tr><td><code>= += -= *= /=</code>, <code>++</code>, <code>--</code></td><td>Assign / update / add or subtract 1.</td></tr>
+<tr><td><code>-eq -ne</code></td><td>Equal / not equal.</td></tr>
+<tr><td><code>-gt -ge -lt -le</code></td><td>Greater, greater-or-equal, less, less-or-equal.</td></tr>
+<tr><td><code>-like 'a*'</code></td><td>Wildcard match (<code>*</code>, <code>?</code>).</td></tr>
+<tr><td><code>-match '^\d+$'</code></td><td>Regular-expression match.</td></tr>
+<tr><td><code>-contains</code> / <code>-in</code></td><td>Is the value in the list?</td></tr>
+<tr><td><code>-and -or -not !</code></td><td>Logical operators.</td></tr>
+<tr><td><code>-replace 'a','b'</code>, <code>-split ','</code>, <code>-join ','</code></td><td>Text operators.</td></tr>
+<tr><td><code>-ceq</code>, <code>-clike</code>, <code>-cmatch</code></td><td>Case-sensitive versions (normal ones ignore case).</td></tr>
+<tr><td><code>-is [int]</code></td><td>Type check.</td></tr>
+</table></div>
+<div class="callout warn"><span class="ct">Watch out</span><code>&gt;</code> and <code>&lt;</code> are not comparisons in PowerShell. <code>&gt;</code> writes output to a file.</div>
+
+<h2 id="flow">Decisions &amp; loops · 11, 12</h2>
+<p><a href="../notes/t11-conditionals.html">11 if, else &amp; switch</a> · <a href="../notes/t12-loops.html">12 Loops</a></p>
+<div class="table-wrap"><table>
+<tr><th>Syntax</th><th>Meaning</th></tr>
+<tr><td><code>if (cond) { } elseif (cond) { } else { }</code></td><td>Run the first block whose condition is true.</td></tr>
+<tr><td><code>switch ($x) { 1 { 'one' } default { 'other' } }</code></td><td>Pick by value.</td></tr>
+<tr><td><code>switch ($m) { { $_ -ge 90 } { 'A'; break } }</code></td><td>Condition cases; <code>break</code> stops at first match.</td></tr>
+<tr><td><code>switch -Wildcard</code> / <code>-Regex</code></td><td>Match cases by pattern.</td></tr>
+<tr><td><code>for ($i = 1; $i -le 5; $i++) { }</code></td><td>Counting loop.</td></tr>
+<tr><td><code>foreach ($s in $list) { }</code></td><td>Once per item in a collection.</td></tr>
+<tr><td><code>while (cond) { }</code></td><td>Check first, then repeat.</td></tr>
+<tr><td><code>do { } while (cond)</code> / <code>do { } until (cond)</code></td><td>Run at least once.</td></tr>
+<tr><td><code>1..5</code></td><td>Range: 1, 2, 3, 4, 5.</td></tr>
+<tr><td><code>break</code> / <code>continue</code></td><td>Leave the loop / skip to the next turn.</td></tr>
+</table></div>
+
+<h2 id="coll">Arrays &amp; hashtables · 13, 14</h2>
+<p><a href="../notes/t13-arrays.html">13 Arrays</a> · <a href="../notes/t14-hashtables.html">14 Hashtables</a></p>
+<div class="table-wrap"><table>
+<tr><th>Syntax</th><th>Meaning</th></tr>
+<tr><td><code>$a = @(10, 20, 30)</code> or <code>10, 20, 30</code></td><td>Make an array.</td></tr>
+<tr><td><code>@()</code></td><td>Empty array.</td></tr>
+<tr><td><code>$a[0]</code>, <code>$a[-1]</code>, <code>$a[0..1]</code></td><td>First, last, a slice.</td></tr>
+<tr><td><code>$a.Count</code></td><td>Number of items.</td></tr>
+<tr><td><code>$a += 40</code></td><td>Add an item (makes a new array).</td></tr>
+<tr><td><code>$a -contains 20</code></td><td>Is 20 in the array?</td></tr>
+<tr><td><code>$h = @{ Name = 'Aarav'; Marks = 92 }</code></td><td>Make a hashtable (key = value).</td></tr>
+<tr><td><code>$h.Name</code> or <code>$h['Name']</code></td><td>Read a value by key.</td></tr>
+<tr><td><code>$h.City = 'Pune'</code> / <code>$h.Add('City','Pune')</code></td><td>Add a key.</td></tr>
+<tr><td><code>$h.Remove('City')</code></td><td>Delete a key.</td></tr>
+<tr><td><code>$h.Keys</code>, <code>$h.Values</code>, <code>$h.ContainsKey('Name')</code></td><td>All keys, all values, key exists?</td></tr>
+<tr><td><code>[ordered]@{ }</code></td><td>Hashtable that keeps insertion order.</td></tr>
+<tr><td><code>[pscustomobject]@{ }</code></td><td>Turn a hashtable into an object.</td></tr>
+</table></div>
+
+<h2 id="func">Functions &amp; scope · 15, 16</h2>
+<p><a href="../notes/t15-functions.html">15 Functions</a> · <a href="../notes/t16-scoping.html">16 Scoping</a></p>
+<div class="table-wrap"><table>
+<tr><th>Syntax</th><th>Meaning</th></tr>
+<tr><td><code>function Get-Square { param([int]$N) $N * $N }</code></td><td>Define a function with a parameter.</td></tr>
+<tr><td><code>Get-Square -N 4</code> or <code>Get-Square 4</code></td><td>Call it (no brackets, no commas).</td></tr>
+<tr><td><code>param([int]$N = 1)</code></td><td>Default value.</td></tr>
+<tr><td><code>[Parameter(Mandatory)]</code></td><td>Ask for the value if it is missing.</td></tr>
+<tr><td><code>return $x</code></td><td>Leave the function; any uncaught output is also returned.</td></tr>
+<tr><td>Local scope</td><td>Variables made inside a function vanish when it ends.</td></tr>
+<tr><td><code>$global:x</code></td><td>Visible everywhere in the session.</td></tr>
+<tr><td><code>$script:x</code></td><td>Shared across the whole script file.</td></tr>
+<tr><td><code>$local:x</code></td><td>Current scope only.</td></tr>
+<tr><td>Child reads parent</td><td>A function can read outer variables but changes stay local unless a scope prefix is used.</td></tr>
+</table></div>
+
+<h2 id="err">Errors &amp; profiles · 17, 18</h2>
+<p><a href="../notes/t17-error-handling.html">17 Basic error handling</a> · <a href="../notes/t18-profiles.html">18 Profiles</a></p>
+<div class="table-wrap"><table>
+<tr><th>Syntax</th><th>Meaning</th></tr>
+<tr><td><code>try { } catch { } finally { }</code></td><td>Try code, handle failure, always clean up.</td></tr>
+<tr><td><code>$_</code> in <code>catch</code></td><td>The error; <code>$_.Exception.Message</code> is its text.</td></tr>
+<tr><td><code>-ErrorAction Stop</code></td><td>Turn a non-terminating error into one <code>catch</code> can see.</td></tr>
+<tr><td><code>-ErrorAction SilentlyContinue</code></td><td>Hide the error and carry on.</td></tr>
+<tr><td><code>$ErrorActionPreference = 'Stop'</code></td><td>Default for every command.</td></tr>
+<tr><td><code>$Error[0]</code></td><td>Most recent error.</td></tr>
+<tr><td><code>throw "message"</code></td><td>Raise your own error.</td></tr>
+<tr><td><code>$PROFILE</code></td><td>Path of your profile script (runs at every start).</td></tr>
+<tr><td><code>Test-Path $PROFILE</code></td><td>Does it exist yet?</td></tr>
+<tr><td><code>New-Item $PROFILE -Force</code></td><td>Create it (with its folders).</td></tr>
+<tr><td><code>notepad $PROFILE</code> / <code>code $PROFILE</code></td><td>Edit it.</td></tr>
+<tr><td><code>. $PROFILE</code></td><td>Reload it without restarting.</td></tr>
+</table></div>
+<div class="callout note"><span class="ct">Note</span>PowerShell 7 and 5.1 use <strong>different</strong> profile files. Check <code>$PROFILE</code> in each.</div>
+
+<h2 id="basics">Everyday commands · F3, F4</h2>
+<p><a href="../basics/f3-first-commands.html">F3 First commands</a> · <a href="../basics/f4-files-and-folders.html">F4 Files &amp; folders</a></p>
+<div class="table-wrap"><table>
+<tr><th>Syntax</th><th>Meaning</th></tr>
+<tr><td><code>Get-Location</code> (<code>pwd</code>)</td><td>Where am I?</td></tr>
+<tr><td><code>Set-Location ..</code> (<code>cd</code>)</td><td>Move (here <code>..</code> = up one).</td></tr>
+<tr><td><code>Get-ChildItem</code> (<code>ls</code>, <code>dir</code>)</td><td>List a folder.</td></tr>
+<tr><td><code>New-Item -ItemType File|Directory -Name x</code></td><td>Create a file or folder.</td></tr>
+<tr><td><code>Get-Content</code> / <code>Set-Content</code> / <code>Add-Content</code></td><td>Read / overwrite / append text.</td></tr>
+<tr><td><code>Copy-Item</code>, <code>Move-Item</code>, <code>Rename-Item</code></td><td>Copy, move, rename.</td></tr>
+<tr><td><code>Remove-Item x -WhatIf</code></td><td>Preview a delete safely.</td></tr>
+<tr><td><code>Test-Path x</code></td><td><code>True</code> if it exists.</td></tr>
+</table></div>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li>Comparisons are words: <code>-eq</code>, <code>-gt</code>, <code>-like</code>, never <code>==</code> or <code>&gt;</code>.</li>
+  <li>Double quotes expand <code>$variables</code>, single quotes do not.</li>
+  <li>Filter early, format last; use <code>-ErrorAction Stop</code> so <code>try/catch</code> works.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>Name three things that make PowerShell different from cmd.</strong> It passes objects through the pipeline, its commands follow a consistent Verb-Noun pattern, and it is a full scripting language with variables, loops, functions and <code>try/catch</code>.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

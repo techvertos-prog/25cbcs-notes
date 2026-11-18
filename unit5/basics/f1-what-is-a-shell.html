@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F1 · What is a shell?</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="f1">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Fundamentals / F1</div>
+<h1>What is a shell?</h1>
+<p class="lead">A shell is a program where you type a command, press Enter, and the computer does it.</p>
+<div class="meta-row"><span class="pill">Fundamentals F1</span><span class="pill grey">~10 min</span><span class="pill grey">No setup needed</span></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>In a shell you <strong>type</strong> what you want instead of clicking. Typed commands can be saved and repeated, which is why admins love them.</p></div>
+
+<h2 id="words">Four words to know</h2>
+<div class="tiles">
+  <div class="tile"><b>Shell</b><code>PowerShell, Bash, cmd</code><p>The program that reads your command and runs it.</p></div>
+  <div class="tile"><b>Terminal</b><code>Windows Terminal</code><p>The window that shows the shell. It only displays text.</p></div>
+  <div class="tile"><b>Prompt</b><code>PS C:\Users\aarav&gt;</code><p>The text that says "I am ready, type now".</p></div>
+  <div class="tile"><b>Command</b><code>Get-Date</code><p>One instruction you type after the prompt.</p></div>
+</div>
+<ul class="flow">
+  <li><span>You type</span></li>
+  <li><span>Press Enter</span></li>
+  <li><span>Shell runs it</span></li>
+  <li><span>Output appears</span></li>
+  <li><span>New prompt</span></li>
+</ul>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Date</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>Tuesday, 17 November 2026 10:30:15</pre></div>
+
+<h2 id="prompt">Reading the prompt</h2>
+<div class="output"><div class="out-head">prompt</div><pre>PS C:\Users\aarav&gt; _</pre></div>
+<div class="table-wrap"><table>
+<tr><th>Part</th><th>Meaning</th></tr>
+<tr><td><code>PS</code></td><td>You are in PowerShell.</td></tr>
+<tr><td><code>C:\Users\aarav</code></td><td>The folder you are in now (on Linux or macOS it looks like <code>/home/aarav</code>).</td></tr>
+<tr><td><code>&gt;</code></td><td>End of the prompt. Type after it.</td></tr>
+</table></div>
+<div class="callout tip"><span class="ct">Tip</span>You never type the prompt yourself. In these notes, code boxes show only what you type.</div>
+
+<h2 id="cli-gui">CLI vs GUI</h2>
+<div class="table-wrap"><table>
+<tr><th></th><th>GUI (Graphical User Interface)</th><th>CLI (Command Line Interface)</th></tr>
+<tr><td>You use</td><td>Mouse, windows, buttons</td><td>Keyboard, typed commands</td></tr>
+<tr><td>Easy to start?</td><td>Yes, you can see everything</td><td>Needs a few commands to learn</td></tr>
+<tr><td>Repeat a job</td><td>Click again every time</td><td>Run the same command again</td></tr>
+<tr><td>100 computers</td><td>100 times the clicking</td><td>One loop or one script</td></tr>
+<tr><td>Save the steps</td><td>Hard (screenshots)</td><td>Easy (a <code>.ps1</code> script file)</td></tr>
+<tr><td>Example</td><td>File Explorer</td><td>PowerShell</td></tr>
+</table></div>
+
+<h2 id="why">Why admins script</h2>
+<div class="tiles">
+  <div class="tile"><b>Fast</b><p>One line does what takes many clicks.</p></div>
+  <div class="tile"><b>Repeatable</b><p>Same steps, same result, every time.</p></div>
+  <div class="tile"><b>Scales</b><p>Works on 1 server or 500.</p></div>
+  <div class="tile"><b>Recorded</b><p>The script is a written record of what was done.</p></div>
+</div>
+<p>Example: <code>datasets/servers.txt</code> lists five servers. One command reads them all.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Content datasets/servers.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>web01
+web02
+db01
+mail01
+backup01</pre></div>
+
+<h2 id="anatomy">Anatomy of a command line</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-ChildItem -Path datasets -Filter *.csv -Name</code></pre></div>
+<div class="table-wrap"><table>
+<tr><th>Piece</th><th>Role</th><th>Meaning</th></tr>
+<tr><td><code>Get-ChildItem</code></td><td>Command</td><td>What to do: list items in a folder.</td></tr>
+<tr><td><code>-Path</code></td><td>Parameter</td><td>An option. It always starts with <code>-</code>.</td></tr>
+<tr><td><code>datasets</code></td><td>Value</td><td>The setting for <code>-Path</code>: which folder.</td></tr>
+<tr><td><code>-Filter</code></td><td>Parameter</td><td>Only keep matching names.</td></tr>
+<tr><td><code>*.csv</code></td><td>Value</td><td>The pattern: names ending in <code>.csv</code>.</td></tr>
+<tr><td><code>-Name</code></td><td>Switch</td><td>A parameter with no value. Being there turns it on: show names only.</td></tr>
+</table></div>
+<div class="output"><div class="out-head">output</div><pre>inventory.csv
+students.csv</pre></div>
+<div class="callout note"><span class="ct">Note</span>Spaces separate the pieces. PowerShell does not care about upper or lower case: <code>get-childitem</code> works too.</div>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Name the three parts of the prompt <code>PS C:\Windows&gt;</code>.</li>
+  <li>In <code>Get-Content -Path datasets/numbers.txt</code>, which piece is the command, the parameter and the value?</li>
+  <li>Give one job that is easier in a GUI and one that is easier in a CLI.</li>
+</ol>
+<details><summary>Answers</summary>
+<ol>
+  <li><code>PS</code> = PowerShell, <code>C:\Windows</code> = current folder, <code>&gt;</code> = end of prompt.</li>
+  <li>Command <code>Get-Content</code>, parameter <code>-Path</code>, value <code>datasets/numbers.txt</code>.</li>
+  <li>GUI: editing a photo. CLI: renaming 200 files or checking 50 servers.</li>
+</ol>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li>Shell = runs commands. Terminal = the window. Prompt = "type here".</li>
+  <li>A command line is: <strong>command</strong>, then <strong>-Parameter value</strong> pairs.</li>
+  <li>CLI work can be saved as a script and repeated.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>What is the difference between a shell and a terminal?</strong> The shell (such as PowerShell) understands and runs commands. The terminal (such as Windows Terminal) is only the window that shows the text going in and out.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

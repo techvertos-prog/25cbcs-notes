@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>05 · Pipelines</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="t05">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Topics / 05</div>
+<h1>Pipelines</h1>
+<p class="lead">The pipe <code>|</code> hands the output of one command to the next one, so small commands can work together.</p>
+<div class="meta-row"><span class="pill">Topic 05</span><span class="pill grey">~20 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="../basics/f5-objects.html">F5 Objects</a><a href="t03-cmdlets.html">03 Cmdlets</a><a href="t04-help.html">04 Help</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>PowerShell pipes <strong>objects</strong>, not plain text. The next command can read their properties directly, so you never have to cut columns out of text.</p></div>
+
+<h2 id="how">How a pipeline flows</h2>
+<ul class="flow">
+  <li><span>Get data</span></li>
+  <li><span>Filter rows</span></li>
+  <li><span>Sort</span></li>
+  <li><span>Pick columns</span></li>
+  <li><span>Show or save</span></li>
+</ul>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Process | Where-Object CPU -gt 10 | Sort-Object CPU -Descending | Select-Object -First 3 Name, CPU</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>Name        CPU
+----        ---
+pwsh      58.21
+Code      41.07
+explorer  12.90</pre></div>
+
+<h2 id="five">The five pipeline cmdlets</h2>
+<div class="tiles">
+  <div class="tile"><b>Where-Object</b><code>| Where-Object Qty -eq 0</code><p>Keep only matching rows.</p></div>
+  <div class="tile"><b>Sort-Object</b><code>| Sort-Object Price -Descending</code><p>Put rows in order.</p></div>
+  <div class="tile"><b>Select-Object</b><code>| Select-Object Name, Qty</code><p>Pick columns, or the first N rows.</p></div>
+  <div class="tile"><b>Measure-Object</b><code>| Measure-Object Qty -Sum</code><p>Count, sum, average, min, max.</p></div>
+  <div class="tile"><b>ForEach-Object</b><code>| ForEach-Object { $_.Name }</code><p>Run code once for each row.</p></div>
+</div>
+<p><code>$_</code> (also written <code>$PSItem</code>) means "the current object in the pipe".</p>
+
+<h2 id="step">Build one step at a time</h2>
+<p>We use <code>datasets/inventory.csv</code>. <code>Import-Csv</code> turns each line into an object with the properties <code>Item</code>, <code>Category</code>, <code>Qty</code> and <code>Price</code>.</p>
+
+<h3 id="s1">1. Get the data</h3>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Import-Csv datasets/inventory.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Item      Category    Qty Price
+----      --------    --- -----
+Keyboard  Accessories 25  750
+Mouse     Accessories 40  400
+Monitor   Display     8   9500
+Laptop    Computers   5   58000
+USB Cable Accessories 0   150
+Webcam    Accessories 12  2200
+Printer   Peripherals 3   12500
+Router    Network     0   3200</pre></div>
+
+<h3 id="s2">2. Filter: only out-of-stock items</h3>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Import-Csv datasets/inventory.csv | Where-Object { $_.Qty -eq 0 }</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Item      Category    Qty Price
+----      --------    --- -----
+USB Cable Accessories 0   150
+Router    Network     0   3200</pre></div>
+
+<h3 id="s3">3. Sort and pick columns</h3>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Import-Csv datasets/inventory.csv |
+    Sort-Object { [int]$_.Price } -Descending |
+    Select-Object -First 3 Item, Price</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Item    Price
+----    -----
+Laptop  58000
+Printer 12500
+Monitor 9500</pre></div>
+<div class="callout tip"><span class="ct">Tip</span>CSV values are text. <code>[int]$_.Price</code> turns them into numbers so <code>9500</code> sorts below <code>12500</code>. A line that ends with <code>|</code> continues on the next line.</div>
+
+<h3 id="s4">4. Measure</h3>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Import-Csv datasets/inventory.csv | Measure-Object -Property Qty -Sum -Average</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Count             : 8
+Average           : 11.625
+Sum               : 93
+Maximum           :
+Minimum           :
+StandardDeviation :
+Property          : Qty</pre></div>
+
+<h3 id="s5">5. Save the result</h3>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Import-Csv datasets/inventory.csv |
+    Where-Object { $_.Qty -eq 0 } |
+    Export-Csv reorder.csv -NoTypeInformation
+
+Get-Content reorder.csv</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>"Item","Category","Qty","Price"
+"USB Cable","Accessories","0","150"
+"Router","Network","0","3200"</pre></div>
+
+<h2 id="out">Where the output can go</h2>
+<div class="table-wrap"><table>
+<tr><th>End the pipe with</th><th>Result</th></tr>
+<tr><td><code>Format-Table</code></td><td>Columns on screen</td></tr>
+<tr><td><code>Format-List</code></td><td>One property per line</td></tr>
+<tr><td><code>Out-File report.txt</code></td><td>Text file</td></tr>
+<tr><td><code>Export-Csv data.csv -NoTypeInformation</code></td><td>CSV file</td></tr>
+<tr><td><code>ConvertTo-Json</code></td><td>JSON text</td></tr>
+<tr><td><code>Out-GridView</code></td><td>Clickable table window (Windows only)</td></tr>
+</table></div>
+<div class="callout warn"><span class="ct">Watch out</span>Put <code>Format-*</code> <strong>last</strong>. After it, you have display formatting, not data, so <code>Export-Csv</code> or <code>Sort-Object</code> will give strange results.</div>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Show only items in the <code>Accessories</code> category.</li>
+  <li>Show the 2 cheapest items.</li>
+  <li>Count how many items have fewer than 10 in stock.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Import-Csv datasets/inventory.csv | Where-Object Category -eq 'Accessories'
+Import-Csv datasets/inventory.csv | Sort-Object { [int]$_.Price } | Select-Object -First 2
+(Import-Csv datasets/inventory.csv | Where-Object { [int]$_.Qty -lt 10 }).Count    # 5</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li><code>|</code> passes <strong>objects</strong> to the next command.</li>
+  <li><code>$_</code> is the current object.</li>
+  <li>Filter early with <code>Where-Object</code>, format last with <code>Format-*</code>.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>How is the PowerShell pipeline different from the Bash pipeline?</strong> Bash passes text, so you cut out columns with tools like <code>awk</code>. PowerShell passes objects, so you use property names such as <code>$_.Qty</code>.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

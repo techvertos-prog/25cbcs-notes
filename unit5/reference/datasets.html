@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Practice files</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="datasets">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Reference / Practice files</div>
+<h1>Practice files</h1>
+<p class="lead">Six small files in <code>unit5/datasets/</code> that the examples and labs use as data.</p>
+<div class="meta-row"><span class="pill">Reference</span><span class="pill grey">6 files</span><span class="pill grey">Read-only practice data</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="../basics/f3-first-commands.html">F3 First commands</a><a href="../basics/f5-objects.html">F5 Objects</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>Open PowerShell <strong>inside the <code>unit5</code> folder</strong>. Then every example path such as <code>datasets/students.csv</code> just works.</p></div>
+
+<div class="table-wrap"><table>
+<tr><th>File</th><th>Kind</th><th>Load with</th></tr>
+<tr><td><a href="#students-csv"><code>students.csv</code></a></td><td>Table (CSV)</td><td><code>Import-Csv</code></td></tr>
+<tr><td><a href="#inventory-csv"><code>inventory.csv</code></a></td><td>Table (CSV)</td><td><code>Import-Csv</code></td></tr>
+<tr><td><a href="#servers-txt"><code>servers.txt</code></a></td><td>List of lines</td><td><code>Get-Content</code></td></tr>
+<tr><td><a href="#numbers-txt"><code>numbers.txt</code></a></td><td>List of lines</td><td><code>Get-Content</code></td></tr>
+<tr><td><a href="#app-log"><code>app.log</code></a></td><td>Log lines</td><td><code>Get-Content</code></td></tr>
+<tr><td><a href="#config-json"><code>config.json</code></a></td><td>Settings (JSON)</td><td><code>Get-Content -Raw | ConvertFrom-Json</code></td></tr>
+</table></div>
+<div class="code"><div class="code-head">powershell · get there first</div><pre><code class="language-powershell">Set-Location path\to\unit5      # your own path
+Get-ChildItem datasets -Name</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>app.log
+config.json
+inventory.csv
+numbers.txt
+servers.txt
+students.csv</pre></div>
+
+<h2 id="students-csv">students.csv</h2>
+<p>Marks of 8 students in Maths, Science and English. One row per student.</p>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/students.csv</span></div><pre><code>Name,Class,Maths,Science,English
+Aarav,10A,92,85,78
+Priya,10A,67,72,88
+Rohan,10B,45,58,61
+Sneha,10B,88,91,95
+Kabir,10A,33,40,52
+Isha,10C,76,69,81
+Vikram,10C,58,47,39
+Ananya,10B,99,94,90</code></pre></div>
+<div class="code"><div class="code-head">powershell · load it</div><pre><code class="language-powershell">Import-Csv datasets/students.csv</code></pre></div>
+<p>Columns: <code>Name</code>, <code>Class</code>, <code>Maths</code>, <code>Science</code>, <code>English</code>. Use <code>[int]$_.Maths</code> when comparing marks as numbers.</p>
+
+<h2 id="inventory-csv">inventory.csv</h2>
+<p>A small shop's stock list. Two items are out of stock (Qty 0).</p>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/inventory.csv</span></div><pre><code>Item,Category,Qty,Price
+Keyboard,Accessories,25,750
+Mouse,Accessories,40,400
+Monitor,Display,8,9500
+Laptop,Computers,5,58000
+USB Cable,Accessories,0,150
+Webcam,Accessories,12,2200
+Printer,Peripherals,3,12500
+Router,Network,0,3200</code></pre></div>
+<div class="code"><div class="code-head">powershell · load it</div><pre><code class="language-powershell">Import-Csv datasets/inventory.csv</code></pre></div>
+<p>Columns: <code>Item</code>, <code>Category</code>, <code>Qty</code>, <code>Price</code>.</p>
+
+<h2 id="servers-txt">servers.txt</h2>
+<p>Five server names, one per line. Handy for loops.</p>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/servers.txt</span></div><pre><code>web01
+web02
+db01
+mail01
+backup01</code></pre></div>
+<div class="code"><div class="code-head">powershell · load it</div><pre><code class="language-powershell">Get-Content datasets/servers.txt</code></pre></div>
+<p>Each line becomes one string, so you get an array of 5 names.</p>
+
+<h2 id="numbers-txt">numbers.txt</h2>
+<p>Eight whole numbers, one per line. Handy for sums, averages, min and max.</p>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/numbers.txt</span></div><pre><code>12
+7
+45
+3
+28
+19
+33
+8</code></pre></div>
+<div class="code"><div class="code-head">powershell · load it</div><pre><code class="language-powershell">Get-Content datasets/numbers.txt | ForEach-Object { [int]$_ }</code></pre></div>
+<p>Each line is text, so <code>[int]</code> turns it into a number.</p>
+
+<h2 id="app-log">app.log</h2>
+<p>A day of application log lines: date, time, level (INFO, WARN or ERROR), message.</p>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/app.log</span></div><pre><code>2026-11-16 08:00:01 INFO  Application started
+2026-11-16 08:00:05 INFO  Connected to database db01
+2026-11-16 08:15:22 WARN  Disk usage at 78% on web01
+2026-11-16 08:30:10 INFO  User aarav logged in
+2026-11-16 08:42:57 ERROR Failed to send email to priya@example.com
+2026-11-16 09:01:33 INFO  Backup job started
+2026-11-16 09:05:12 INFO  Backup job finished in 218 seconds
+2026-11-16 09:20:44 WARN  Slow response from web02 (2.4 s)
+2026-11-16 09:31:08 ERROR Database connection lost
+2026-11-16 09:31:15 INFO  Reconnected to database db01
+2026-11-16 10:02:49 INFO  User sneha logged in
+2026-11-16 10:15:00 WARN  Disk usage at 85% on web01
+2026-11-16 10:45:31 ERROR Disk full on web01
+2026-11-16 11:00:00 INFO  Application stopped</code></pre></div>
+<div class="code"><div class="code-head">powershell · load it</div><pre><code class="language-powershell">Get-Content datasets/app.log | Select-String 'ERROR'</code></pre></div>
+<p><code>Select-String</code> keeps only the lines that contain the word.</p>
+
+<h2 id="config-json">config.json</h2>
+<p>App settings in JSON: text, a number, true/false, a list and a nested object.</p>
+<div class="dataset short"><div class="ds-head"><span class="ds-name">datasets/config.json</span></div><pre><code>{
+  "AppName": "StudentPortal",
+  "Version": "2.1.0",
+  "Port": 8080,
+  "DebugMode": false,
+  "Admins": ["aarav", "sneha"],
+  "Database": {
+    "Server": "db01",
+    "Name": "portal"
+  }
+}</code></pre></div>
+<div class="code"><div class="code-head">powershell · load it</div><pre><code class="language-powershell">$config = Get-Content datasets/config.json -Raw | ConvertFrom-Json</code></pre></div>
+<p>Then read values with a dot: <code>$config.Port</code>, <code>$config.Database.Server</code>. <code>-Raw</code> reads the file as one string.</p>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Count the lines in <code>servers.txt</code>.</li>
+  <li>Show only the <code>WARN</code> lines of <code>app.log</code>.</li>
+  <li>Print the <code>AppName</code> from <code>config.json</code>.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">(Get-Content datasets/servers.txt).Count                          # 5
+Get-Content datasets/app.log | Select-String 'WARN'
+(Get-Content datasets/config.json -Raw | ConvertFrom-Json).AppName  # StudentPortal</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li>CSV → <code>Import-Csv</code> gives objects with column names as properties.</li>
+  <li>Text → <code>Get-Content</code> gives one string per line.</li>
+  <li>JSON → <code>Get-Content -Raw | ConvertFrom-Json</code> gives one object.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>Why do we write <code>[int]$_.Qty</code> after <code>Import-Csv</code>?</strong> CSV values are always read as text. <code>[int]</code> converts them to numbers so comparisons and sorting work numerically.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

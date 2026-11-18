@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>09 · User Input</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="t09">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Topics / 09</div>
+<h1>User Input</h1>
+<p class="lead"><code>Read-Host</code> pauses the script, shows a prompt, and waits for the user to type something.</p>
+<div class="meta-row"><span class="pill">Topic 09</span><span class="pill grey">~15 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="t06-writing-scripts.html">06 Writing scripts</a><a href="t08-variables.html">08 Variables</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p><code>Read-Host</code> <strong>always returns a string</strong>. If you need a number, convert it with <code>[int]</code> before doing maths.</p></div>
+
+<ul class="flow">
+  <li><span>Prompt</span></li>
+  <li><span>User types</span></li>
+  <li><span>String stored</span></li>
+  <li><span>Convert / check</span></li>
+  <li><span>Use it</span></li>
+</ul>
+
+<h2 id="readhost">Read-Host</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$name = Read-Host "Enter your name"
+"Hello, $name!"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Enter your name: Aarav
+Hello, Aarav!</pre></div>
+<p>PowerShell adds the <code>: </code> after your prompt text by itself.</p>
+
+<h2 id="convert">It is always a string</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$age = Read-Host "Age"
+$age.GetType().Name
+$age + 1</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Age: 20
+String
+201</pre></div>
+<p><code>"20" + 1</code> joins text, giving <code>201</code>. Convert first:</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$age = [int](Read-Host "Age")
+$age + 1</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Age: 20
+21</pre></div>
+<div class="table-wrap"><table>
+<tr><th>Need</th><th>Write</th></tr>
+<tr><td>Whole number</td><td><code>[int](Read-Host "Qty")</code></td></tr>
+<tr><td>Decimal</td><td><code>[double](Read-Host "Price")</code></td></tr>
+<tr><td>Date</td><td><code>[datetime](Read-Host "Date (yyyy-mm-dd)")</code></td></tr>
+<tr><td>Yes / no</td><td><code>(Read-Host "Continue? y/n") -eq 'y'</code></td></tr>
+</table></div>
+<div class="callout warn"><span class="ct">Watch out</span>If the user types <code>abc</code>, <code>[int]</code> fails with an error. The loop below shows how to check first.</div>
+
+<h2 id="secure">Passwords: -AsSecureString</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$pw = Read-Host "Password" -AsSecureString
+$pw</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Password: ********
+System.Security.SecureString</pre></div>
+<p>Typing shows <code>*</code>, and the value is stored encrypted in memory, so printing it shows only its type.</p>
+<div class="callout note"><span class="ct">PowerShell 7</span><code>Read-Host "PIN" -MaskInput</code> also hides typing with <code>*</code>, but returns a normal string. Use it for things that are secret on screen but not truly sensitive.</div>
+
+<h2 id="validate">A validating input loop</h2>
+<p>Keep asking until the answer is good.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">do {
+    $text = Read-Host "Enter marks (0-100)"
+    $ok = ($text -match '^\d+$') -and ([int]$text -le 100)
+    if (-not $ok) { Write-Host "Please type a number from 0 to 100." -ForegroundColor Yellow }
+} until ($ok)
+
+$marks = [int]$text
+"Saved: $marks"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Enter marks (0-100): abc
+Please type a number from 0 to 100.
+Enter marks (0-100): 150
+Please type a number from 0 to 100.
+Enter marks (0-100): 85
+Saved: 85</pre></div>
+<div class="callout tip"><span class="ct">How it works</span><code>'^\d+$'</code> means "only digits". <code>-and</code> stops early if the first test fails, so <code>[int]"abc"</code> never runs. Loops are covered in <a href="t12-loops.html">12 Loops</a>.</div>
+
+<h2 id="params">The alternative: script parameters</h2>
+<p><code>Read-Host</code> stops and waits. Parameters let the user give values on the command line, so the script can run unattended.</p>
+<div class="code"><div class="code-head">greet-param.ps1</div><pre><code class="language-powershell">param(
+    [Parameter(Mandatory)]
+    [string]$Name
+)
+"Hello, $Name!"</code></pre></div>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">./greet-param.ps1 -Name Priya
+./greet-param.ps1               # Mandatory, so PowerShell asks</code></pre></div>
+<div class="output"><div class="out-head">output · sample</div><pre>Hello, Priya!
+
+cmdlet greet-param.ps1 at command pipeline position 1
+Supply values for the following parameters:
+Name: Sneha
+Hello, Sneha!</pre></div>
+<p>More in <a href="t19-script-files.html">19 Script files</a>.</p>
+
+<h2 id="mini">Mini example: greeting</h2>
+<div class="code"><div class="code-head">greet.ps1</div><pre><code class="language-powershell"># greet.ps1 : ask two questions, then answer
+$name = Read-Host "What is your name"
+$year = [int](Read-Host "What year were you born")
+$age  = (Get-Date).Year - $year
+
+Write-Host "----------------"
+"Hello, $name!"
+"You turn $age this year."</code></pre></div>
+<div class="output"><div class="out-head">output · in 2026</div><pre>What is your name: Isha
+What year were you born: 2006
+----------------
+Hello, Isha!
+You turn 20 this year.</pre></div>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Ask for two numbers and print their sum. Check that <code>3</code> and <code>4</code> give <code>7</code>, not <code>34</code>.</li>
+  <li>Ask for a password with <code>-AsSecureString</code> and print "Password received".</li>
+  <li>Ask for a server name and say whether it is in <code>datasets/servers.txt</code>.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$a = [int](Read-Host "First number")
+$b = [int](Read-Host "Second number")
+"Sum: $($a + $b)"
+
+$pw = Read-Host "Password" -AsSecureString
+"Password received"
+
+$s = Read-Host "Server name"
+(Get-Content datasets/servers.txt) -contains $s     # True or False</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li><code>Read-Host "Prompt"</code> shows <code>Prompt: </code> and returns a <strong>string</strong>.</li>
+  <li>Use <code>[int]</code> / <code>[double]</code> before maths.</li>
+  <li><code>-AsSecureString</code> hides and protects passwords.</li>
+  <li>Validate in a loop; prefer parameters for scripts that run unattended.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>Why does <code>(Read-Host "Num") + 5</code> give a wrong answer?</strong> <code>Read-Host</code> returns a string, so <code>+</code> joins text: typing <code>10</code> gives <code>105</code>. Cast it first: <code>[int](Read-Host "Num") + 5</code> gives <code>15</code>.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>11 · if, else &amp; switch</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="t11">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Topics / 11</div>
+<h1>if, else &amp; switch</h1>
+<p class="lead">Conditionals let a script make decisions: run this code only when something is true.</p>
+<div class="meta-row"><span class="pill">Topic 11</span><span class="pill grey">~20 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="t08-variables.html">08 Variables</a><a href="t09-user-input.html">09 User input</a><a href="t10-operators.html">10 Operators</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>PowerShell checks conditions <strong>top to bottom</strong> and runs the block of the <strong>first</strong> one that is <code>$true</code>. Use <code>if</code> for a few checks, <code>switch</code> for one value with many cases.</p></div>
+
+<h2 id="if">if</h2>
+<p>The condition goes in <code>( )</code>. The code to run goes in <code>{ }</code>.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$marks = 72
+if ($marks -ge 40) { "Pass" }</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Pass</pre></div>
+<div class="callout warn"><span class="ct">Watch out</span>Compare with <code>-gt</code>, <code>-eq</code>, not <code>&gt;</code> or <code>=</code>. <code>if ($marks &gt; 40)</code> writes a file named <code>40</code>, and <code>if ($marks = 40)</code> assigns 40.</div>
+
+<h2 id="else">if / else and elseif</h2>
+<p><code>else</code> runs when the condition is false.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$marks = 35
+if ($marks -ge 40) { "Pass" } else { "Fail" }</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Fail</pre></div>
+
+<p>Add <code>elseif</code> for more than two choices. Put the strictest check first.</p>
+<ul class="flow">
+  <li><span>Check 1</span></li>
+  <li><span>true? run it, stop</span></li>
+  <li><span>else check 2</span></li>
+  <li><span>…</span></li>
+  <li class="here"><span>nothing matched: else</span></li>
+</ul>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$marks = 72
+if ($marks -ge 90) {
+    "Grade A"
+}
+elseif ($marks -ge 75) {
+    "Grade B"
+}
+elseif ($marks -ge 40) {
+    "Grade C"
+}
+else {
+    "Fail"
+}</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Grade C</pre></div>
+
+<h2 id="combine">Nested and combined conditions</h2>
+<p>An <code>if</code> can sit inside another <code>if</code>.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$age = 20
+$hasId = $true
+if ($age -ge 18) {
+    if ($hasId) { "Entry allowed" } else { "Show your ID" }
+}
+else {
+    "Too young"
+}</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Entry allowed</pre></div>
+
+<p>Often <code>-and</code> / <code>-or</code> is shorter than nesting.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$maths = 92; $science = 85
+if ($maths -ge 80 -and $science -ge 80) { "Merit in both" }
+if ($maths -lt 40 -or $science -lt 40)  { "Needs support" } else { "No support needed" }</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Merit in both
+No support needed</pre></div>
+<div class="table-wrap"><table>
+<tr><th>Operator</th><th>True when</th></tr>
+<tr><td><code>-and</code></td><td>both sides are true</td></tr>
+<tr><td><code>-or</code></td><td>at least one side is true</td></tr>
+<tr><td><code>-not</code> or <code>!</code></td><td>the condition is false, e.g. <code>if (-not $hasId)</code></td></tr>
+</table></div>
+
+<h2 id="switch">switch</h2>
+<p><code>switch</code> compares one value against many cases. <code>default</code> runs when nothing matches. Matching ignores case.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$day = 'sat'
+switch ($day) {
+    'Sat'   { 'Weekend' }
+    'Sun'   { 'Weekend' }
+    default { 'Weekday' }
+}</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Weekend</pre></div>
+
+<h3 id="wild">-Wildcard and -Regex</h3>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$server = 'web02'
+switch -Wildcard ($server) {
+    'web*'  { 'Web server' }
+    'db*'   { 'Database server' }
+    default { 'Other' }
+}
+
+$line = '2026-11-16 08:42:57 ERROR Failed to send email'
+switch -Regex ($line) {
+    'ERROR' { 'Problem found' }
+    'WARN'  { 'Check this' }
+}</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Web server
+Problem found</pre></div>
+
+<h3 id="sb">Script-block conditions and break</h3>
+<p>A case can be a test in <code>{ }</code>. <code>$_</code> is the value being checked. Unlike <code>if</code>, <strong>every</strong> matching case runs.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$marks = 85
+switch ($marks) {
+    { $_ -ge 75 } { 'Distinction' }
+    { $_ -ge 40 } { 'Pass' }
+}</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Distinction
+Pass</pre></div>
+<p>Add <code>break</code> to stop after the first match.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">switch ($marks) {
+    { $_ -ge 75 } { 'Distinction'; break }
+    { $_ -ge 40 } { 'Pass'; break }
+    default       { 'Fail' }
+}</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Distinction</pre></div>
+
+<h3 id="arr">switch over an array</h3>
+<p>Give <code>switch</code> many values and it checks each one in turn.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">switch -Wildcard (Get-Content datasets/servers.txt) {
+    'web*'  { "$_ : web" }
+    'db*'   { "$_ : database" }
+    default { "$_ : other" }
+}</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>web01 : web
+web02 : web
+db01 : database
+mail01 : other
+backup01 : other</pre></div>
+<div class="callout note"><span class="ct">Note</span>With an array, <code>break</code> stops the <strong>whole</strong> switch. Use <code>continue</code> to skip to the next item.</div>
+
+<h2 id="which">Which to use</h2>
+<div class="table-wrap"><table>
+<tr><th>Situation</th><th>Use</th></tr>
+<tr><td>One yes/no check</td><td><code>if</code></td></tr>
+<tr><td>Two outcomes</td><td><code>if / else</code></td></tr>
+<tr><td>Ranges (marks, sizes, ages)</td><td><code>if / elseif / else</code></td></tr>
+<tr><td>Several different variables in one test</td><td><code>if</code> with <code>-and</code> / <code>-or</code></td></tr>
+<tr><td>One value, many fixed options (menu choice, day)</td><td><code>switch</code></td></tr>
+<tr><td>Match patterns like <code>web*</code></td><td><code>switch -Wildcard</code> or <code>-Regex</code></td></tr>
+<tr><td>Check every item of a list</td><td><code>switch</code> over an array</td></tr>
+</table></div>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Set <code>$temp = 31</code>. Print <code>Hot</code> above 30, <code>Warm</code> from 20 to 30, else <code>Cold</code>.</li>
+  <li>Set <code>$choice = '2'</code>. Use <code>switch</code> to print <code>Start</code> for 1, <code>Stop</code> for 2, <code>Unknown</code> otherwise.</li>
+  <li>Using <code>switch -Regex</code>, print <code>Has digits</code> if <code>$name = 'web01'</code> contains a digit.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$temp = 31
+if ($temp -gt 30) { 'Hot' } elseif ($temp -ge 20) { 'Warm' } else { 'Cold' }    # Hot
+
+$choice = '2'
+switch ($choice) { '1' { 'Start' } '2' { 'Stop' } default { 'Unknown' } }       # Stop
+
+$name = 'web01'
+switch -Regex ($name) { '\d' { 'Has digits' } }                                  # Has digits</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li><code>if (condition) { code }</code>, then optional <code>elseif</code> and <code>else</code>.</li>
+  <li>Use <code>-eq</code>, <code>-gt</code>, <code>-le</code>… never <code>=</code> or <code>&gt;</code> in a condition.</li>
+  <li><code>switch</code> runs <strong>every</strong> matching case; add <code>break</code> to stop at the first.</li>
+  <li><code>switch</code> has <code>default</code>, <code>-Wildcard</code>, <code>-Regex</code> and works on arrays.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>How is PowerShell's <code>switch</code> different from C's?</strong> It does not fall through, it can match wildcards, regex and script-block tests, it runs every matching case unless you use <code>break</code>, and it can loop over an array.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

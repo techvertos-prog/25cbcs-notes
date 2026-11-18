@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 1 · Explore the console &amp; help</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="lab01">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Labs / Lab 1</div>
+<h1>Lab 1: Explore the console &amp; help</h1>
+<p class="lead">Open PowerShell, check its version, find commands, read their help and look inside the objects they return.</p>
+<div class="meta-row"><span class="pill">Lab 1</span><span class="pill grey">Beginner</span><span class="pill grey">~30 min</span></div>
+
+<div class="prereq"><span class="ct">Topics used:</span><a href="../notes/t01-introduction.html">01 Introduction</a><a href="../notes/t02-console-ise.html">02 Console &amp; ISE</a><a href="../notes/t03-cmdlets.html">03 Cmdlets</a><a href="../notes/t04-help.html">04 Help</a></div>
+
+<h2 id="aim">Aim</h2>
+<ul class="check">
+  <li>Open the console and check the PowerShell version.</li>
+  <li>Find commands with <code>Get-Command</code>.</li>
+  <li>Read help and examples with <code>Get-Help</code>.</li>
+  <li>Look inside objects with <code>Get-Member</code>.</li>
+  <li>Use and look up aliases.</li>
+</ul>
+
+<h2 id="plan">Plan</h2>
+<ul class="flow">
+  <li><span>Open console</span></li>
+  <li><span>Find a command</span></li>
+  <li><span>Read its help</span></li>
+  <li><span>Inspect its output</span></li>
+  <li><span>Use short names</span></li>
+</ul>
+
+<h2 id="tasks">Tasks</h2>
+
+<div class="task">
+<span class="task-tag">Task 1</span>
+<h3 id="t1">Open the console and check the version</h3>
+<p>Start PowerShell 7: type <code>pwsh</code> in a terminal, or pick <b>PowerShell 7</b> from the Start menu on Windows. Then <code>cd</code> into the <code>unit5</code> folder.</p>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">$PSVersionTable.PSVersion
+$PSVersionTable.PSEdition</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>Major  Minor  Patch  PreReleaseLabel BuildLabel
+-----  -----  -----  --------------- ----------
+7      4      6
+
+Core</pre></div>
+<p><code>Core</code> means PowerShell 7 (cross-platform). The old Windows PowerShell 5.1 shows <code>Desktop</code>.</p>
+<div class="callout note"><span class="ct">Windows only</span>The <b>PowerShell ISE</b> editor comes with Windows PowerShell 5.1 only. For PowerShell 7, use the console or VS Code with the PowerShell extension.</div>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 2</span>
+<h3 id="t2">Find commands with Get-Command</h3>
+<p>Cmdlet names are <b>Verb-Noun</b>, so search by verb, by noun, or with a wildcard.</p>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">Get-Command -Noun Process
+Get-Command *-Csv
+(Get-Command -CommandType Cmdlet).Count</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>CommandType     Name                                               Version    Source
+-----------     ----                                               -------    ------
+Cmdlet          Debug-Process                                      7.0.0.0    Microsoft.PowerShell.Management
+Cmdlet          Get-Process                                        7.0.0.0    Microsoft.PowerShell.Management
+Cmdlet          Start-Process                                      7.0.0.0    Microsoft.PowerShell.Management
+Cmdlet          Stop-Process                                       7.0.0.0    Microsoft.PowerShell.Management
+Cmdlet          Wait-Process                                       7.0.0.0    Microsoft.PowerShell.Management
+
+CommandType     Name                                               Version    Source
+-----------     ----                                               -------    ------
+Cmdlet          ConvertFrom-Csv                                    7.0.0.0    Microsoft.PowerShell.Utility
+Cmdlet          ConvertTo-Csv                                      7.0.0.0    Microsoft.PowerShell.Utility
+Cmdlet          Export-Csv                                         7.0.0.0    Microsoft.PowerShell.Utility
+Cmdlet          Import-Csv                                         7.0.0.0    Microsoft.PowerShell.Utility
+
+295</pre></div>
+<p>Use <code>Get-Verb</code> to see the list of approved verbs such as <code>Get</code>, <code>Set</code>, <code>New</code> and <code>Remove</code>.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 3</span>
+<h3 id="t3">Read help and examples</h3>
+<p>Download the help files once (run as Administrator on Windows), then ask for help.</p>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">Update-Help -UICulture en-US -ErrorAction SilentlyContinue   # once, needs internet
+
+Get-Help Get-Process                 # short summary
+Get-Help Get-Process -Examples       # only the examples
+Get-Help Get-Process -Parameter Name # one parameter
+Get-Help about_Pipelines             # a concept page</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>NAME
+    Get-Process
+
+SYNOPSIS
+    Gets the processes that are running on the local computer.
+...
+    --------- Example 1: Get a list of all active processes on the local computer ---------
+
+    Get-Process
+...</pre></div>
+<div class="table-wrap"><table>
+<tr><th>Switch</th><th>Shows</th></tr>
+<tr><td><code>-Examples</code></td><td>Only the worked examples</td></tr>
+<tr><td><code>-Detailed</code></td><td>Parameters + examples</td></tr>
+<tr><td><code>-Full</code></td><td>Everything</td></tr>
+<tr><td><code>-Online</code></td><td>Opens the help page in a browser</td></tr>
+</table></div>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 4</span>
+<h3 id="t4">Inspect objects with Get-Member</h3>
+<p>Pipe any output to <code>Get-Member</code> to see its type, properties and methods.</p>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">"hello" | Get-Member -MemberType Property
+"hello".Length
+"hello".ToUpper()</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>
+   TypeName: System.String
+
+Name   MemberType Definition
+----   ---------- ----------
+Length Property   int Length {get;}
+
+5
+HELLO</pre></div>
+<p>Now try it on a CSV file. Each row becomes an object with one property per column.</p>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">Import-Csv datasets/students.csv | Get-Member -MemberType NoteProperty</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>
+   TypeName: System.Management.Automation.PSCustomObject
+
+Name    MemberType   Definition
+----    ----------   ----------
+Class   NoteProperty string Class=10A
+English NoteProperty string English=78
+Maths   NoteProperty string Maths=92
+Name    NoteProperty string Name=Aarav
+Science NoteProperty string Science=85</pre></div>
+<p>Every value is a <code>string</code>, so you convert it with <code>[int]</code> before doing maths.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 5</span>
+<h3 id="t5">Use aliases</h3>
+<p>An alias is a short name for a cmdlet.</p>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">Get-Alias dir, gci, cd
+Get-Alias -Definition Get-ChildItem</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>CommandType     Name                                               Version    Source
+-----------     ----                                               -------    ------
+Alias           dir -&gt; Get-ChildItem
+Alias           gci -&gt; Get-ChildItem
+Alias           cd -&gt; Set-Location
+Alias           dir -&gt; Get-ChildItem
+Alias           gci -&gt; Get-ChildItem
+Alias           ls -&gt; Get-ChildItem</pre></div>
+<p><code>ls</code> is an alias only on Windows. On macOS and Linux, <code>ls</code> runs the system's own <code>ls</code> program.</p>
+<div class="callout tip"><span class="ct">Tip</span>Aliases save typing at the prompt. In scripts, write the full cmdlet name so others can read it.</div>
+</div>
+
+<h2 id="challenge">Challenge</h2>
+<ol class="steps">
+  <li>Find every command whose noun is <code>Item</code>.</li>
+  <li>Show the examples for <code>Sort-Object</code>.</li>
+  <li>List the properties of the objects that <code>Get-Date</code> returns.</li>
+  <li>Make your own alias <code>gh</code> for <code>Get-Help</code>.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Command -Noun Item
+Get-Help Sort-Object -Examples
+Get-Date | Get-Member -MemberType Property
+Set-Alias gh Get-Help      # lasts until you close the console</code></pre></div>
+</details>
+
+<h2 id="viva">Viva questions</h2>
+<details><summary>What does <code>$PSVersionTable</code> show?</summary><p>Details about the running PowerShell: version, edition (<code>Core</code> or <code>Desktop</code>), OS and more.</p></details>
+<details><summary>What is the difference between <code>Get-Command</code> and <code>Get-Help</code>?</summary><p><code>Get-Command</code> finds which commands exist. <code>Get-Help</code> explains how to use one of them.</p></details>
+<details><summary>Why is <code>Get-Member</code> useful?</summary><p>PowerShell returns objects. <code>Get-Member</code> shows their type and the properties and methods you can use, such as <code>.Length</code> or <code>.ToUpper()</code>.</p></details>
+<details><summary>Is an alias the same as a cmdlet?</summary><p>No. It is only another name that points to a cmdlet. <code>Get-Alias</code> shows what it points to.</p></details>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

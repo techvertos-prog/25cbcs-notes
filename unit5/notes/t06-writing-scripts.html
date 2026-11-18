@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>06 · Writing Scripts</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="t06">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Topics / 06</div>
+<h1>Writing Scripts</h1>
+<p class="lead">A script is a text file of PowerShell commands, saved with the <code>.ps1</code> extension, that you can run again and again.</p>
+<div class="meta-row"><span class="pill">Topic 06</span><span class="pill grey">~20 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="../basics/f4-files-and-folders.html">F4 Files &amp; folders</a><a href="t02-console-ise.html">02 Console &amp; ISE</a><a href="t05-pipelines.html">05 Pipelines</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>Anything you can type at the prompt, you can put in a <code>.ps1</code> file. Run it with <code>./name.ps1</code>.</p></div>
+
+<ul class="flow">
+  <li><span>Create .ps1</span></li>
+  <li><span>Write commands</span></li>
+  <li><span>Save</span></li>
+  <li><span>Run ./file.ps1</span></li>
+</ul>
+
+<h2 id="create">Create a script</h2>
+<div class="table-wrap"><table>
+<tr><th>Way</th><th>Command</th></tr>
+<tr><td>VS Code (best)</td><td><code>code hello.ps1</code></td></tr>
+<tr><td>Notepad (Windows)</td><td><code>notepad hello.ps1</code></td></tr>
+<tr><td>From PowerShell</td><td><code>New-Item hello.ps1</code>, then edit it</td></tr>
+<tr><td>One line, no editor</td><td><code>Set-Content hello.ps1 'Write-Output "Hello!"'</code></td></tr>
+</table></div>
+<p>Put this in <code>hello.ps1</code> and save it in the <code>unit5</code> folder:</p>
+<div class="code"><div class="code-head">hello.ps1</div><pre><code class="language-powershell">Write-Output "Hello from my first script!"
+Get-Date -Format "dddd"</code></pre></div>
+
+<h2 id="run">Run it, and why ./ is needed</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">./hello.ps1</code></pre></div>
+<div class="output"><div class="out-head">output · sample, the day will differ</div><pre>Hello from my first script!
+Tuesday</pre></div>
+<p>Without <code>./</code>, PowerShell refuses:</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">hello.ps1</code></pre></div>
+<div class="output"><div class="out-head">output · Windows</div><pre>hello.ps1: The term 'hello.ps1' is not recognized as a name of a cmdlet, function, script file, or executable program.
+Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+
+Suggestion [3,General]: The command "hello.ps1" was not found, but does exist in the current location. PowerShell does not load commands from the current location by default. If you trust this command, instead type: ".\hello.ps1". See "get-help about_Command_Precedence" for more details.</pre></div>
+<div class="callout note"><span class="ct">Why?</span>Safety. PowerShell never runs files from the current folder just by name, so a planted file called <code>dir.ps1</code> can't trick you. <code>./</code> (or <code>.\</code> on Windows) means "this folder, I'm sure".</div>
+<p>Other ways: full path <code>C:\scripts\hello.ps1</code>, or from CMD: <code>pwsh -File hello.ps1</code>.</p>
+
+<h2 id="policy">Execution policy (Windows only)</h2>
+<p>Windows uses an <strong>execution policy</strong> to decide whether scripts may run. It is a safety belt, not a security wall.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-ExecutionPolicy</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>Restricted</pre></div>
+<p>If it is <code>Restricted</code>, running a script gives:</p>
+<div class="output"><div class="out-head">output · sample</div><pre>File C:\Users\aarav\unit5\hello.ps1 cannot be loaded because running scripts is disabled on this system. For more information, see about_Execution_Policies at https:/go.microsoft.com/fwlink/?LinkID=135170.</pre></div>
+<p>Fix it for your user only (no admin needed):</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Set-ExecutionPolicy RemoteSigned -Scope CurrentUser</code></pre></div>
+<div class="table-wrap"><table>
+<tr><th>Policy</th><th>Local scripts</th><th>Downloaded scripts</th></tr>
+<tr><td><code>Restricted</code></td><td>Blocked</td><td>Blocked</td></tr>
+<tr><td><code>AllSigned</code></td><td>Only if signed</td><td>Only if signed</td></tr>
+<tr><td><code>RemoteSigned</code></td><td>Run</td><td>Only if signed</td></tr>
+<tr><td><code>Unrestricted</code></td><td>Run</td><td>Run, with a warning</td></tr>
+<tr><td><code>Bypass</code></td><td>Run</td><td>Run, no warning</td></tr>
+</table></div>
+<div class="callout warn"><span class="ct">Watch out</span>On Windows 10/11 the default is <code>Restricted</code>, and on Windows Server it is <code>RemoteSigned</code>. Always check with <code>Get-ExecutionPolicy</code>. On Linux and macOS the policy is always <code>Unrestricted</code> and cannot be changed.</div>
+
+<h2 id="write">Write-Output vs Write-Host</h2>
+<div class="table-wrap"><table>
+<tr><th></th><th><code>Write-Output</code></th><th><code>Write-Host</code></th></tr>
+<tr><td>Goes to</td><td>The pipeline (real output)</td><td>The screen only</td></tr>
+<tr><td>Can be piped / saved?</td><td>Yes</td><td>No</td></tr>
+<tr><td>Colours?</td><td>No</td><td>Yes, <code>-ForegroundColor</code></td></tr>
+<tr><td>Use for</td><td>Results</td><td>Messages to the user</td></tr>
+</table></div>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">(Write-Output "Hi" | Measure-Object).Count
+(Write-Host "Hi" | Measure-Object).Count</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>1
+Hi
+0</pre></div>
+<p>The second line printed <code>Hi</code> on screen, but nothing went down the pipe, so the count is 0.</p>
+<div class="callout tip"><span class="ct">Tip</span>A plain string on its own line is output too: <code>"Hello"</code> works the same as <code>Write-Output "Hello"</code>.</div>
+
+<h2 id="first">A first complete script</h2>
+<div class="code"><div class="code-head">class-report.ps1</div><pre><code class="language-powershell"># class-report.ps1 : a tiny report from students.csv
+$students = Import-Csv datasets/students.csv
+Write-Host "=== Class Report ===" -ForegroundColor Cyan
+
+Write-Output "Students in file: $($students.Count)"
+
+$top = $students | Sort-Object { [int]$_.Maths } -Descending | Select-Object -First 1
+Write-Output "Top in Maths: $($top.Name) ($($top.Maths))"
+
+$fail = $students | Where-Object { [int]$_.Maths -lt 40 }
+Write-Output "Below 40 in Maths: $($fail.Name)"</code></pre></div>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">./class-report.ps1</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>=== Class Report ===
+Students in file: 8
+Top in Maths: Ananya (99)
+Below 40 in Maths: Kabir</pre></div>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Check your execution policy. If it is <code>Restricted</code>, change it for your user.</li>
+  <li>Write <code>servers.ps1</code> that prints "Servers:" in yellow, then the contents of <code>datasets/servers.txt</code>.</li>
+  <li>Run it, then run <code>./servers.ps1 | Measure-Object</code>. Why is the count 5, not 6?</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">servers.ps1</div><pre><code class="language-powershell">Write-Host "Servers:" -ForegroundColor Yellow
+Get-Content datasets/servers.txt</code></pre></div>
+<p>The heading uses <code>Write-Host</code>, so it goes to the screen, not the pipeline. Only the 5 server names are counted.</p>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li>Scripts are <code>.ps1</code> text files; run them with <code>./name.ps1</code>.</li>
+  <li><code>./</code> is required because PowerShell won't run files from the current folder by name.</li>
+  <li><code>Set-ExecutionPolicy RemoteSigned -Scope CurrentUser</code> allows your own scripts on Windows.</li>
+  <li><code>Write-Output</code> for results, <code>Write-Host</code> for on-screen messages.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>What is an execution policy?</strong> A Windows safety setting that controls whether PowerShell scripts can run. Common values are Restricted, AllSigned, RemoteSigned, Unrestricted and Bypass. <code>RemoteSigned</code> runs local scripts but requires downloaded scripts to be signed.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

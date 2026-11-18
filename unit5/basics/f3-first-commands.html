@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F3 · First commands &amp; navigation</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="f3">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Fundamentals / F3</div>
+<h1>First commands &amp; navigation</h1>
+<p class="lead">Find out where you are, move between folders, list what is inside, and use the keyboard shortcuts that save time.</p>
+<div class="meta-row"><span class="pill">Fundamentals F3</span><span class="pill grey">~20 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="f1-what-is-a-shell.html">F1 What is a shell?</a><a href="f2-install-and-open.html">F2 Install &amp; open</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>Three commands do most of the moving around: <strong>where am I</strong> (<code>Get-Location</code>), <strong>go there</strong> (<code>Set-Location</code>), <strong>what is here</strong> (<code>Get-ChildItem</code>).</p></div>
+
+<h2 id="three">The big three</h2>
+<div class="table-wrap"><table>
+<tr><th>Cmdlet</th><th>Short aliases</th><th>Does</th></tr>
+<tr><td><code>Get-Location</code></td><td><code>pwd</code>, <code>gl</code></td><td>Shows the current folder.</td></tr>
+<tr><td><code>Set-Location</code></td><td><code>cd</code>, <code>sl</code>, <code>chdir</code></td><td>Moves to another folder.</td></tr>
+<tr><td><code>Get-ChildItem</code></td><td><code>ls</code>, <code>dir</code>, <code>gci</code></td><td>Lists files and folders.</td></tr>
+</table></div>
+<div class="callout warn"><span class="ct">Watch out</span>On Linux and macOS, <code>ls</code> runs the system's own <code>ls</code>, not <code>Get-ChildItem</code>. Use <code>dir</code> or <code>gci</code> there to get PowerShell objects.</div>
+
+<h3 id="where">Where am I?</h3>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Location</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>Path
+----
+C:\Users\aarav\unit5</pre></div>
+
+<h3 id="list">What is here?</h3>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-ChildItem -Name</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>assets
+basics
+datasets
+labs
+notes
+reference
+index.html</pre></div>
+<p><code>-Name</code> shows names only. Without it you also get <code>Mode</code>, <code>LastWriteTime</code> and <code>Length</code> (size).</p>
+
+<h3 id="move">Go somewhere</h3>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Set-Location datasets
+Get-ChildItem -Name</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>app.log
+config.json
+inventory.csv
+numbers.txt
+servers.txt
+students.csv</pre></div>
+<p><code>Set-Location</code> prints nothing. Your prompt changes to show the new folder.</p>
+
+<h2 id="paths">Paths: absolute and relative</h2>
+<div class="tiles">
+  <div class="tile"><b>Absolute</b><code>C:\Users\aarav\unit5</code><p>Full address from the drive or <code>/</code>. Works from anywhere.</p></div>
+  <div class="tile"><b>Relative</b><code>datasets\students.csv</code><p>Starts from where you are now.</p></div>
+</div>
+<div class="table-wrap"><table>
+<tr><th>Symbol</th><th>Means</th><th>Example</th></tr>
+<tr><td><code>.</code></td><td>This folder</td><td><code>Get-ChildItem .</code></td></tr>
+<tr><td><code>..</code></td><td>One folder up (the parent)</td><td><code>cd ..</code></td></tr>
+<tr><td><code>..\..</code></td><td>Two folders up</td><td><code>cd ..\..</code></td></tr>
+<tr><td><code>~</code></td><td>Your home folder</td><td><code>cd ~</code></td></tr>
+<tr><td><code>\</code> or <code>/</code></td><td>Separator between folder names</td><td><code>cd datasets/</code></td></tr>
+</table></div>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">cd ..        # back up to unit5
+cd ~         # jump to home
+cd -         # go back to the previous folder (PowerShell 6.2+)</code></pre></div>
+<div class="callout tip"><span class="ct">Tip</span>Both <code>\</code> and <code>/</code> work on Windows. Use <code>/</code> if you want the same command to work on Linux and macOS too.</div>
+
+<h2 id="keys">Keys that save time</h2>
+<div class="table-wrap"><table>
+<tr><th>Key</th><th>Does</th></tr>
+<tr><td><kbd>Tab</kbd></td><td>Completes a command, parameter or path. Press again for the next match.</td></tr>
+<tr><td><kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Goes back to the previous match.</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Space</kbd></td><td>Shows all matches as a menu.</td></tr>
+<tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>Scrolls through commands you typed before.</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Stops the command that is running now.</td></tr>
+<tr><td><kbd>Esc</kbd></td><td>Clears the line you are typing.</td></tr>
+</table></div>
+<p>Try Tab: type <code>Get-Chi</code> and press <kbd>Tab</kbd>. It becomes <code>Get-ChildItem</code>. Type <code>cd da</code> and press <kbd>Tab</kbd>. It becomes <code>cd .\datasets\</code> (<code>./datasets/</code> on Linux and macOS).</p>
+
+<h3 id="ctrlc">Stop a long command</h3>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Start-Sleep -Seconds 100    # waits 100 seconds; press Ctrl+C to stop early</code></pre></div>
+
+<h2 id="history">History and clearing the screen</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-History</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>  Id     Duration CommandLine
+  --     -------- -----------
+   1        0.015 Get-Location
+   2        0.021 Get-ChildItem -Name
+   3        0.002 Set-Location datasets</pre></div>
+<div class="tiles">
+  <div class="tile"><b>Get-History</b><code>h</code>, <code>history</code><p>Lists this session's commands.</p></div>
+  <div class="tile"><b>Invoke-History 2</b><code>r 2</code><p>Runs command number 2 again.</p></div>
+  <div class="tile"><b>Clear-Host</b><code>cls</code>, <code>clear</code><p>Wipes the screen. History is kept.</p></div>
+</div>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>From the <code>unit5</code> folder, go into <code>datasets</code> and list the files.</li>
+  <li>Go back up one level without typing the folder name.</li>
+  <li>List the <code>notes</code> folder <strong>without</strong> moving into it.</li>
+  <li>Show your history, then clear the screen.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">cd datasets
+ls             # or dir, or Get-ChildItem
+cd ..
+Get-ChildItem notes -Name
+Get-History
+cls</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li><code>pwd</code> where, <code>cd</code> go, <code>ls</code>/<code>dir</code> list: all are aliases of PowerShell cmdlets.</li>
+  <li><code>.</code> here, <code>..</code> up, <code>~</code> home.</li>
+  <li><kbd>Tab</kbd> completes, <kbd>↑</kbd> repeats, <kbd>Ctrl</kbd>+<kbd>C</kbd> stops.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>What is the difference between an absolute and a relative path?</strong> An absolute path gives the full location from the drive or root, such as <code>C:\Users\aarav\unit5</code>. A relative path starts from the current folder, such as <code>datasets\students.csv</code> or <code>..\notes</code>.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

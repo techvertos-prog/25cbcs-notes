@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>15 · Functions</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="t15">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Topics / 15</div>
+<h1>Functions</h1>
+<p class="lead">A function is a named block of code you write once and call many times, just like a cmdlet.</p>
+<div class="meta-row"><span class="pill">Topic 15</span><span class="pill grey">~25 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="t03-cmdlets.html">03 Cmdlets</a><a href="t06-writing-scripts.html">06 Writing scripts</a><a href="t11-conditionals.html">11 if, else &amp; switch</a><a href="t14-hashtables.html">14 Hashtables</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>Inputs go in through <code>param()</code>. <strong>Everything</strong> the function outputs comes back to the caller, not only what follows <code>return</code>.</p></div>
+
+<h2 id="define">Define and call</h2>
+<ul class="flow">
+  <li><span>function Name { … }</span></li>
+  <li><span>Call: Name</span></li>
+  <li class="here"><span>Output comes back</span></li>
+</ul>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">function Get-Greeting {
+    "Hello!"
+}
+Get-Greeting</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Hello!</pre></div>
+<p>Define the function <strong>before</strong> you call it. In a script, put functions at the top.</p>
+
+<h2 id="params">Parameters with param()</h2>
+<p>Give each parameter a type and, if you like, a default value.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">function Get-Greeting {
+    param(
+        [string]$Name = 'friend'
+    )
+    "Hello, $Name!"
+}
+Get-Greeting
+Get-Greeting -Name Priya
+Get-Greeting Priya          # by position</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Hello, friend!
+Hello, Priya!
+Hello, Priya!</pre></div>
+
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">function Get-Total {
+    param([int]$A, [int]$B)
+    $A + $B
+}
+Get-Total -A 5 -B 7
+Get-Total 5 '7'             # '7' is converted to an int</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>12
+12</pre></div>
+<div class="callout warn"><span class="ct">Watch out</span>Call functions like cmdlets: <code>Get-Total 5 7</code>. Writing <code>Get-Total(5, 7)</code> passes <strong>one</strong> array to <code>$A</code>.</div>
+
+<h2 id="return">Returning values</h2>
+<p>Any value that is not saved or printed with <code>Write-Host</code> becomes output.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">function Get-Square {
+    param([int]$Number)
+    "Working..."                # this is output too!
+    $Number * $Number
+}
+$result = Get-Square 4
+$result</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Working...
+16</pre></div>
+<p><code>$result</code> got <strong>both</strong> lines. Use <code>Write-Host "Working..."</code> for messages that should only go to the screen.</p>
+
+<p><code>return</code> sends a value and leaves the function straight away.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">function Test-Pass {
+    param([int]$Marks)
+    if ($Marks -ge 40) { return 'Pass' }
+    'Fail'
+}
+Test-Pass 72
+Test-Pass 33</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Pass
+Fail</pre></div>
+
+<h2 id="mandatory">Mandatory and switch parameters</h2>
+<p><code>[Parameter(Mandatory)]</code> makes PowerShell ask for a value that was not given.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">function Get-Greeting {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Name
+    )
+    "Hello, $Name!"
+}
+Get-Greeting</code></pre></div>
+<div class="output"><div class="out-head">output · you type Sneha</div><pre>cmdlet Get-Greeting at command pipeline position 1
+Supply values for the following parameters:
+Name: Sneha
+Hello, Sneha!</pre></div>
+
+<p>A <code>[switch]</code> is an on/off flag. It is <code>$true</code> only when you type it.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">function Get-Greeting {
+    param(
+        [string]$Name = 'friend',
+        [switch]$Loud
+    )
+    $text = "Hello, $Name!"
+    if ($Loud) { $text.ToUpper() } else { $text }
+}
+Get-Greeting -Name Isha
+Get-Greeting -Name Isha -Loud</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Hello, Isha!
+HELLO, ISHA!</pre></div>
+
+<h2 id="pipeline">Pipeline input</h2>
+<p>Add <code>ValueFromPipeline</code> and put the work in a <code>process { }</code> block. It runs once per piped item.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">function Get-Double {
+    param(
+        [Parameter(ValueFromPipeline)]
+        [int]$Number
+    )
+    process { $Number * 2 }
+}
+1..3 | Get-Double</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>2
+4
+6</pre></div>
+<div class="callout note"><span class="ct">Note</span>Without <code>process { }</code>, only the <strong>last</strong> piped item is used.</div>
+
+<h2 id="naming">Naming: Verb-Noun</h2>
+<p>Name functions like cmdlets: an approved verb, a dash, a singular noun. <code>Get-Verb</code> lists the approved verbs.</p>
+<div class="table-wrap"><table>
+<tr><th>Verb</th><th>Use it to</th><th>Example</th></tr>
+<tr><td><code>Get</code></td><td>read or return data</td><td><code>Get-Grade</code></td></tr>
+<tr><td><code>Set</code></td><td>change something</td><td><code>Set-Theme</code></td></tr>
+<tr><td><code>New</code></td><td>create something</td><td><code>New-Report</code></td></tr>
+<tr><td><code>Remove</code></td><td>delete something</td><td><code>Remove-OldLog</code></td></tr>
+<tr><td><code>Test</code></td><td>return True/False</td><td><code>Test-Pass</code></td></tr>
+<tr><td><code>Show</code></td><td>display to the user</td><td><code>Show-Menu</code></td></tr>
+</table></div>
+<div class="callout tip"><span class="ct">Tip</span>Avoid made-up verbs like <code>Calculate-</code> or <code>Make-</code>. Use <code>Get-</code> or <code>New-</code> instead.</div>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Write <code>Get-Area</code> with <code>[int]$Width</code> and <code>[int]$Height</code> that returns the area. Call it with 4 and 5.</li>
+  <li>Give <code>$Height</code> a default of 1 and call <code>Get-Area -Width 9</code>.</li>
+  <li>Write <code>Test-Even</code> that returns <code>$true</code> for even numbers.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">function Get-Area {
+    param([int]$Width, [int]$Height = 1)
+    $Width * $Height
+}
+Get-Area 4 5             # 20
+Get-Area -Width 9        # 9
+
+function Test-Even {
+    param([int]$Number)
+    $Number % 2 -eq 0
+}
+Test-Even 6              # True</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li><code>function Verb-Noun { param(...) ... }</code>, defined before it is called.</li>
+  <li>Call with spaces: <code>Get-Total 5 7</code> or <code>-A 5 -B 7</code>, never <code>( , )</code>.</li>
+  <li>All output is returned; <code>return</code> also exits early.</li>
+  <li><code>[Parameter(Mandatory)]</code> asks for a value; <code>[switch]</code> is a flag.</li>
+  <li>Pipeline input needs <code>ValueFromPipeline</code> and <code>process { }</code>.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>What does a PowerShell function return?</strong> Every value it outputs, not only the one after <code>return</code>. If it outputs several values, the caller receives an array. <code>return</code> just adds a final value and exits.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

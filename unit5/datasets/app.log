@@ -1,0 +1,14 @@
+2026-11-16 08:00:01 INFO  Application started
+2026-11-16 08:00:05 INFO  Connected to database db01
+2026-11-16 08:15:22 WARN  Disk usage at 78% on web01
+2026-11-16 08:30:10 INFO  User aarav logged in
+2026-11-16 08:42:57 ERROR Failed to send email to priya@example.com
+2026-11-16 09:01:33 INFO  Backup job started
+2026-11-16 09:05:12 INFO  Backup job finished in 218 seconds
+2026-11-16 09:20:44 WARN  Slow response from web02 (2.4 s)
+2026-11-16 09:31:08 ERROR Database connection lost
+2026-11-16 09:31:15 INFO  Reconnected to database db01
+2026-11-16 10:02:49 INFO  User sneha logged in
+2026-11-16 10:15:00 WARN  Disk usage at 85% on web01
+2026-11-16 10:45:31 ERROR Disk full on web01
+2026-11-16 11:00:00 INFO  Application stopped

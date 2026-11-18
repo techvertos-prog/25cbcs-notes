@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>01 · Introduction to PowerShell</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="t01">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Topics / 01</div>
+<h1>Introduction to PowerShell</h1>
+<p class="lead">PowerShell is a command-line shell and a scripting language from Microsoft, used to control and automate computers.</p>
+<div class="meta-row"><span class="pill">Topic 01</span><span class="pill grey">~15 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="../basics/f1-what-is-a-shell.html">F1 What is a shell?</a><a href="../basics/f2-install-and-open.html">F2 Install &amp; open</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>PowerShell = <strong>shell</strong> (type commands) + <strong>language</strong> (write scripts), built on <strong>.NET</strong>. Its commands return <strong>objects</strong>, not plain text.</p></div>
+
+<h2 id="what">What it is</h2>
+<div class="tiles">
+  <div class="tile"><b>A shell</b><code>Get-Date</code><p>Type a command, press Enter, see the result.</p></div>
+  <div class="tile"><b>A scripting language</b><code>hello.ps1</code><p>Save commands in a file with variables, loops and functions.</p></div>
+  <div class="tile"><b>Built on .NET</b><code>[math]::Sqrt(16)</code><p>You can use .NET classes and methods directly.</p></div>
+  <div class="tile"><b>Object-based</b><code>(Get-Date).Year</code><p>Results are objects with properties, not just text.</p></div>
+</div>
+
+<h2 id="history">A short history</h2>
+<div class="table-wrap"><table>
+<tr><th>Version</th><th>Year</th><th>What changed</th></tr>
+<tr><td>1.0</td><td>2006</td><td>First release for Windows (code name "Monad").</td></tr>
+<tr><td>2.0</td><td>2009</td><td>Remoting and the ISE editor added.</td></tr>
+<tr><td>5.1</td><td>2016</td><td>Last <strong>Windows PowerShell</strong>. Built into Windows 10/11. No new features since.</td></tr>
+<tr><td>6 (Core)</td><td>2018</td><td>Open source and <strong>cross-platform</strong> (Windows, Linux, macOS) on .NET Core.</td></tr>
+<tr><td>7.x</td><td>2020 →</td><td>Current version. Command name is <code>pwsh</code>. This wiki uses it.</td></tr>
+</table></div>
+<div class="callout note"><span class="ct">Note</span>Windows still ships 5.1 (<code>powershell.exe</code>). PowerShell 7 (<code>pwsh.exe</code>) installs next to it. Both can be used on the same PC.</div>
+
+<h2 id="uses">What it is used for</h2>
+<div class="tiles">
+  <div class="tile"><b>System admin</b><p>Manage users, services, processes and settings.</p></div>
+  <div class="tile"><b>Automation</b><p>Turn a boring manual job into a script you run any time.</p></div>
+  <div class="tile"><b>Files &amp; data</b><p>Read and write CSV, JSON, text and log files.</p></div>
+  <div class="tile"><b>Remote work</b><p>Run commands on many servers at once.</p></div>
+  <div class="tile"><b>Cloud</b><p>Manage Azure, AWS and Microsoft 365 with modules.</p></div>
+  <div class="tile"><b>Reports</b><p>Collect information and save it as a file.</p></div>
+</div>
+
+<h2 id="compare">PowerShell vs CMD vs Bash</h2>
+<div class="table-wrap"><table>
+<tr><th></th><th>PowerShell</th><th>CMD</th><th>Bash</th></tr>
+<tr><td>Runs on</td><td>Windows, Linux, macOS</td><td>Windows only</td><td>Linux, macOS (Windows via WSL)</td></tr>
+<tr><td>Output is</td><td><strong>Objects</strong></td><td>Text</td><td>Text</td></tr>
+<tr><td>Command style</td><td><code>Get-ChildItem</code> (Verb-Noun)</td><td><code>dir</code></td><td><code>ls</code></td></tr>
+<tr><td>Script file</td><td><code>.ps1</code></td><td><code>.bat</code> / <code>.cmd</code></td><td><code>.sh</code></td></tr>
+<tr><td>Variables</td><td><code>$name</code></td><td><code>%name%</code></td><td><code>$name</code></td></tr>
+<tr><td>Help</td><td><code>Get-Help</code></td><td><code>help</code>, <code>/?</code></td><td><code>man</code>, <code>--help</code></td></tr>
+<tr><td>Case-sensitive?</td><td>No</td><td>No</td><td>Yes</td></tr>
+</table></div>
+
+<h2 id="taste">A first taste</h2>
+<p>Open PowerShell inside the <code>unit5</code> folder and try these.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Content datasets/servers.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>web01
+web02
+db01
+mail01
+backup01</pre></div>
+
+<p>Each line is an object, so you can ask how many there are.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">(Get-Content datasets/servers.txt).Count</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>5</pre></div>
+
+<p>A CSV becomes a table of objects. Pick the columns you want by name.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Import-Csv datasets/students.csv | Select-Object -First 3 Name, Maths</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Name  Maths
+----  -----
+Aarav 92
+Priya 67
+Rohan 45</pre></div>
+
+<p>Which version are you running?</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$PSVersionTable.PSVersion</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>Major  Minor  Patch  PreReleaseLabel BuildLabel
+-----  -----  -----  --------------- ----------
+7      4      6</pre></div>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Check your PowerShell version.</li>
+  <li>Show today's date, then only the year.</li>
+  <li>Count the lines in <code>datasets/numbers.txt</code>.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$PSVersionTable.PSVersion
+Get-Date
+(Get-Date).Year
+(Get-Content datasets/numbers.txt).Count    # 8</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li>PowerShell is a shell <strong>and</strong> a scripting language, built on .NET.</li>
+  <li>5.1 = Windows PowerShell (Windows only). 7 = PowerShell (<code>pwsh</code>, cross-platform).</li>
+  <li>Commands return <strong>objects</strong>, so you use properties instead of cutting text.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>What is PowerShell and how is it different from CMD?</strong> PowerShell is an object-based shell and scripting language built on .NET. CMD passes plain text and has a very small command set; PowerShell passes objects and uses Verb-Noun cmdlets such as <code>Get-Process</code>.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

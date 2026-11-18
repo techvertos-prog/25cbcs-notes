@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F4 · Files &amp; folders</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="f4">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Fundamentals / F4</div>
+<h1>Files &amp; folders</h1>
+<p class="lead">Create, read, write, copy, move, rename and delete files from the command line.</p>
+<div class="meta-row"><span class="pill">Fundamentals F4</span><span class="pill grey">~20 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="f3-first-commands.html">F3 First commands &amp; navigation</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>Every file job has a cmdlet named <strong>Verb-Item</strong> or <strong>Verb-Content</strong>. <em>Item</em> = the file or folder itself. <em>Content</em> = the text inside it.</p></div>
+
+<h2 id="map">The whole set</h2>
+<div class="table-wrap"><table>
+<tr><th>Cmdlet</th><th>Alias</th><th>Does</th></tr>
+<tr><td><code>New-Item</code></td><td><code>ni</code></td><td>Make a file or folder</td></tr>
+<tr><td><code>Get-Content</code></td><td><code>gc</code>, <code>cat</code>, <code>type</code></td><td>Read a file</td></tr>
+<tr><td><code>Set-Content</code></td><td></td><td>Write a file (replaces old text)</td></tr>
+<tr><td><code>Add-Content</code></td><td></td><td>Add text to the end</td></tr>
+<tr><td><code>Copy-Item</code></td><td><code>copy</code>, <code>cp</code></td><td>Copy</td></tr>
+<tr><td><code>Move-Item</code></td><td><code>move</code>, <code>mv</code></td><td>Move</td></tr>
+<tr><td><code>Rename-Item</code></td><td><code>ren</code></td><td>Rename</td></tr>
+<tr><td><code>Remove-Item</code></td><td><code>del</code>, <code>rm</code></td><td>Delete</td></tr>
+<tr><td><code>Test-Path</code></td><td></td><td>Does it exist? <code>True</code> / <code>False</code></td></tr>
+</table></div>
+<p><small>On Linux and macOS, names like <code>cat</code>, <code>cp</code>, <code>mv</code> and <code>rm</code> run the system tools instead, so use the full cmdlet names.</small></p>
+
+<h2 id="create">Create a practice folder</h2>
+<p>Work inside <code>playground</code> so nothing important gets touched.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">New-Item -ItemType Directory -Name playground
+Set-Location playground</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>    Directory: C:\Users\aarav\unit5
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d----          17-11-2026    10:30                playground</pre></div>
+
+<h3 id="newfile">Make a file</h3>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">New-Item -ItemType File -Name notes.txt</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>    Directory: C:\Users\aarav\unit5\playground
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a---          17-11-2026    10:31              0 notes.txt</pre></div>
+<p><code>Length 0</code> means the file is empty. <code>d</code> in <code>Mode</code> means directory.</p>
+
+<h2 id="content">Write and read text</h2>
+<ul class="flow">
+  <li><span>Set-Content: replace</span></li>
+  <li><span>Add-Content: append</span></li>
+  <li><span>Get-Content: read</span></li>
+</ul>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Set-Content notes.txt "Hello PowerShell"
+Add-Content notes.txt "Second line"
+Get-Content notes.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Hello PowerShell
+Second line</pre></div>
+<div class="callout warn"><span class="ct">Watch out</span><code>Set-Content</code> wipes what was there. Use <code>Add-Content</code> to keep old lines.</div>
+
+<h2 id="copy">Copy, move, rename</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Copy-Item notes.txt backup.txt              # now two files
+New-Item -ItemType Directory -Name old | Out-Null   # Out-Null hides the output
+Move-Item backup.txt old                    # backup.txt goes into old
+Rename-Item notes.txt diary.txt             # new name, same file
+Get-ChildItem -Name
+Get-ChildItem old -Name</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>old
+diary.txt
+backup.txt</pre></div>
+<div class="tiles">
+  <div class="tile"><b>Copy-Item</b><code>Copy-Item a b</code><p>a stays, b is a new copy.</p></div>
+  <div class="tile"><b>Move-Item</b><code>Move-Item a folder</code><p>a leaves here and goes there.</p></div>
+  <div class="tile"><b>Rename-Item</b><code>Rename-Item a b</code><p>Same place, new name.</p></div>
+</div>
+
+<h2 id="delete">Check and delete safely</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Test-Path diary.txt
+Remove-Item diary.txt -WhatIf</code></pre></div>
+<div class="output"><div class="out-head">output · sample path, yours will differ</div><pre>True
+What if: Performing the operation "Remove File" on target "C:\Users\aarav\unit5\playground\diary.txt".</pre></div>
+<p><code>-WhatIf</code> only tells you what <em>would</em> happen. Nothing is deleted. Happy? Run it for real:</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Remove-Item diary.txt
+Test-Path diary.txt</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>False</pre></div>
+<div class="callout tip"><span class="ct">Safety tip</span>Add <code>-WhatIf</code> to any <code>Remove-Item</code>, <code>Move-Item</code> or <code>Copy-Item</code> first. Deleted items do <strong>not</strong> go to the Recycle Bin.</div>
+
+<h3 id="clean">Clean up</h3>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Set-Location ..
+Remove-Item playground -Recurse</code></pre></div>
+<p><code>-Recurse</code> deletes the folder and everything inside it. Without it, PowerShell asks you to confirm first.</p>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Make <code>playground</code> again and go into it.</li>
+  <li>Create <code>todo.txt</code> holding <code>Buy milk</code>, then add <code>Call Priya</code> as a second line.</li>
+  <li>Copy <code>datasets/servers.txt</code> into the playground.</li>
+  <li>Rename it to <code>hosts.txt</code>, then show its contents.</li>
+  <li>Check what deleting <code>todo.txt</code> would do, without deleting it.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">New-Item -ItemType Directory -Name playground
+cd playground
+Set-Content todo.txt "Buy milk"
+Add-Content todo.txt "Call Priya"
+Copy-Item ../datasets/servers.txt .
+Rename-Item servers.txt hosts.txt
+Get-Content hosts.txt
+Remove-Item todo.txt -WhatIf</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li><code>-ItemType Directory</code> for a folder, <code>-ItemType File</code> for a file.</li>
+  <li><code>Set-Content</code> replaces, <code>Add-Content</code> appends, <code>Get-Content</code> reads.</li>
+  <li><code>Test-Path</code> checks, <code>-WhatIf</code> previews, <code>-Recurse</code> includes everything inside.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>What does <code>-WhatIf</code> do?</strong> It shows what a command would change without changing anything. It is a safe way to test <code>Remove-Item</code> or <code>Move-Item</code> before running them for real.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

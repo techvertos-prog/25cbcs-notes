@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 5 · Loop practice</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="lab05">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Labs / Lab 5</div>
+<h1>Lab 5: Loop practice</h1>
+<p class="lead">Use each kind of loop once: <code>for</code>, <code>foreach</code>, <code>while</code>, <code>do-until</code> and <code>ForEach-Object</code>.</p>
+<div class="meta-row"><span class="pill">Lab 5</span><span class="pill grey">Beginner</span><span class="pill grey">~45 min</span></div>
+
+<div class="prereq"><span class="ct">Topics used:</span><a href="../notes/t12-loops.html">12 Loops</a><a href="../notes/t11-conditionals.html">11 if, else &amp; switch</a></div>
+
+<h2 id="aim">Aim</h2>
+<ul class="check">
+  <li>Count with a <code>for</code> loop.</li>
+  <li>Walk through a file's lines with <code>foreach</code>.</li>
+  <li>Repeat while a condition is true with <code>while</code>.</li>
+  <li>Repeat until a condition is true with <code>do-until</code>.</li>
+  <li>Process pipeline input with <code>ForEach-Object</code>.</li>
+</ul>
+
+<h2 id="plan">Plan</h2>
+<ul class="flow">
+  <li><span>for</span></li>
+  <li><span>foreach</span></li>
+  <li><span>while</span></li>
+  <li><span>do-until</span></li>
+  <li><span>ForEach-Object</span></li>
+</ul>
+<div class="table-wrap"><table>
+<tr><th>Loop</th><th>Use it when</th></tr>
+<tr><td><code>for</code></td><td>You know how many times to repeat</td></tr>
+<tr><td><code>foreach</code></td><td>You have a list of items</td></tr>
+<tr><td><code>while</code></td><td>Repeat while something is true (may run 0 times)</td></tr>
+<tr><td><code>do-until</code></td><td>Repeat until something is true (runs at least once)</td></tr>
+<tr><td><code>ForEach-Object</code></td><td>Items arrive through a pipe</td></tr>
+</table></div>
+
+<h2 id="tasks">Tasks</h2>
+
+<div class="task">
+<span class="task-tag">Task 1</span>
+<h3 id="t1">Multiplication table with for</h3>
+<div class="code"><div class="code-head">powershell · table.ps1</div><pre><code class="language-powershell">$n = 7
+for ($i = 1; $i -le 10; $i++) {
+    "{0} x {1,2} = {2,3}" -f $n, $i, ($n * $i)
+}</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>7 x  1 =   7
+7 x  2 =  14
+7 x  3 =  21
+7 x  4 =  28
+7 x  5 =  35
+7 x  6 =  42
+7 x  7 =  49
+7 x  8 =  56
+7 x  9 =  63
+7 x 10 =  70</pre></div>
+<p>The three parts are: start (<code>$i = 1</code>), keep going while (<code>$i -le 10</code>), and step (<code>$i++</code>).</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 2</span>
+<h3 id="t2">foreach over servers.txt</h3>
+<div class="code"><div class="code-head">powershell · servers.ps1</div><pre><code class="language-powershell">$servers = Get-Content datasets/servers.txt
+$num = 0
+foreach ($s in $servers) {
+    $num++
+    if ($s -like 'web*') { $role = 'Web server' } else { $role = 'Other' }
+    "{0}. {1,-9} {2}" -f $num, $s, $role
+}
+"Total servers: $($servers.Count)"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>1. web01     Web server
+2. web02     Web server
+3. db01      Other
+4. mail01    Other
+5. backup01  Other
+Total servers: 5</pre></div>
+<p><code>Get-Content</code> returns an array with one item per line, so <code>foreach</code> visits each server name in turn.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 3</span>
+<h3 id="t3">Countdown with while</h3>
+<div class="code"><div class="code-head">powershell · countdown.ps1</div><pre><code class="language-powershell">$n = 5
+while ($n -gt 0) {
+    "T-minus $n"
+    Start-Sleep -Seconds 1
+    $n--
+}
+"Lift off!"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>T-minus 5
+T-minus 4
+T-minus 3
+T-minus 2
+T-minus 1
+Lift off!</pre></div>
+<p>If you forget <code>$n--</code>, the condition never becomes false and the loop runs forever. Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop it.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 4</span>
+<h3 id="t4">Guess the number with do-until</h3>
+<p>The secret is fixed at 42 so your output matches ours. Later, try <code>Get-Random -Minimum 1 -Maximum 101</code>.</p>
+<div class="code"><div class="code-head">powershell · guess.ps1</div><pre><code class="language-powershell">$secret = 42
+$tries  = 0
+do {
+    [int]$guess = Read-Host "Guess (1-100)"
+    $tries++
+    if ($guess -lt $secret)     { "Too low" }
+    elseif ($guess -gt $secret) { "Too high" }
+} until ($guess -eq $secret)
+
+"Correct! You took $tries tries."</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Guess (1-100): 50
+Too high
+Guess (1-100): 30
+Too low
+Guess (1-100): 42
+Correct! You took 3 tries.</pre></div>
+<p>The body runs first and the test comes after, so the user is always asked at least once.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 5</span>
+<h3 id="t5">Count log levels with ForEach-Object</h3>
+<p>Each line of <code>datasets/app.log</code> has a level: <code>INFO</code>, <code>WARN</code> or <code>ERROR</code>.</p>
+<div class="code"><div class="code-head">powershell · loglevels.ps1</div><pre><code class="language-powershell">$info = 0; $warn = 0; $err = 0
+
+Get-Content datasets/app.log | ForEach-Object {
+    if ($_ -match ' INFO ')      { $info++ }
+    elseif ($_ -match ' WARN ')  { $warn++ }
+    elseif ($_ -match ' ERROR ') { $err++ }
+}
+
+"INFO : $info"
+"WARN : $warn"
+"ERROR: $err"
+"Total: $($info + $warn + $err) lines"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>INFO : 8
+WARN : 3
+ERROR: 3
+Total: 14 lines</pre></div>
+<p>Inside <code>ForEach-Object</code>, <code>$_</code> is the current line.</p>
+</div>
+
+<h2 id="challenge">Challenge</h2>
+<ol class="steps">
+  <li>Print the 7 times table backwards, from 10 down to 1.</li>
+  <li>Add up all numbers in <code>datasets/numbers.txt</code> with <code>foreach</code>. (Answer: 155.)</li>
+  <li>Print only the <code>ERROR</code> lines of <code>app.log</code>, using <code>continue</code> to skip the rest.</li>
+  <li>Get the same log counts in one line with <code>Group-Object</code>.</li>
+</ol>
+<details><summary>Hints</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">for ($i = 10; $i -ge 1; $i--) { "7 x $i = $(7 * $i)" }
+
+$sum = 0
+foreach ($line in Get-Content datasets/numbers.txt) { $sum += [int]$line }
+$sum
+
+foreach ($line in Get-Content datasets/app.log) {
+    if ($line -notmatch ' ERROR ') { continue }
+    $line
+}
+
+Get-Content datasets/app.log | ForEach-Object { ($_ -split '\s+')[2] } | Group-Object -NoElement</code></pre></div>
+</details>
+
+<h2 id="viva">Viva questions</h2>
+<details><summary>What is the difference between <code>while</code> and <code>do-until</code>?</summary><p><code>while</code> tests first, so it may run zero times. <code>do-until</code> runs the body first and stops when the test becomes true, so it runs at least once.</p></details>
+<details><summary>What is the difference between <code>foreach</code> and <code>ForEach-Object</code>?</summary><p><code>foreach</code> is a language keyword that loops over a list you already have. <code>ForEach-Object</code> is a cmdlet that handles items one by one as they come through a pipe.</p></details>
+<details><summary>What do <code>break</code> and <code>continue</code> do?</summary><p><code>break</code> leaves the loop completely. <code>continue</code> skips the rest of this pass and moves to the next item.</p></details>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

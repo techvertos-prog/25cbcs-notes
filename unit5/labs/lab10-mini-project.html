@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 10 · Mini project: admin menu</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="lab10">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Labs / Lab 10</div>
+<h1>Lab 10: Mini project: admin menu</h1>
+<p class="lead">Build <code>admin-tool.ps1</code>, a menu-driven tool that shows system info, big files, a log summary and a student report.</p>
+<div class="meta-row"><span class="pill">Lab 10</span><span class="pill grey">Project</span><span class="pill grey">~90 min</span></div>
+
+<div class="prereq"><span class="ct">Topics used:</span><a href="../notes/t05-pipelines.html">05 Pipelines</a><a href="../notes/t09-user-input.html">09 User input</a><a href="../notes/t11-conditionals.html">11 switch</a><a href="../notes/t12-loops.html">12 Loops</a><a href="../notes/t15-functions.html">15 Functions</a><a href="../notes/t17-error-handling.html">17 Error handling</a><a href="../notes/t19-script-files.html">19 Script files</a></div>
+
+<h2 id="aim">Aim</h2>
+<ul class="check">
+  <li>Show a menu again and again with <code>do</code>/<code>until</code>.</li>
+  <li>Route each choice with <code>switch</code>.</li>
+  <li>Put each option in its own function.</li>
+  <li>Handle missing files with <code>try</code>/<code>catch</code>.</li>
+  <li>Accept file paths through <code>param()</code>.</li>
+</ul>
+
+<h2 id="plan">Plan</h2>
+<ul class="flow">
+  <li><span>Show menu</span></li>
+  <li><span>Read choice</span></li>
+  <li><span>switch</span></li>
+  <li><span>Run function</span></li>
+  <li><span>Repeat until 5</span></li>
+</ul>
+<div class="table-wrap"><table>
+<tr><th>Choice</th><th>Function</th><th>Uses</th></tr>
+<tr><td>1</td><td><code>Show-SystemInfo</code></td><td><code>$PSVersionTable</code>, <code>[Environment]</code></td></tr>
+<tr><td>2</td><td><code>Show-BigFiles</code></td><td><code>Get-ChildItem</code>, <code>Sort-Object</code></td></tr>
+<tr><td>3</td><td><code>Show-LogSummary</code></td><td><code>datasets/app.log</code>, <code>Group-Object</code></td></tr>
+<tr><td>4</td><td><code>Show-StudentReport</code></td><td><code>datasets/students.csv</code></td></tr>
+<tr><td>5</td><td>Exit</td><td></td></tr>
+</table></div>
+
+<h2 id="tasks">Tasks</h2>
+
+<div class="task">
+<span class="task-tag">Task 1</span>
+<h3 id="t1">The menu skeleton</h3>
+<p>Start with the loop only. Each option just prints a placeholder for now.</p>
+<div class="code"><div class="code-head">powershell · admin-tool.ps1</div><pre><code class="language-powershell">function Show-Menu {
+    Write-Host '===== Admin Tool =====' -ForegroundColor Cyan
+    Write-Host '1) System info'
+    Write-Host '2) List big files'
+    Write-Host '3) Log summary'
+    Write-Host '4) Student report'
+    Write-Host '5) Exit'
+}
+
+do {
+    Show-Menu
+    $choice = Read-Host 'Choose 1-5'
+    switch ($choice) {
+        '1'     { Write-Host 'System info: coming soon' }
+        '2'     { Write-Host 'Big files: coming soon' }
+        '3'     { Write-Host 'Log summary: coming soon' }
+        '4'     { Write-Host 'Student report: coming soon' }
+        '5'     { Write-Host 'Goodbye!' }
+        default { Write-Host "'$choice' is not a valid choice." -ForegroundColor Yellow }
+    }
+} until ($choice -eq '5')</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>===== Admin Tool =====
+1) System info
+2) List big files
+3) Log summary
+4) Student report
+5) Exit
+Choose 1-5: 7
+'7' is not a valid choice.
+===== Admin Tool =====
+1) System info
+2) List big files
+3) Log summary
+4) Student report
+5) Exit
+Choose 1-5: 5
+Goodbye!</pre></div>
+<p><code>Read-Host</code> returns text, so the cases are written as <code>'1'</code>, <code>'2'</code> and so on. Any other input falls to <code>default</code>.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 2</span>
+<h3 id="t2">Options 1 and 2: system info and big files</h3>
+<p>Add these functions above the <code>do</code> loop, and call them from cases <code>'1'</code> and <code>'2'</code>.</p>
+<div class="code"><div class="code-head">powershell · admin-tool.ps1 (add)</div><pre><code class="language-powershell">function Show-SystemInfo {
+    [pscustomobject]@{
+        Computer   = [Environment]::MachineName
+        User       = [Environment]::UserName
+        OS         = $PSVersionTable.OS
+        PowerShell = $PSVersionTable.PSVersion.ToString()
+        Time       = Get-Date -Format 'yyyy-MM-dd HH:mm'
+    } | Format-List | Out-Host
+}
+
+function Show-BigFiles {
+    param([string]$Path = '.', [int]$Top = 5)
+    Get-ChildItem -Path $Path -File -Recurse |
+        Sort-Object Length -Descending |
+        Select-Object -First $Top Name,
+            @{ Name = 'SizeKB'; Expression = { [math]::Round($_.Length / 1KB, 1) } } |
+        Format-Table -AutoSize | Out-Host
+}</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>Choose 1-5: 1
+
+Computer   : LAB-PC-07
+User       : you
+OS         : Microsoft Windows 10.0.22631
+PowerShell : 7.4.6
+Time       : 2026-11-17 10:45
+
+Choose 1-5: 2
+
+Name                    SizeKB
+----                    ------
+style.css                 17.1
+cheatsheet.html           15.6
+lab10-mini-project.html   14.8
+app.js                    14.2
+t10-operators.html        11.2</pre></div>
+<div class="callout warn"><span class="ct">Why Out-Host?</span>Without <code>| Out-Host</code>, PowerShell may hold a table back and print it <b>after</b> the next menu and prompt. <code>Out-Host</code> prints it straight away.</div>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 3</span>
+<h3 id="t3">Option 3: log summary</h3>
+<div class="code"><div class="code-head">powershell · admin-tool.ps1 (add)</div><pre><code class="language-powershell">function Show-LogSummary {
+    param([string]$Path = 'datasets/app.log')
+    $lines = Get-Content -Path $Path
+    $lines | ForEach-Object { ($_ -split '\s+')[2] } |
+        Group-Object -NoElement |
+        Select-Object Name, Count |
+        Format-Table -AutoSize | Out-Host
+    Write-Host 'Error lines:' -ForegroundColor Red
+    $lines | Where-Object { $_ -match ' ERROR ' } | ForEach-Object { Write-Host "  $_" }
+}</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Choose 1-5: 3
+
+Name  Count
+----  -----
+INFO      8
+WARN      3
+ERROR     3
+
+Error lines:
+  2026-11-16 08:42:57 ERROR Failed to send email to priya@example.com
+  2026-11-16 09:31:08 ERROR Database connection lost
+  2026-11-16 10:45:31 ERROR Disk full on web01</pre></div>
+<p>Splitting a line on spaces gives date, time, level, ...; index <code>[2]</code> is the level. <code>Group-Object</code> counts each level in order of first appearance.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 4</span>
+<h3 id="t4">Option 4: student report</h3>
+<p>A student passes only if every subject is 40 or more.</p>
+<div class="code"><div class="code-head">powershell · admin-tool.ps1 (add)</div><pre><code class="language-powershell">function Show-StudentReport {
+    param([string]$Path = 'datasets/students.csv')
+    $rows = Import-Csv -Path $Path | ForEach-Object {
+        $m = [int]$_.Maths; $s = [int]$_.Science; $e = [int]$_.English
+        if ($m -ge 40 -and $s -ge 40 -and $e -ge 40) { $result = 'Pass' } else { $result = 'Fail' }
+        [pscustomobject]@{
+            Name    = $_.Name
+            Average = [math]::Round(($m + $s + $e) / 3, 1)
+            Result  = $result
+        }
+    }
+    $rows | Sort-Object Average -Descending | Format-Table -AutoSize | Out-Host
+    $passed = ($rows | Where-Object Result -eq 'Pass').Count
+    Write-Host "Passed: $passed of $($rows.Count)"
+}</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Choose 1-5: 4
+
+Name   Average Result
+----   ------- ------
+Ananya    94.3 Pass
+Sneha     91.3 Pass
+Aarav       85 Pass
+Priya     75.7 Pass
+Isha      75.3 Pass
+Rohan     54.7 Pass
+Vikram      48 Fail
+Kabir     41.7 Fail
+
+Passed: 6 of 8</pre></div>
+<p>Kabir fails on Maths (33) and Vikram on English (39), even though their averages are above 40.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 5</span>
+<h3 id="t5">Add param() and error handling</h3>
+<p>Put a <code>param()</code> block at the very top of the script, so the user can point it at other files. Then wrap each file read in <code>try</code>/<code>catch</code> with <code>-ErrorAction Stop</code>.</p>
+<div class="code"><div class="code-head">powershell · admin-tool.ps1 (top of file)</div><pre><code class="language-powershell">param(
+    [string]$LogPath     = 'datasets/app.log',
+    [string]$StudentPath = 'datasets/students.csv',
+    [string]$FolderPath  = '.'
+)</code></pre></div>
+<div class="code"><div class="code-head">powershell · inside Show-LogSummary</div><pre><code class="language-powershell">    try {
+        $lines = Get-Content -Path $Path -ErrorAction Stop
+        # ... rest of the function ...
+    }
+    catch {
+        Write-Host "Cannot read log: $($_.Exception.Message)" -ForegroundColor Red
+    }</code></pre></div>
+<div class="code"><div class="code-head">powershell · run it</div><pre><code class="language-powershell">./admin-tool.ps1 -LogPath datasets/missing.log</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>===== Admin Tool =====
+1) System info
+2) List big files
+3) Log summary
+4) Student report
+5) Exit
+Choose 1-5: 3
+Cannot read log: Cannot find path '/home/you/unit5/datasets/missing.log' because it does not exist.
+===== Admin Tool =====
+...</pre></div>
+<p>The tool reports the problem and shows the menu again instead of crashing.</p>
+</div>
+
+<h2 id="final">Full script</h2>
+<details><summary>admin-tool.ps1 (complete)</summary>
+<div class="code"><div class="code-head">powershell · admin-tool.ps1</div><pre><code class="language-powershell">&lt;#
+  admin-tool.ps1: a menu-driven admin tool (Unit 5 mini project)
+  Run from the unit5 folder:  ./admin-tool.ps1
+#&gt;
+param(
+    [string]$LogPath     = 'datasets/app.log',
+    [string]$StudentPath = 'datasets/students.csv',
+    [string]$FolderPath  = '.'
+)
+
+function Show-Menu {
+    Write-Host '===== Admin Tool =====' -ForegroundColor Cyan
+    Write-Host '1) System info'
+    Write-Host '2) List big files'
+    Write-Host '3) Log summary'
+    Write-Host '4) Student report'
+    Write-Host '5) Exit'
+}
+
+function Show-SystemInfo {
+    [pscustomobject]@{
+        Computer   = [Environment]::MachineName
+        User       = [Environment]::UserName
+        OS         = $PSVersionTable.OS
+        PowerShell = $PSVersionTable.PSVersion.ToString()
+        Time       = Get-Date -Format 'yyyy-MM-dd HH:mm'
+    } | Format-List | Out-Host
+}
+
+function Show-BigFiles {
+    param([string]$Path = '.', [int]$Top = 5)
+    try {
+        Get-ChildItem -Path $Path -File -Recurse -ErrorAction Stop |
+            Sort-Object Length -Descending |
+            Select-Object -First $Top Name,
+                @{ Name = 'SizeKB'; Expression = { [math]::Round($_.Length / 1KB, 1) } } |
+            Format-Table -AutoSize | Out-Host
+    }
+    catch {
+        Write-Host "Cannot list files: $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+
+function Show-LogSummary {
+    param([string]$Path = 'datasets/app.log')
+    try {
+        $lines = Get-Content -Path $Path -ErrorAction Stop
+        $lines | ForEach-Object { ($_ -split '\s+')[2] } |
+            Group-Object -NoElement |
+            Select-Object Name, Count |
+            Format-Table -AutoSize | Out-Host
+        Write-Host 'Error lines:' -ForegroundColor Red
+        $lines | Where-Object { $_ -match ' ERROR ' } | ForEach-Object { Write-Host "  $_" }
+    }
+    catch {
+        Write-Host "Cannot read log: $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+
+function Show-StudentReport {
+    param([string]$Path = 'datasets/students.csv')
+    try {
+        $rows = Import-Csv -Path $Path -ErrorAction Stop | ForEach-Object {
+            $m = [int]$_.Maths; $s = [int]$_.Science; $e = [int]$_.English
+            if ($m -ge 40 -and $s -ge 40 -and $e -ge 40) { $result = 'Pass' } else { $result = 'Fail' }
+            [pscustomobject]@{
+                Name    = $_.Name
+                Average = [math]::Round(($m + $s + $e) / 3, 1)
+                Result  = $result
+            }
+        }
+        $rows | Sort-Object Average -Descending | Format-Table -AutoSize | Out-Host
+        $passed = ($rows | Where-Object Result -eq 'Pass').Count
+        Write-Host "Passed: $passed of $($rows.Count)"
+    }
+    catch {
+        Write-Host "Cannot read students: $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+
+# ---------- main loop ----------
+do {
+    Show-Menu
+    $choice = Read-Host 'Choose 1-5'
+    switch ($choice) {
+        '1'     { Show-SystemInfo }
+        '2'     { Show-BigFiles -Path $FolderPath }
+        '3'     { Show-LogSummary -Path $LogPath }
+        '4'     { Show-StudentReport -Path $StudentPath }
+        '5'     { Write-Host 'Goodbye!' }
+        default { Write-Host "'$choice' is not a valid choice." -ForegroundColor Yellow }
+    }
+} until ($choice -eq '5')</code></pre></div>
+</details>
+
+<h2 id="challenge">Challenge</h2>
+<ol class="steps">
+  <li>Add option <b>6) Low stock</b> that lists items in <code>datasets/inventory.csv</code> with <code>Qty</code> below 10.</li>
+  <li>Log every menu choice with a timestamp to <code>admin.log</code>.</li>
+  <li>Add a <code>-Top</code> parameter to the script and pass it to <code>Show-BigFiles</code>.</li>
+  <li>Add option <b>7) Config</b> that reads <code>datasets/config.json</code> with <code>ConvertFrom-Json</code> and prints the app name and port.</li>
+</ol>
+<details><summary>Hint for 4</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$cfg = Get-Content datasets/config.json -Raw | ConvertFrom-Json
+"$($cfg.AppName) runs on port $($cfg.Port)"    # StudentPortal runs on port 8080</code></pre></div>
+</details>
+
+<h2 id="viva">Viva questions</h2>
+<details><summary>Why is <code>do</code>/<code>until</code> a good fit for a menu?</summary><p>The menu must appear at least once, and it should repeat until the user picks Exit. <code>do</code>/<code>until</code> runs first and tests after.</p></details>
+<details><summary>Why are the <code>switch</code> cases written as <code>'1'</code> and not <code>1</code>?</summary><p><code>Read-Host</code> returns text. Quoting the cases makes it clear we compare text with text.</p></details>
+<details><summary>Why put each option in a function?</summary><p>Each piece is short, has one job and can be tested on its own. The main loop stays easy to read.</p></details>
+<details><summary>What does the <code>param()</code> block at the top of a script do?</summary><p>It lets the user pass values when running the script, such as <code>./admin-tool.ps1 -LogPath other.log</code>. The defaults are used otherwise.</p></details>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

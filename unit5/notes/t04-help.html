@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>04 · Working with Help</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="t04">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Topics / 04</div>
+<h1>Working with Help</h1>
+<p class="lead">PowerShell explains itself: <code>Get-Help</code>, <code>Get-Command</code> and <code>Get-Member</code> answer almost every "how do I…?" question.</p>
+<div class="meta-row"><span class="pill">Topic 04</span><span class="pill grey">~20 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="../basics/f5-objects.html">F5 Objects</a><a href="t03-cmdlets.html">03 Cmdlets</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>Three discovery commands: <strong>Get-Command</strong> finds a command, <strong>Get-Help</strong> explains how to use it, <strong>Get-Member</strong> shows what its output objects contain.</p></div>
+
+<ul class="flow">
+  <li><span>Get-Command</span></li>
+  <li><span>Get-Help</span></li>
+  <li><span>Run it</span></li>
+  <li><span>Get-Member</span></li>
+</ul>
+
+<h2 id="update">Step 1: download the help files</h2>
+<p>PowerShell ships with only short help. Download the full text once.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Update-Help -UICulture en-US -ErrorAction SilentlyContinue</code></pre></div>
+<div class="callout warn"><span class="ct">Watch out</span>In <strong>Windows PowerShell 5.1</strong>, run this as <strong>Administrator</strong>. In PowerShell 7 it saves help for your user only, so no admin is needed. A few modules may fail to update; that is normal.</div>
+
+<h2 id="gethelp">Get-Help and its switches</h2>
+<div class="table-wrap"><table>
+<tr><th>Command</th><th>Shows</th></tr>
+<tr><td><code>Get-Help Get-Content</code></td><td>Short summary and syntax</td></tr>
+<tr><td><code>Get-Help Get-Content -Examples</code></td><td>Only the examples (start here!)</td></tr>
+<tr><td><code>Get-Help Get-Content -Detailed</code></td><td>Summary, parameters, examples</td></tr>
+<tr><td><code>Get-Help Get-Content -Full</code></td><td>Everything, including input/output types</td></tr>
+<tr><td><code>Get-Help Get-Content -Parameter TotalCount</code></td><td>One parameter only</td></tr>
+<tr><td><code>Get-Help Get-Content -Online</code></td><td>Opens the web page in your browser</td></tr>
+</table></div>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Help Get-Content -Parameter TotalCount</code></pre></div>
+<div class="output"><div class="out-head">output · sample, wording may differ</div><pre>-TotalCount &lt;System.Int64&gt;
+    Specifies the number of lines from the beginning of a file or other item. The default is -1 (all lines).
+
+    Required?                    false
+    Position?                    named
+    Default value                -1
+    Accept pipeline input?       True (ByPropertyName)
+    Accept wildcard characters?  false</pre></div>
+
+<h2 id="syntax">Reading a syntax block</h2>
+<div class="output"><div class="out-head">syntax · trimmed</div><pre>Get-Content [-Path] &lt;string[]&gt; [-TotalCount &lt;long&gt;] [-Tail &lt;int&gt;] [-Raw] [&lt;CommonParameters&gt;]</pre></div>
+<div class="table-wrap"><table>
+<tr><th>Piece</th><th>Meaning</th></tr>
+<tr><td><code>[-TotalCount &lt;long&gt;]</code></td><td>Whole thing in <code>[ ]</code> = <strong>optional</strong> parameter.</td></tr>
+<tr><td><code>[-Path] &lt;string[]&gt;</code></td><td>Only the name is in <code>[ ]</code> = value is <strong>required</strong>, but you can skip typing <code>-Path</code> (positional).</td></tr>
+<tr><td><code>&lt;long&gt;</code>, <code>&lt;int&gt;</code></td><td><code>&lt; &gt;</code> = the <strong>type</strong> of value to give (a number here).</td></tr>
+<tr><td><code>&lt;string[]&gt;</code></td><td><code>[]</code> after a type = you may give <strong>several</strong> values, separated by commas.</td></tr>
+<tr><td><code>[-Raw]</code></td><td>No value type = a <strong>switch</strong>.</td></tr>
+<tr><td><code>[&lt;CommonParameters&gt;]</code></td><td>Shared parameters like <code>-Verbose</code> and <code>-ErrorAction</code>.</td></tr>
+</table></div>
+<p>So this is valid: <code>Get-Content datasets/numbers.txt -Tail 2</code></p>
+<div class="output"><div class="out-head">output</div><pre>33
+8</pre></div>
+
+<h2 id="about">about_ topics</h2>
+<p>Concepts (not commands) are explained in <strong>about_</strong> pages.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Help about_*              # list them all
+Get-Help about_Operators      # read one
+Get-Help about_If</code></pre></div>
+<div class="callout tip"><span class="ct">Tip</span>Wildcards work: <code>Get-Help *csv*</code> lists every command and topic about CSV.</div>
+
+<h2 id="getmember">Get-Member: what is inside an object?</h2>
+<p>Pipe any output into <code>Get-Member</code> (alias <code>gm</code>) to see its <strong>properties</strong> (data) and <strong>methods</strong> (actions).</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Import-Csv datasets/students.csv | Get-Member -MemberType NoteProperty</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>
+   TypeName: System.Management.Automation.PSCustomObject
+
+Name    MemberType   Definition
+----    ----------   ----------
+Class   NoteProperty string Class=10A
+English NoteProperty string English=78
+Maths   NoteProperty string Maths=92
+Name    NoteProperty string Name=Aarav
+Science NoteProperty string Science=85</pre></div>
+
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">"hello" | Get-Member -Name Length, ToUpper</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>
+   TypeName: System.String
+
+Name    MemberType Definition
+----    ---------- ----------
+ToUpper Method     string ToUpper(), string ToUpper(cultureinfo culture)
+Length  Property   int Length {get;}</pre></div>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">"hello".Length       # property: no brackets
+"hello".ToUpper()    # method: needs ()</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>5
+HELLO</pre></div>
+
+<h2 id="paging">help vs Get-Help</h2>
+<div class="table-wrap"><table>
+<tr><th></th><th><code>Get-Help</code></th><th><code>help</code></th></tr>
+<tr><td>What it is</td><td>Cmdlet</td><td>Function that calls Get-Help</td></tr>
+<tr><td>Long text</td><td>Scrolls past all at once</td><td>Shows one page at a time</td></tr>
+<tr><td>Keys</td><td>–</td><td><kbd>Space</kbd> next page, <kbd>Enter</kbd> next line, <kbd>q</kbd> quit</td></tr>
+</table></div>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Show only the examples for <code>Sort-Object</code>.</li>
+  <li>In the syntax of <code>Get-ChildItem</code>, is <code>-Recurse</code> a switch?</li>
+  <li>Read the help topic about comparison operators.</li>
+  <li>What properties does a <code>Get-Date</code> object have?</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Help Sort-Object -Examples
+Get-Help Get-ChildItem          # [-Recurse] has no &lt;type&gt;, so yes, a switch
+Get-Help about_Comparison_Operators
+Get-Date | Get-Member -MemberType Property</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li>Run <code>Update-Help</code> once (as admin on 5.1).</li>
+  <li><code>-Examples</code> is the fastest way to learn a cmdlet.</li>
+  <li>In syntax: <code>[ ]</code> = optional, <code>&lt; &gt;</code> = value type, no type = switch.</li>
+  <li><code>Get-Member</code> lists properties and methods of objects.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>Name the three discovery cmdlets.</strong> <code>Get-Command</code> finds commands, <code>Get-Help</code> shows how to use them (with <code>-Examples</code>, <code>-Detailed</code>, <code>-Full</code>, <code>-Online</code>), and <code>Get-Member</code> shows the properties and methods of the objects a command returns.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

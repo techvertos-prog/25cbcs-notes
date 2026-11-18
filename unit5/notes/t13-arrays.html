@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>13 · Arrays</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="t13">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Topics / 13</div>
+<h1>Arrays</h1>
+<p class="lead">An array is one variable that holds a list of values, kept in order and numbered from 0.</p>
+<div class="meta-row"><span class="pill">Topic 13</span><span class="pill grey">~20 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="t08-variables.html">08 Variables</a><a href="t10-operators.html">10 Operators</a><a href="t12-loops.html">12 Loops</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>Commas make an array. Each item has an <strong>index</strong>: the first is <code>[0]</code>, the last is <code>[-1]</code>.</p></div>
+
+<h2 id="create">Create an array</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$fruits = @('apple', 'banana', 'cherry')   # @( ) style
+$nums   = 10, 20, 30, 40, 50               # commas are enough
+$empty  = @()                              # empty array
+$fruits</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>apple
+banana
+cherry</pre></div>
+
+<div class="table-wrap"><table>
+<tr><th>Index</th><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th></tr>
+<tr><td><code>$nums</code></td><td>10</td><td>20</td><td>30</td><td>40</td><td>50</td></tr>
+<tr><td>Negative</td><td>-5</td><td>-4</td><td>-3</td><td>-2</td><td>-1</td></tr>
+</table></div>
+
+<h2 id="index">Index, slice and count</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$nums[0]          # first
+$nums[-1]         # last
+$nums[1..3]       # slice: items 1 to 3
+$nums[0, 2]       # pick items 0 and 2
+$nums.Count
+$empty.Count</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>10
+50
+20
+30
+40
+10
+30
+5
+0</pre></div>
+<div class="callout note"><span class="ct">Note</span>An index past the end, like <code>$nums[10]</code>, gives nothing (<code>$null</code>), not an error.</div>
+
+<p>Many commands return arrays. <code>Get-Content</code> gives one item per line.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$servers = Get-Content datasets/servers.txt
+$servers.Count
+$servers[1]</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>5
+web02</pre></div>
+
+<h2 id="add">Add items with +=</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$nums += 60
+$nums.Count
+$nums[-1]</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>6
+60</pre></div>
+<div class="callout warn"><span class="ct">Watch out</span>Arrays have a fixed size. <code>+=</code> builds a <strong>new copy</strong> with one more item. That is fine for small lists but slow for thousands of items.</div>
+<div class="callout tip"><span class="ct">Tip</span>For a list that grows a lot, use a List: <code>$list = [System.Collections.Generic.List[string]]::new()</code>, then <code>$list.Add('web01')</code>. Older scripts use <code>[System.Collections.ArrayList]</code>, whose <code>.Add()</code> also prints the new index, so write <code>[void]$al.Add('x')</code>.</div>
+
+<h2 id="loop">Loop, search and sort</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">foreach ($f in $fruits) {
+    "I like $f"
+}</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>I like apple
+I like banana
+I like cherry</pre></div>
+
+<p><code>-contains</code> asks "is this value in the array?". <code>-in</code> is the same, written the other way round.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$fruits -contains 'banana'
+'kiwi' -in $fruits</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>True
+False</pre></div>
+
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$list = 3, 1, 2, 3, 1
+($list | Sort-Object) -join ' '
+($list | Sort-Object -Descending) -join ' '
+($list | Sort-Object -Unique) -join ' '</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>1 1 2 3 3
+3 3 2 1 1
+1 2 3</pre></div>
+
+<h2 id="objects">An array of objects</h2>
+<p><code>Import-Csv</code> returns an array, one object per row.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$students = Import-Csv datasets/students.csv
+$students.Count
+$students[0]</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>8
+
+Name    : Aarav
+Class   : 10A
+Maths   : 92
+Science : 85
+English : 78</pre></div>
+
+<p><code>$students.Name</code> collects one property from every item.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$students.Name -join ', '
+$students[-1].Maths
+$students | Where-Object { [int]$_.Maths -ge 90 } | Select-Object Name, Maths</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Aarav, Priya, Rohan, Sneha, Kabir, Isha, Vikram, Ananya
+99
+
+Name   Maths
+----   -----
+Aarav  92
+Ananya 99</pre></div>
+<div class="callout tip"><span class="ct">Tip</span>Wrap a command in <code>@( )</code> to always get an array, even for one or zero results: <code>@(Get-Content datasets/servers.txt | Where-Object { $_ -like 'db*' }).Count</code> gives <code>1</code>.</div>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Make <code>$colors = 'red','green','blue'</code>. Print the last one with a negative index.</li>
+  <li>Add <code>'yellow'</code> and print the count.</li>
+  <li>Check whether <code>web01</code> is in <code>datasets/servers.txt</code>.</li>
+  <li>From <code>numbers.txt</code>, show the three largest numbers.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$colors = 'red', 'green', 'blue'
+$colors[-1]                                            # blue
+$colors += 'yellow'; $colors.Count                     # 4
+(Get-Content datasets/servers.txt) -contains 'web01'   # True
+Get-Content datasets/numbers.txt | Sort-Object { [int]$_ } -Descending | Select-Object -First 3   # 45 33 28</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li>Create with commas or <code>@( )</code>; empty is <code>@()</code>.</li>
+  <li>First is <code>[0]</code>, last is <code>[-1]</code>, slice with <code>[1..3]</code>.</li>
+  <li><code>.Count</code> gives the size; <code>-contains</code> searches.</li>
+  <li><code>+=</code> makes a new copy; use a <code>List</code> for big lists.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>Why is <code>+=</code> slow on a large array?</strong> Arrays are fixed-size, so every <code>+=</code> creates a new array and copies all the old items into it. A generic <code>List</code> grows in place with <code>.Add()</code>.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

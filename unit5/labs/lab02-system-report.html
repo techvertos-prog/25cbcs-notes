@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 2 · System report with pipelines</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="lab02">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Labs / Lab 2</div>
+<h1>Lab 2: System report with pipelines</h1>
+<p class="lead">Chain cmdlets with <code>|</code> to find heavy processes and big files, total a stock list, and save the result as CSV and HTML.</p>
+<div class="meta-row"><span class="pill">Lab 2</span><span class="pill grey">Beginner</span><span class="pill grey">~40 min</span></div>
+
+<div class="prereq"><span class="ct">Topics used:</span><a href="../notes/t05-pipelines.html">05 Pipelines</a></div>
+
+<h2 id="aim">Aim</h2>
+<ul class="check">
+  <li>Sort and pick objects with <code>Sort-Object</code> and <code>Select-Object</code>.</li>
+  <li>Add a calculated column.</li>
+  <li>Total numbers with <code>Measure-Object</code>.</li>
+  <li>Export a report to CSV and HTML.</li>
+</ul>
+
+<h2 id="plan">Plan</h2>
+<ul class="flow">
+  <li><span>Get objects</span></li>
+  <li><span>Filter</span></li>
+  <li><span>Sort</span></li>
+  <li><span>Select</span></li>
+  <li><span>Measure</span></li>
+  <li><span>Export</span></li>
+</ul>
+
+<h2 id="tasks">Tasks</h2>
+
+<div class="task">
+<span class="task-tag">Task 1</span>
+<h3 id="t1">Top 5 processes by memory</h3>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">Get-Process |
+    Sort-Object WorkingSet -Descending |
+    Select-Object -First 5 Name, Id,
+        @{ Name = 'MemoryMB'; Expression = { [math]::Round($_.WorkingSet / 1MB, 1) } }</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>Name        Id MemoryMB
+----        -- --------
+Code      9120    612.4
+msedge    4408    388.9
+pwsh      7764    142.7
+explorer  3312    120.3
+Teams     6096     98.5</pre></div>
+<p><code>WorkingSet</code> is memory in bytes. The <code>@{ Name = ...; Expression = ... }</code> part is a <b>calculated property</b>: a new column you compute.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 2</span>
+<h3 id="t2">Files sorted by size</h3>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">Get-ChildItem datasets -File |
+    Sort-Object Length -Descending |
+    Select-Object Name, Length</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Name          Length
+----          ------
+app.log          729
+inventory.csv    230
+config.json      189
+students.csv     186
+servers.txt       33
+numbers.txt       21</pre></div>
+<p><code>Length</code> is the size in bytes. On Windows, sizes can be a few bytes larger if the files use CRLF line endings.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 3</span>
+<h3 id="t3">Stock value from inventory.csv</h3>
+<p>Keep items that are in stock, add a <code>Value</code> column (Qty × Price), and sort by it.</p>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">$stock = Import-Csv datasets/inventory.csv |
+    Where-Object { [int]$_.Qty -gt 0 } |
+    Select-Object Item, Qty, Price,
+        @{ Name = 'Value'; Expression = { [int]$_.Qty * [int]$_.Price } } |
+    Sort-Object Value -Descending
+
+$stock</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Item     Qty Price  Value
+----     --- -----  -----
+Laptop   5   58000 290000
+Monitor  8   9500   76000
+Printer  3   12500  37500
+Webcam   12  2200   26400
+Keyboard 25  750    18750
+Mouse    40  400    16000</pre></div>
+<p><code>Value</code> is a real number, so it is right-aligned. <code>Qty</code> and <code>Price</code> are still text from the CSV, so they are left-aligned.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 4</span>
+<h3 id="t4">Totals with Measure-Object</h3>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">$stock | Measure-Object -Property Value -Sum -Average -Maximum -Minimum</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Count             : 6
+Average           : 77441.6666666667
+Sum               : 464650
+Maximum           : 290000
+Minimum           : 16000
+StandardDeviation :
+Property          : Value</pre></div>
+<p>Pull out one number with brackets and a dot:</p>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">$total = ($stock | Measure-Object Value -Sum).Sum
+"Total stock value: Rs. $total"
+(Get-ChildItem datasets -File | Measure-Object Length -Sum).Sum</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Total stock value: Rs. 464650
+1388</pre></div>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 5</span>
+<h3 id="t5">Export to CSV and HTML</h3>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">$stock | Export-Csv stock.csv -NoTypeInformation
+Get-Content stock.csv -TotalCount 3</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>"Item","Qty","Price","Value"
+"Laptop","5","58000","290000"
+"Monitor","8","9500","76000"</pre></div>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">$stock |
+    ConvertTo-Html -Title 'Stock report' -PreContent '&lt;h1&gt;Stock report&lt;/h1&gt;' |
+    Out-File stock.html
+
+Invoke-Item stock.html     # opens it in your browser (Windows)</code></pre></div>
+<p>There is no output on screen. <code>ConvertTo-Html</code> builds an HTML table and <code>Out-File</code> saves it. On macOS use <code>open stock.html</code>; on Linux use <code>xdg-open stock.html</code>.</p>
+</div>
+
+<h2 id="challenge">Challenge</h2>
+<ol class="steps">
+  <li>Show the 3 processes that have used the most CPU time.</li>
+  <li>Total the <code>Value</code> per <code>Category</code> with <code>Group-Object</code>.</li>
+  <li>Save the top-5 process list from Task 1 as <code>processes.html</code>.</li>
+</ol>
+<details><summary>Hint for 2</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Import-Csv datasets/inventory.csv | Group-Object Category | ForEach-Object {
+    $sum = ($_.Group | ForEach-Object { [int]$_.Qty * [int]$_.Price } | Measure-Object -Sum).Sum
+    "{0,-12} {1,7}" -f $_.Name, $sum
+}</code></pre></div>
+</details>
+
+<h2 id="viva">Viva questions</h2>
+<details><summary>What is a calculated property?</summary><p>A hashtable <code>@{ Name = ...; Expression = { ... } }</code> given to <code>Select-Object</code>. It adds a new column whose value is computed for each object.</p></details>
+<details><summary>Why write <code>[int]$_.Qty</code> and not just <code>$_.Qty</code>?</summary><p>CSV values are text. <code>[int]</code> turns them into numbers so comparison and multiplication work correctly.</p></details>
+<details><summary>What is the difference between <code>Export-Csv</code> and <code>Out-File</code>?</summary><p><code>Export-Csv</code> saves the object data as CSV. <code>Out-File</code> saves whatever text you send it, exactly as it would appear on screen.</p></details>
+<details><summary>Why should <code>Format-Table</code> not come before <code>Export-Csv</code>?</summary><p><code>Format-Table</code> turns objects into display instructions. After it, the real properties are gone, so the CSV would be useless.</p></details>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

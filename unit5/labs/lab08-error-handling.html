@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 8 · Safe file backup</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="lab08">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Labs / Lab 8</div>
+<h1>Lab 8: Safe file backup</h1>
+<p class="lead">Build a <code>Backup-File</code> function that copies a file with a timestamp, catches failures and writes them to a log.</p>
+<div class="meta-row"><span class="pill">Lab 8</span><span class="pill grey">Intermediate</span><span class="pill grey">~45 min</span></div>
+
+<div class="prereq"><span class="ct">Topics used:</span><a href="../notes/t17-error-handling.html">17 Basic error handling</a><a href="../notes/t15-functions.html">15 Functions</a></div>
+
+<h2 id="aim">Aim</h2>
+<ul class="check">
+  <li>Copy a file to a backup folder with a timestamped name.</li>
+  <li>See why a plain error is not caught by <code>try</code>.</li>
+  <li>Use <code>-ErrorAction Stop</code> with <code>try</code>/<code>catch</code>/<code>finally</code>.</li>
+  <li>Write errors to <code>errors.log</code>.</li>
+</ul>
+
+<h2 id="plan">Plan</h2>
+<ul class="flow">
+  <li><span>Copy with timestamp</span></li>
+  <li><span>Missing file</span></li>
+  <li><span>try / catch / finally</span></li>
+  <li><span>Log errors</span></li>
+  <li><span>Back up many</span></li>
+</ul>
+
+<h2 id="tasks">Tasks</h2>
+
+<div class="task">
+<span class="task-tag">Task 1</span>
+<h3 id="t1">Copy a file with a timestamp</h3>
+<div class="code"><div class="code-head">powershell · backup.ps1</div><pre><code class="language-powershell">function Backup-File {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [string]$Destination = 'backup'
+    )
+    if (-not (Test-Path $Destination)) {
+        New-Item -ItemType Directory -Path $Destination | Out-Null
+    }
+    $file    = Get-Item -Path $Path
+    $stamp   = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $newName = '{0}_{1}{2}' -f $file.BaseName, $stamp, $file.Extension
+    Copy-Item -Path $file.FullName -Destination (Join-Path $Destination $newName)
+    Write-Host "Backed up $($file.Name) -&gt; $Destination/$newName" -ForegroundColor Green
+}
+
+Backup-File datasets/app.log</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>Backed up app.log -&gt; backup/app_20261117-101530.log</pre></div>
+<p><code>BaseName</code> is the name without the extension (<code>app</code>) and <code>Extension</code> is <code>.log</code>. The timestamp makes every copy unique.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 2</span>
+<h3 id="t2">A missing file: try alone does not catch it</h3>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">try {
+    Copy-Item datasets/nope.txt backup/
+    "Still running after the error"
+}
+catch {
+    "Caught it!"
+}</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>Copy-Item: Cannot find path '/home/you/unit5/datasets/nope.txt' because it does not exist.
+Still running after the error</pre></div>
+<p>Most cmdlet errors are <b>non-terminating</b>: they print in red and the script carries on, so <code>catch</code> never runs.</p>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">try {
+    Copy-Item datasets/nope.txt backup/ -ErrorAction Stop
+    "Still running after the error"
+}
+catch {
+    "Caught it: $($_.Exception.Message)"
+}</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>Caught it: Cannot find path '/home/you/unit5/datasets/nope.txt' because it does not exist.</pre></div>
+<p><code>-ErrorAction Stop</code> turns the error into a terminating one, so control jumps to <code>catch</code>. Inside <code>catch</code>, <code>$_</code> is the error.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 3</span>
+<h3 id="t3">Add try / catch / finally to Backup-File</h3>
+<p>Replace the body of the function in <code>backup.ps1</code> with this.</p>
+<div class="code"><div class="code-head">powershell · backup.ps1 (updated body)</div><pre><code class="language-powershell">    try {
+        if (-not (Test-Path $Destination)) {
+            New-Item -ItemType Directory -Path $Destination -ErrorAction Stop | Out-Null
+        }
+        $file    = Get-Item -Path $Path -ErrorAction Stop
+        $stamp   = Get-Date -Format 'yyyyMMdd-HHmmss'
+        $newName = '{0}_{1}{2}' -f $file.BaseName, $stamp, $file.Extension
+        Copy-Item -Path $file.FullName -Destination (Join-Path $Destination $newName) -ErrorAction Stop
+        Write-Host "Backed up $($file.Name) -&gt; $Destination/$newName" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "Backup failed: $($_.Exception.Message)" -ForegroundColor Red
+    }
+    finally {
+        Write-Host "Done: $Path"
+    }</code></pre></div>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">. ./backup.ps1
+Backup-File datasets/config.json
+Backup-File datasets/nope.txt</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>Backed up config.json -&gt; backup/config_20261117-101702.json
+Done: datasets/config.json
+Backup failed: Cannot find path '/home/you/unit5/datasets/nope.txt' because it does not exist.
+Done: datasets/nope.txt</pre></div>
+<p><code>finally</code> runs every time, whether the copy worked or failed.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 4</span>
+<h3 id="t4">Log errors to errors.log</h3>
+<p>Add one line inside <code>catch</code>, after the <code>Write-Host</code>.</p>
+<div class="code"><div class="code-head">powershell · backup.ps1 (inside catch)</div><pre><code class="language-powershell">        $time = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+        Add-Content -Path errors.log -Value "$time  $Path  $($_.Exception.Message)"</code></pre></div>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">. ./backup.ps1
+Backup-File datasets/nope.txt
+Get-Content errors.log</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>Backup failed: Cannot find path '/home/you/unit5/datasets/nope.txt' because it does not exist.
+Done: datasets/nope.txt
+2026-11-17 10:18:44  datasets/nope.txt  Cannot find path '/home/you/unit5/datasets/nope.txt' because it does not exist.</pre></div>
+<p><code>Add-Content</code> appends a line and creates the file if needed, so the log keeps growing over time.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 5</span>
+<h3 id="t5">Back up several files</h3>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">'datasets/students.csv', 'datasets/missing.csv', 'datasets/servers.txt' |
+    ForEach-Object { Backup-File $_ }
+
+Get-ChildItem backup | Select-Object Name</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>Backed up students.csv -&gt; backup/students_20261117-101920.csv
+Done: datasets/students.csv
+Backup failed: Cannot find path '/home/you/unit5/datasets/missing.csv' because it does not exist.
+Done: datasets/missing.csv
+Backed up servers.txt -&gt; backup/servers_20261117-101920.txt
+Done: datasets/servers.txt
+
+Name
+----
+app_20261117-101530.log
+config_20261117-101702.json
+servers_20261117-101920.txt
+students_20261117-101920.csv</pre></div>
+<p>One bad file does not stop the others: each call has its own <code>try</code>/<code>catch</code>.</p>
+</div>
+
+<h2 id="challenge">Challenge</h2>
+<ol class="steps">
+  <li>Add a separate <code>catch [System.Management.Automation.ItemNotFoundException]</code> block that prints "File not found" before the general <code>catch</code>.</li>
+  <li>Add a <code>-WhatIf</code>-style switch <code>-Preview</code> that only prints the new name without copying.</li>
+</ol>
+<details><summary>Hint for 1</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">catch [System.Management.Automation.ItemNotFoundException] {
+    Write-Host "File not found: $Path" -ForegroundColor Yellow
+}
+catch {
+    Write-Host "Other error: $($_.Exception.Message)" -ForegroundColor Red
+}</code></pre></div>
+</details>
+
+<h2 id="viva">Viva questions</h2>
+<details><summary>What is the difference between terminating and non-terminating errors?</summary><p>A terminating error stops the current block and can be caught by <code>catch</code>. A non-terminating error is printed and the command carries on.</p></details>
+<details><summary>Why do we add <code>-ErrorAction Stop</code>?</summary><p>It makes a non-terminating error terminating, so <code>try</code>/<code>catch</code> can handle it.</p></details>
+<details><summary>When does <code>finally</code> run?</summary><p>Always: after <code>try</code> succeeds, and after <code>catch</code> handles an error. Use it for clean-up or a closing message.</p></details>
+<details><summary>What is <code>$Error</code>?</summary><p>An automatic list of recent errors in the session. <code>$Error[0]</code> is the latest one.</p></details>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

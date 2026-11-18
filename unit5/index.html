@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CBCS Unit 5 PowerShell Wiki</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-root="" data-page="home">
+<main class="content">
+<article>
+
+<div class="breadcrumb">Home</div>
+<h1>CBCS Unit 5: PowerShell Study Wiki</h1>
+<p class="lead">Learn PowerShell from zero: start with the basics, read one short topic at a time, then practise in the labs.</p>
+<div class="meta-row">
+  <span class="pill">5 fundamentals</span><span class="pill">19 topics</span><span class="pill">10 labs</span><span class="pill grey">PowerShell 7 · Windows, Linux, macOS</span><span class="pill grey">Works offline</span>
+</div>
+
+<h2 id="path">Your study path</h2>
+<ul class="flow">
+  <li><a href="#fundamentals">1 · Fundamentals</a></li>
+  <li><a href="#topics">2 · Topics</a></li>
+  <li><a href="#labs">3 · Labs</a></li>
+  <li><a href="reference/cheatsheet.html">4 · Revise</a></li>
+</ul>
+<ol class="steps">
+  <li><strong>New to the command line?</strong> Do the five fundamentals first. They take about an hour.</li>
+  <li><strong>Read the topics in order.</strong> Each page covers one idea, with short examples and their output.</li>
+  <li><strong>Do the lab</strong> after each group of topics. Every lab lists the topics it needs.</li>
+  <li><strong>Revise</strong> with the cheat sheet and the viva questions at the end of each lab.</li>
+</ol>
+
+<div class="code"><div class="code-head">powershell · try it now</div><pre><code class="language-powershell">Get-Date
+"Hello from PowerShell!"
+2 + 3 * 4</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>Tuesday, 17 November 2026 10:30:15
+
+Hello from PowerShell!
+14</pre></div>
+
+<h2 id="fundamentals">1 · Fundamentals <small style="font-weight:400;color:var(--muted)">(prerequisites)</small></h2>
+<div class="cards">
+  <a class="card" href="basics/f1-what-is-a-shell.html"><span class="card-num">F1</span><h3>What is a shell?</h3><p>Terminal, prompt, command, CLI vs GUI.</p></a>
+  <a class="card" href="basics/f2-install-and-open.html"><span class="card-num">F2</span><h3>Install &amp; open PowerShell</h3><p>Windows PowerShell 5.1 vs PowerShell 7, check your version.</p></a>
+  <a class="card" href="basics/f3-first-commands.html"><span class="card-num">F3</span><h3>First commands</h3><p>Where am I, move around, list, clear, history, Tab key.</p></a>
+  <a class="card" href="basics/f4-files-and-folders.html"><span class="card-num">F4</span><h3>Files &amp; folders</h3><p>Create, read, copy, move, delete.</p></a>
+  <a class="card" href="basics/f5-objects.html"><span class="card-num">F5</span><h3>Objects in 5 minutes</h3><p>Properties and methods: the idea everything else builds on.</p></a>
+</div>
+
+<h2 id="topics">2 · Topics</h2>
+<h3 id="g-start">Getting started</h3>
+<div class="cards">
+  <a class="card" href="notes/t01-introduction.html"><span class="card-num">01</span><h3>Introduction to PowerShell</h3><p>What it is, why admins use it.</p></a>
+  <a class="card" href="notes/t02-console-ise.html"><span class="card-num">02</span><h3>Console &amp; ISE</h3><p>The two places you type PowerShell.</p></a>
+  <a class="card" href="notes/t03-cmdlets.html"><span class="card-num">03</span><h3>Cmdlets</h3><p>Verb-Noun commands, parameters, aliases.</p></a>
+  <a class="card" href="notes/t04-help.html"><span class="card-num">04</span><h3>Working with help</h3><p>Get-Help, Get-Command, Get-Member.</p></a>
+  <a class="card" href="notes/t05-pipelines.html"><span class="card-num">05</span><h3>Pipelines</h3><p>Pass objects with <code>|</code>, filter, sort, select.</p></a>
+</div>
+<h3 id="g-scripts">Scripts &amp; data</h3>
+<div class="cards">
+  <a class="card" href="notes/t06-writing-scripts.html"><span class="card-num">06</span><h3>Writing scripts</h3><p>.ps1 files, execution policy, running.</p></a>
+  <a class="card" href="notes/t07-comments.html"><span class="card-num">07</span><h3>Comments</h3><p><code>#</code>, block comments, comment-based help.</p></a>
+  <a class="card" href="notes/t08-variables.html"><span class="card-num">08</span><h3>Variables</h3><p><code>$name</code>, types, strings.</p></a>
+  <a class="card" href="notes/t09-user-input.html"><span class="card-num">09</span><h3>User input</h3><p>Read-Host and converting input.</p></a>
+  <a class="card" href="notes/t10-operators.html"><span class="card-num">10</span><h3>Operators</h3><p>Maths, compare, logic, text.</p></a>
+</div>
+<h3 id="g-flow">Decisions &amp; repetition</h3>
+<div class="cards">
+  <a class="card" href="notes/t11-conditionals.html"><span class="card-num">11</span><h3>if, else &amp; switch</h3><p>Make decisions.</p></a>
+  <a class="card" href="notes/t12-loops.html"><span class="card-num">12</span><h3>Loops</h3><p>for, foreach, while, do.</p></a>
+  <a class="card" href="notes/t13-arrays.html"><span class="card-num">13</span><h3>Arrays</h3><p>Lists of values.</p></a>
+  <a class="card" href="notes/t14-hashtables.html"><span class="card-num">14</span><h3>Hashtables</h3><p>Key = value pairs.</p></a>
+</div>
+<h3 id="g-reuse">Reusable code</h3>
+<div class="cards">
+  <a class="card" href="notes/t15-functions.html"><span class="card-num">15</span><h3>Functions</h3><p>Name a block of code, pass parameters.</p></a>
+  <a class="card" href="notes/t16-scoping.html"><span class="card-num">16</span><h3>Scoping</h3><p>Where a variable can be seen.</p></a>
+  <a class="card" href="notes/t17-error-handling.html"><span class="card-num">17</span><h3>Basic error handling</h3><p>try, catch, finally, -ErrorAction.</p></a>
+  <a class="card" href="notes/t18-profiles.html"><span class="card-num">18</span><h3>Profiles</h3><p>Run your settings at every start.</p></a>
+  <a class="card" href="notes/t19-script-files.html"><span class="card-num">19</span><h3>Script files</h3><p>param(), dot-sourcing, organising scripts.</p></a>
+</div>
+
+<h2 id="labs">3 · Labs</h2>
+<div class="table-wrap"><table>
+<tr><th>Lab</th><th>You build</th><th>Do it after</th></tr>
+<tr><td><a href="labs/lab01-console-and-help.html">L1</a></td><td>Explore the console &amp; help</td><td>Topics 01–04</td></tr>
+<tr><td><a href="labs/lab02-system-report.html">L2</a></td><td>System report with pipelines</td><td>Topic 05</td></tr>
+<tr><td><a href="labs/lab03-first-script.html">L3</a></td><td>First script: greet &amp; calculate</td><td>Topics 06–10</td></tr>
+<tr><td><a href="labs/lab04-grade-calculator.html">L4</a></td><td>Grade calculator</td><td>Topic 11</td></tr>
+<tr><td><a href="labs/lab05-loops.html">L5</a></td><td>Loop practice</td><td>Topic 12</td></tr>
+<tr><td><a href="labs/lab06-arrays-hashtables.html">L6</a></td><td>Student marks &amp; inventory</td><td>Topics 13–14</td></tr>
+<tr><td><a href="labs/lab07-functions.html">L7</a></td><td>Build a function toolkit</td><td>Topics 15–16</td></tr>
+<tr><td><a href="labs/lab08-error-handling.html">L8</a></td><td>Safe file backup</td><td>Topic 17</td></tr>
+<tr><td><a href="labs/lab09-profile.html">L9</a></td><td>Customise your profile</td><td>Topic 18</td></tr>
+<tr><td><a href="labs/lab10-mini-project.html">L10</a></td><td>Mini project: admin menu</td><td>All topics</td></tr>
+</table></div>
+
+<div class="callout note"><span class="ct">Which PowerShell?</span>Use <strong>PowerShell 7</strong> (<code>pwsh</code>). It runs on Windows, Linux and macOS. Windows also ships the older <strong>Windows PowerShell 5.1</strong>; almost every example works there too, and pages point out the few differences.</div>
+
+<h2 id="files">Practice files</h2>
+<p>Some examples read small files from <code>datasets/</code>. Open PowerShell <strong>inside this <code>unit5</code> folder</strong> so the paths work. See the <a href="reference/datasets.html">practice files</a> page.</p>
+
+</article>
+</main>
+<script src="assets/app.js"></script>
+</body>
+</html>

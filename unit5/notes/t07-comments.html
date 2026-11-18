@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>07 · Comments</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="t07">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Topics / 07</div>
+<h1>Comments</h1>
+<p class="lead">Comments are notes for humans. PowerShell skips them when it runs the script.</p>
+<div class="meta-row"><span class="pill">Topic 07</span><span class="pill grey">~15 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="t04-help.html">04 Help</a><a href="t06-writing-scripts.html">06 Writing scripts</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p><code>#</code> comments one line. <code>&lt;# … #&gt;</code> comments a block. A block with keywords like <code>.SYNOPSIS</code> becomes real <strong>help</strong> for your script.</p></div>
+
+<div class="tiles">
+  <div class="tile"><b>Single-line</b><code># note</code><p>Everything after <code>#</code> is ignored.</p></div>
+  <div class="tile"><b>Inline</b><code>$x = 5  # note</code><p>Code first, note at the end.</p></div>
+  <div class="tile"><b>Block</b><code>&lt;# ... #&gt;</code><p>Many lines at once.</p></div>
+  <div class="tile"><b>Comment-based help</b><code>.SYNOPSIS</code><p>Read by <code>Get-Help</code>.</p></div>
+</div>
+
+<h2 id="single">Single-line and inline comments</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell"># Read the server list
+$servers = Get-Content datasets/servers.txt
+
+$servers.Count    # how many servers
+# Write-Output "this line is switched off"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>5</pre></div>
+<div class="callout tip"><span class="ct">Tip</span>"Commenting out" a line with <code>#</code> is a quick way to switch it off while testing. In VS Code, <kbd>Ctrl</kbd>+<kbd>/</kbd> toggles it.</div>
+<div class="callout warn"><span class="ct">Watch out</span><code>#</code> inside quotes is just text: <code>"Room #5"</code> prints <code>Room #5</code>.</div>
+
+<h2 id="block">Block comments</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">&lt;#
+  Author : Priya
+  Date   : 2026-11-17
+  Purpose: Count servers in the list
+#&gt;
+(Get-Content datasets/servers.txt).Count</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>5</pre></div>
+
+<h2 id="help">Comment-based help</h2>
+<p>Put a block comment with special keywords at the <strong>top</strong> of the script. <code>Get-Help</code> then treats it like any cmdlet's help.</p>
+<div class="table-wrap"><table>
+<tr><th>Keyword</th><th>Write here</th></tr>
+<tr><td><code>.SYNOPSIS</code></td><td>One-line summary</td></tr>
+<tr><td><code>.DESCRIPTION</code></td><td>Longer explanation</td></tr>
+<tr><td><code>.PARAMETER Name</code></td><td>What one parameter means</td></tr>
+<tr><td><code>.EXAMPLE</code></td><td>A sample command (can repeat)</td></tr>
+<tr><td><code>.NOTES</code></td><td>Author, date, version</td></tr>
+</table></div>
+<div class="code"><div class="code-head">top-students.ps1</div><pre><code class="language-powershell">&lt;#
+.SYNOPSIS
+    Shows the top students in one subject.
+.DESCRIPTION
+    Reads datasets/students.csv and lists the best students
+    for the subject you choose.
+.PARAMETER Subject
+    Maths, Science or English.
+.PARAMETER Top
+    How many students to show. Default is 3.
+.EXAMPLE
+    ./top-students.ps1 -Subject Science -Top 2
+#&gt;
+param(
+    [string]$Subject = 'Maths',
+    [int]$Top = 3
+)
+
+Import-Csv datasets/students.csv |
+    Sort-Object { [int]$_.$Subject } -Descending |
+    Select-Object -First $Top Name, $Subject</code></pre></div>
+
+<h3 id="run">Run it</h3>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">./top-students.ps1 -Subject Science -Top 2</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Name   Science
+----   -------
+Ananya 94
+Sneha  91</pre></div>
+
+<h3 id="read">Read its help</h3>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Help ./top-students.ps1</code></pre></div>
+<div class="output"><div class="out-head">output · sample, your path will differ</div><pre>NAME
+    C:\Users\aarav\unit5\top-students.ps1
+
+SYNOPSIS
+    Shows the top students in one subject.
+
+
+SYNTAX
+    C:\Users\aarav\unit5\top-students.ps1 [[-Subject] &lt;String&gt;] [[-Top] &lt;Int32&gt;] [&lt;CommonParameters&gt;]
+
+
+DESCRIPTION
+    Reads datasets/students.csv and lists the best students
+    for the subject you choose.
+
+
+RELATED LINKS
+
+REMARKS
+    To see the examples, type: "Get-Help C:\Users\aarav\unit5\top-students.ps1 -Examples"
+    For more information, type: "Get-Help C:\Users\aarav\unit5\top-students.ps1 -Detailed"
+    For technical information, type: "Get-Help C:\Users\aarav\unit5\top-students.ps1 -Full"</pre></div>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Help ./top-students.ps1 -Examples</code></pre></div>
+<div class="output"><div class="out-head">output · sample, your path will differ</div><pre>NAME
+    C:\Users\aarav\unit5\top-students.ps1
+
+SYNOPSIS
+    Shows the top students in one subject.
+
+    -------------------------- EXAMPLE 1 --------------------------
+
+    PS &gt; ./top-students.ps1 -Subject Science -Top 2</pre></div>
+<div class="callout warn"><span class="ct">Watch out</span>Keywords must start with a dot and be spelled exactly. One wrong keyword (say <code>.SYNOPSYS</code>) and <code>Get-Help</code> ignores the whole block.</div>
+
+<h2 id="tips">Good comments</h2>
+<div class="table-wrap"><table>
+<tr><th>Do</th><th>Don't</th></tr>
+<tr><td>Say <strong>why</strong>: <code># CSV values are text, so cast to [int]</code></td><td>Repeat the code: <code># set x to 5</code></td></tr>
+<tr><td>Add comment-based help to every script</td><td>Leave old, wrong comments behind</td></tr>
+<tr><td>Keep comments short and current</td><td>Write a paragraph for every line</td></tr>
+<tr><td>Use <code>&lt;# #&gt;</code> for headers</td><td>Comment out code and forget it forever</td></tr>
+</table></div>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Add a block comment with your name and today's date to <code>hello.ps1</code>.</li>
+  <li>Comment out one line and run the script again.</li>
+  <li>Add <code>.SYNOPSIS</code> and <code>.EXAMPLE</code> help, then run <code>Get-Help ./hello.ps1 -Examples</code>.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">hello.ps1</div><pre><code class="language-powershell">&lt;#
+.SYNOPSIS
+    Says hello and shows the day.
+.EXAMPLE
+    ./hello.ps1
+.NOTES
+    Author: (your name), 2026-11-17
+#&gt;
+Write-Output "Hello from my first script!"
+# Get-Date -Format "dddd"     # switched off for now</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li><code>#</code> = one line; <code>&lt;# #&gt;</code> = a block.</li>
+  <li>Comment-based help (<code>.SYNOPSIS</code>, <code>.DESCRIPTION</code>, <code>.EXAMPLE</code>) goes at the top of the script.</li>
+  <li><code>Get-Help ./script.ps1</code> reads that help.</li>
+  <li>Good comments explain <strong>why</strong>, not <strong>what</strong>.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>What is comment-based help?</strong> A block comment (<code>&lt;# #&gt;</code>) at the start of a script or function that uses keywords such as <code>.SYNOPSIS</code>, <code>.DESCRIPTION</code>, <code>.PARAMETER</code> and <code>.EXAMPLE</code>. <code>Get-Help</code> reads it and shows it like the help for a built-in cmdlet.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F2 · Install &amp; open PowerShell</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="f2">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Fundamentals / F2</div>
+<h1>Install &amp; open PowerShell</h1>
+<p class="lead">Get PowerShell 7 on your computer, open it, and check which version you are running.</p>
+<div class="meta-row"><span class="pill">Fundamentals F2</span><span class="pill grey">~15 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="f1-what-is-a-shell.html">F1 What is a shell?</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>There are two PowerShells. <strong>Windows PowerShell 5.1</strong> is built into Windows. <strong>PowerShell 7</strong> (<code>pwsh</code>) is the new one for every OS. Use 7.</p></div>
+
+<h2 id="two">The two PowerShells</h2>
+<div class="table-wrap"><table>
+<tr><th></th><th>Windows PowerShell 5.1</th><th>PowerShell 7</th></tr>
+<tr><td>Program name</td><td><code>powershell.exe</code></td><td><code>pwsh</code> (<code>pwsh.exe</code> on Windows)</td></tr>
+<tr><td>Runs on</td><td>Windows only</td><td>Windows, Linux, macOS</td></tr>
+<tr><td>Comes with</td><td>Windows (already installed)</td><td>You install it</td></tr>
+<tr><td>Built on</td><td>.NET Framework</td><td>.NET (modern, cross-platform)</td></tr>
+<tr><td>PSEdition</td><td><code>Desktop</code></td><td><code>Core</code></td></tr>
+<tr><td>Updates</td><td>Bug fixes only</td><td>New features</td></tr>
+<tr><td>Window colour</td><td>Blue by default</td><td>Black by default</td></tr>
+</table></div>
+<div class="callout note"><span class="ct">Note</span>Both can be installed side by side. Installing 7 does not remove 5.1.</div>
+
+<h2 id="install">Install PowerShell 7</h2>
+<div class="tiles">
+  <div class="tile"><b>Windows</b><code>winget install --id Microsoft.PowerShell --source winget</code><p>Run in any terminal. Or get it from the Microsoft Store.</p></div>
+  <div class="tile"><b>macOS</b><code>brew install --cask powershell</code><p>Needs Homebrew.</p></div>
+  <div class="tile"><b>Ubuntu / Debian</b><code>sudo apt-get install -y powershell</code><p>First add Microsoft's package repository (see the official install page).</p></div>
+</div>
+<p>Then close and reopen your terminal so it finds <code>pwsh</code>.</p>
+
+<h2 id="open">Open it</h2>
+<div class="table-wrap"><table>
+<tr><th>Way</th><th>How</th></tr>
+<tr><td>Start menu</td><td>Press <kbd>Win</kbd>, type <code>pwsh</code> or <code>PowerShell 7</code>, press Enter.</td></tr>
+<tr><td>Win + X menu</td><td>Press <kbd>Win</kbd>+<kbd>X</kbd>, pick <strong>Terminal</strong> (or <strong>Windows PowerShell</strong> on older Windows).</td></tr>
+<tr><td>Windows Terminal</td><td>Open it, click the <code>⌄</code> arrow next to the tab, choose <strong>PowerShell</strong>.</td></tr>
+<tr><td>From another shell</td><td>Type <code>pwsh</code> and press Enter. Type <code>exit</code> to leave.</td></tr>
+<tr><td>Linux / macOS</td><td>Open Terminal, type <code>pwsh</code>.</td></tr>
+</table></div>
+<div class="callout tip"><span class="ct">Tip</span>In Windows Terminal, go to Settings → Startup → Default profile and choose <strong>PowerShell</strong> so 7 opens every time.</div>
+
+<h2 id="version">Check your version</h2>
+<p><code>$PSVersionTable</code> is a built-in variable that describes your PowerShell.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$PSVersionTable</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>Name                           Value
+----                           -----
+PSVersion                      7.5.4
+PSEdition                      Core
+GitCommitId                    7.5.4
+OS                             Microsoft Windows 10.0.26100
+Platform                       Win32NT
+PSCompatibleVersions           {1.0, 2.0, 3.0, 4.0…}
+PSRemotingProtocolVersion      2.3
+SerializationVersion           1.1.0.1
+WSManStackVersion              3.0</pre></div>
+<p>Ask for just one part with a dot:</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$PSVersionTable.PSEdition
+$PSVersionTable.PSVersion.Major</code></pre></div>
+<div class="output"><div class="out-head">output · in PowerShell 7</div><pre>Core
+7</pre></div>
+<div class="output"><div class="out-head">output · in Windows PowerShell 5.1</div><pre>Desktop
+5</pre></div>
+
+<h2 id="tell">How to tell them apart</h2>
+<div class="table-wrap"><table>
+<tr><th>Check</th><th>PowerShell 7</th><th>Windows PowerShell 5.1</th></tr>
+<tr><td>Window title</td><td>PowerShell</td><td>Windows PowerShell</td></tr>
+<tr><td><code>$PSVersionTable.PSEdition</code></td><td><code>Core</code></td><td><code>Desktop</code></td></tr>
+<tr><td><code>$PSVersionTable.PSVersion.Major</code></td><td><code>7</code></td><td><code>5</code></td></tr>
+<tr><td>Started by</td><td><code>pwsh</code></td><td><code>powershell</code></td></tr>
+</table></div>
+<div class="callout warn"><span class="ct">Watch out</span>The old <strong>PowerShell ISE</strong> editor only runs 5.1. For PowerShell 7, use VS Code with the PowerShell extension.</div>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Open PowerShell 7 and run <code>$PSVersionTable</code>.</li>
+  <li>Print only the edition. Is it <code>Core</code> or <code>Desktop</code>?</li>
+  <li>On Windows, open Windows PowerShell 5.1 too and compare the two outputs.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$PSVersionTable
+$PSVersionTable.PSEdition    # Core in pwsh, Desktop in 5.1</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li>5.1 = <code>powershell</code>, Windows only, edition <code>Desktop</code>.</li>
+  <li>7 = <code>pwsh</code>, every OS, edition <code>Core</code>.</li>
+  <li><code>$PSVersionTable</code> tells you which one you are in.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>How do you find the installed PowerShell version?</strong> Run <code>$PSVersionTable</code> and read <code>PSVersion</code>, or run <code>$PSVersionTable.PSVersion</code>. <code>PSEdition</code> says <code>Core</code> for PowerShell 7 and <code>Desktop</code> for Windows PowerShell 5.1.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

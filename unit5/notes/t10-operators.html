@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>10 · Operators</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="t10">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Topics / 10</div>
+<h1>Operators</h1>
+<p class="lead">Operators do maths, compare values, combine conditions and work on text.</p>
+<div class="meta-row"><span class="pill">Topic 10</span><span class="pill grey">~25 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="t08-variables.html">08 Variables</a><a href="t09-user-input.html">09 User input</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>Maths uses symbols (<code>+ - * /</code>). Almost everything else is a <strong>word with a dash</strong>: <code>-eq</code>, <code>-gt</code>, <code>-like</code>, <code>-and</code>. Comparisons are <strong>not case-sensitive</strong> by default.</p></div>
+
+<div class="callout warn"><span class="ct">Biggest gotcha</span><code>&gt;</code> is <strong>not</strong> "greater than". It is <strong>redirection</strong>: it writes output to a file. Use <code>-gt</code>.</div>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">5 &gt; 3            # no output... but it created a FILE named "3" containing 5
+Get-Content 3
+5 -gt 3          # the right way
+Remove-Item 3    # clean up</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>5
+True</pre></div>
+
+<h2 id="arith">Arithmetic</h2>
+<div class="table-wrap"><table>
+<tr><th>Operator</th><th>Example</th><th>Result</th></tr>
+<tr><td><code>+</code> add</td><td><code>7 + 2</code></td><td><code>9</code></td></tr>
+<tr><td><code>-</code> subtract</td><td><code>7 - 2</code></td><td><code>5</code></td></tr>
+<tr><td><code>*</code> multiply</td><td><code>7 * 2</code></td><td><code>14</code></td></tr>
+<tr><td><code>/</code> divide</td><td><code>7 / 2</code></td><td><code>3.5</code></td></tr>
+<tr><td><code>%</code> remainder</td><td><code>7 % 2</code></td><td><code>1</code></td></tr>
+<tr><td>Power (no <code>^</code>)</td><td><code>[math]::Pow(2, 3)</code></td><td><code>8</code></td></tr>
+<tr><td><code>+</code> on text</td><td><code>"5" + 3</code></td><td><code>53</code></td></tr>
+<tr><td><code>+</code> number first</td><td><code>3 + "5"</code></td><td><code>8</code></td></tr>
+<tr><td><code>*</code> on text</td><td><code>"ab" * 3</code></td><td><code>ababab</code></td></tr>
+</table></div>
+<p>The <strong>left</strong> side decides: text on the left joins text, a number on the left does maths.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$i = 5
+$i++        # add 1
+$i
+$i--        # subtract 1
+$i</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>6
+5</pre></div>
+
+<h2 id="assign">Assignment</h2>
+<div class="table-wrap"><table>
+<tr><th>Operator</th><th>Example (start: <code>$x = 10</code>)</th><th>Same as</th><th><code>$x</code> becomes</th></tr>
+<tr><td><code>=</code></td><td><code>$x = 10</code></td><td>–</td><td><code>10</code></td></tr>
+<tr><td><code>+=</code></td><td><code>$x += 5</code></td><td><code>$x = $x + 5</code></td><td><code>15</code></td></tr>
+<tr><td><code>-=</code></td><td><code>$x -= 3</code></td><td><code>$x = $x - 3</code></td><td><code>7</code></td></tr>
+<tr><td><code>*=</code></td><td><code>$x *= 2</code></td><td><code>$x = $x * 2</code></td><td><code>20</code></td></tr>
+<tr><td><code>/=</code></td><td><code>$x /= 4</code></td><td><code>$x = $x / 4</code></td><td><code>2.5</code></td></tr>
+<tr><td><code>%=</code></td><td><code>$x %= 3</code></td><td><code>$x = $x % 3</code></td><td><code>1</code></td></tr>
+</table></div>
+
+<h2 id="compare">Comparison</h2>
+<div class="table-wrap"><table>
+<tr><th>Operator</th><th>Means</th><th>Example</th><th>Result</th></tr>
+<tr><td><code>-eq</code></td><td>equal</td><td><code>5 -eq 5</code></td><td><code>True</code></td></tr>
+<tr><td><code>-ne</code></td><td>not equal</td><td><code>5 -ne 3</code></td><td><code>True</code></td></tr>
+<tr><td><code>-gt</code></td><td>greater than</td><td><code>5 -gt 3</code></td><td><code>True</code></td></tr>
+<tr><td><code>-ge</code></td><td>greater or equal</td><td><code>5 -ge 6</code></td><td><code>False</code></td></tr>
+<tr><td><code>-lt</code></td><td>less than</td><td><code>3 -lt 5</code></td><td><code>True</code></td></tr>
+<tr><td><code>-le</code></td><td>less or equal</td><td><code>3 -le 2</code></td><td><code>False</code></td></tr>
+</table></div>
+
+<h3 id="case">Case-sensitive versions: add a c</h3>
+<div class="table-wrap"><table>
+<tr><th>Example</th><th>Result</th></tr>
+<tr><td><code>"abc" -eq "ABC"</code></td><td><code>True</code></td></tr>
+<tr><td><code>"abc" -ceq "ABC"</code></td><td><code>False</code></td></tr>
+<tr><td><code>"Web01" -clike "web*"</code></td><td><code>False</code></td></tr>
+</table></div>
+<p>Every comparison has a <code>c</code> form: <code>-ceq</code>, <code>-cne</code>, <code>-cgt</code>, <code>-clike</code>, <code>-cmatch</code>, <code>-creplace</code>…</p>
+
+<h3 id="like">Patterns: -like and -match</h3>
+<div class="table-wrap"><table>
+<tr><th>Example</th><th>Result</th><th>Why</th></tr>
+<tr><td><code>"report.csv" -like "*.csv"</code></td><td><code>True</code></td><td><code>*</code> = any characters</td></tr>
+<tr><td><code>"web01" -like "web??"</code></td><td><code>True</code></td><td><code>?</code> = exactly one character</td></tr>
+<tr><td><code>"db01" -notlike "web*"</code></td><td><code>True</code></td><td>does not match</td></tr>
+<tr><td><code>"Disk at 78%" -match '\d+%'</code></td><td><code>True</code></td><td>regex: digits then %</td></tr>
+<tr><td><code>"INFO" -notmatch 'ERROR'</code></td><td><code>True</code></td><td>regex not found</td></tr>
+</table></div>
+<p><code>-like</code> uses simple wildcards. <code>-match</code> uses regular expressions and saves what it found in <code>$Matches</code>.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Content datasets/app.log | Where-Object { $_ -match 'ERROR' }</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>2026-11-16 08:42:57 ERROR Failed to send email to priya@example.com
+2026-11-16 09:31:08 ERROR Database connection lost
+2026-11-16 10:45:31 ERROR Disk full on web01</pre></div>
+
+<h3 id="contains">Lists: -contains and -in</h3>
+<div class="table-wrap"><table>
+<tr><th>Example</th><th>Result</th></tr>
+<tr><td><code>"web01","db01" -contains "db01"</code></td><td><code>True</code></td></tr>
+<tr><td><code>"db01" -in "web01","db01"</code></td><td><code>True</code></td></tr>
+<tr><td><code>"web01","db01" -contains "db"</code></td><td><code>False</code> (whole items only)</td></tr>
+<tr><td><code>"mail01" -notin "web01","db01"</code></td><td><code>True</code></td></tr>
+</table></div>
+<div class="callout tip"><span class="ct">Remember the order</span><strong>list</strong> <code>-contains</code> <strong>item</strong>, but <strong>item</strong> <code>-in</code> <strong>list</strong>.</div>
+
+<h2 id="logic">Logical</h2>
+<div class="table-wrap"><table>
+<tr><th>Operator</th><th>Example (<code>$m = 72</code>)</th><th>Result</th></tr>
+<tr><td><code>-and</code> both true</td><td><code>($m -ge 40) -and ($m -lt 60)</code></td><td><code>False</code></td></tr>
+<tr><td><code>-or</code> either true</td><td><code>($m -lt 40) -or ($m -gt 70)</code></td><td><code>True</code></td></tr>
+<tr><td><code>-not</code> flip</td><td><code>-not ($m -gt 50)</code></td><td><code>False</code></td></tr>
+<tr><td><code>!</code> flip (short)</td><td><code>!$true</code></td><td><code>False</code></td></tr>
+<tr><td><code>-xor</code> exactly one true</td><td><code>$true -xor $true</code></td><td><code>False</code></td></tr>
+</table></div>
+<p>Use brackets around each test so it is easy to read.</p>
+
+<h2 id="string">String operators</h2>
+<div class="table-wrap"><table>
+<tr><th>Operator</th><th>Example</th><th>Result</th></tr>
+<tr><td><code>-replace</code></td><td><code>"web01" -replace 'web', 'app'</code></td><td><code>app01</code></td></tr>
+<tr><td><code>-split</code></td><td><code>"web01,db01,mail01" -split ','</code></td><td>3 items: <code>web01</code> <code>db01</code> <code>mail01</code></td></tr>
+<tr><td><code>-join</code></td><td><code>"a","b","c" -join '-'</code></td><td><code>a-b-c</code></td></tr>
+</table></div>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">(Get-Content datasets/servers.txt) -join ', '</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>web01, web02, db01, mail01, backup01</pre></div>
+<div class="callout warn"><span class="ct">Watch out</span><code>-replace</code> and <code>-split</code> use regex. A dot means "any character": <code>"1.5" -replace '.', 'x'</code> gives <code>xxx</code>. Write <code>'\.'</code> for a real dot.</div>
+
+<h2 id="type">Type operators</h2>
+<div class="table-wrap"><table>
+<tr><th>Example</th><th>Result</th><th>Means</th></tr>
+<tr><td><code>5 -is [int]</code></td><td><code>True</code></td><td>Is it this type?</td></tr>
+<tr><td><code>"5" -is [int]</code></td><td><code>False</code></td><td>It is a string.</td></tr>
+<tr><td><code>"5" -isnot [int]</code></td><td><code>True</code></td><td>Opposite of <code>-is</code>.</td></tr>
+<tr><td><code>"5" -as [int]</code></td><td><code>5</code></td><td>Convert if possible.</td></tr>
+<tr><td><code>"abc" -as [int]</code></td><td><em>nothing</em> (<code>$null</code>)</td><td>Fails quietly, no error.</td></tr>
+</table></div>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Is 17 even? Use <code>%</code>.</li>
+  <li>Check whether a mark of 55 is a pass (40 or more) <strong>and</strong> below distinction (75).</li>
+  <li>Show only <code>WARN</code> lines from <code>datasets/app.log</code> that mention <code>web01</code>.</li>
+  <li>Turn <code>"10A-10B-10C"</code> into <code>"10A, 10B, 10C"</code>.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">17 % 2 -eq 0                                  # False, so odd
+$m = 55; ($m -ge 40) -and ($m -lt 75)         # True
+Get-Content datasets/app.log | Where-Object { $_ -like '*WARN*' -and $_ -like '*web01*' }
+("10A-10B-10C" -split '-') -join ', '         # 10A, 10B, 10C</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li><code>&gt;</code> writes to a file; compare with <code>-gt</code>, <code>-lt</code>, <code>-eq</code>.</li>
+  <li>Comparisons ignore case; add <code>c</code> (<code>-ceq</code>) to respect it.</li>
+  <li><code>-like</code> = wildcards, <code>-match</code> = regex.</li>
+  <li>list <code>-contains</code> item; item <code>-in</code> list.</li>
+  <li><code>-and</code>, <code>-or</code>, <code>-not</code> combine conditions.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>Why doesn't PowerShell use <code>&gt;</code> and <code>==</code> for comparison?</strong> Because <code>&gt;</code> and <code>&lt;</code> are already used for redirection, as in other shells. So PowerShell uses word operators: <code>-eq</code>, <code>-ne</code>, <code>-gt</code>, <code>-ge</code>, <code>-lt</code>, <code>-le</code>.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

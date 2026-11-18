@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 4 · Grade calculator</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="lab04">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Labs / Lab 4</div>
+<h1>Lab 4: Grade calculator</h1>
+<p class="lead">Write a script that asks for marks and prints a grade, first with <code>if</code>/<code>elseif</code>, then with <code>switch</code>.</p>
+<div class="meta-row"><span class="pill">Lab 4</span><span class="pill grey">Beginner</span><span class="pill grey">~40 min</span></div>
+
+<div class="prereq"><span class="ct">Topics used:</span><a href="../notes/t09-user-input.html">09 User input</a><a href="../notes/t10-operators.html">10 Operators</a><a href="../notes/t11-conditionals.html">11 if, else &amp; switch</a></div>
+
+<h2 id="aim">Aim</h2>
+<ul class="check">
+  <li>Read a number from the user.</li>
+  <li>Choose a grade with <code>if</code>, <code>elseif</code>, <code>else</code>.</li>
+  <li>Do the same with <code>switch</code>.</li>
+  <li>Reject bad input.</li>
+</ul>
+
+<h2 id="plan">Plan</h2>
+<ul class="flow">
+  <li><span>Ask for marks</span></li>
+  <li><span>Check input</span></li>
+  <li><span>Pick grade</span></li>
+  <li><span>Print result</span></li>
+</ul>
+<div class="table-wrap"><table>
+<tr><th>Marks</th><th>Grade</th></tr>
+<tr><td>90 – 100</td><td>A</td></tr>
+<tr><td>75 – 89</td><td>B</td></tr>
+<tr><td>60 – 74</td><td>C</td></tr>
+<tr><td>40 – 59</td><td>D</td></tr>
+<tr><td>0 – 39</td><td>F</td></tr>
+</table></div>
+
+<h2 id="tasks">Tasks</h2>
+
+<div class="task">
+<span class="task-tag">Task 1</span>
+<h3 id="t1">Grade with if / elseif</h3>
+<div class="code"><div class="code-head">powershell · grade.ps1</div><pre><code class="language-powershell"># grade.ps1: ask for marks and print a grade
+[int]$marks = Read-Host "Enter marks (0-100)"
+
+if ($marks -ge 90)     { $grade = 'A' }
+elseif ($marks -ge 75) { $grade = 'B' }
+elseif ($marks -ge 60) { $grade = 'C' }
+elseif ($marks -ge 40) { $grade = 'D' }
+else                   { $grade = 'F' }
+
+Write-Host "Marks: $marks  Grade: $grade"</code></pre></div>
+<div class="code"><div class="code-head">powershell · run it</div><pre><code class="language-powershell">./grade.ps1</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Enter marks (0-100): 82
+Marks: 82  Grade: B</pre></div>
+<p>The checks run top to bottom and stop at the first one that is true, so 82 fails <code>-ge 90</code> and matches <code>-ge 75</code>.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 2</span>
+<h3 id="t2">Reject bad input</h3>
+<p>Typing <code>abc</code> or <code>150</code> should not give a grade.</p>
+<div class="code"><div class="code-head">powershell · grade.ps1 (updated)</div><pre><code class="language-powershell">$text = Read-Host "Enter marks (0-100)"
+
+if ($text -notmatch '^\d+$') {
+    Write-Host "Please type a whole number." -ForegroundColor Red
+    exit
+}
+$marks = [int]$text
+if ($marks -lt 0 -or $marks -gt 100) {
+    Write-Host "Marks must be between 0 and 100." -ForegroundColor Red
+    exit
+}
+# ... grade checks from Task 1 go here ...</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Enter marks (0-100): abc
+Please type a whole number.</pre></div>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 3</span>
+<h3 id="t3">Same logic with switch</h3>
+<div class="code"><div class="code-head">powershell · grade-switch.ps1</div><pre><code class="language-powershell">[int]$marks = Read-Host "Enter marks (0-100)"
+
+$grade = switch ($marks) {
+    { $_ -ge 90 } { 'A'; break }
+    { $_ -ge 75 } { 'B'; break }
+    { $_ -ge 60 } { 'C'; break }
+    { $_ -ge 40 } { 'D'; break }
+    default       { 'F' }
+}
+"Grade: $grade"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Enter marks (0-100): 95
+Grade: A</pre></div>
+<div class="callout warn"><span class="ct">Why break?</span>Without <code>break</code>, <code>switch</code> keeps testing. 95 also matches <code>-ge 75</code>, <code>-ge 60</code> and <code>-ge 40</code>, so you would get <code>A B C D</code>.</div>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 4</span>
+<h3 id="t4">Grade the whole class</h3>
+<p>Read <code>datasets/students.csv</code> and grade each student's Maths mark.</p>
+<div class="code"><div class="code-head">powershell · class-grades.ps1</div><pre><code class="language-powershell">foreach ($s in Import-Csv datasets/students.csv) {
+    $m = [int]$s.Maths
+    $grade = if ($m -ge 90) { 'A' } elseif ($m -ge 75) { 'B' } elseif ($m -ge 60) { 'C' } elseif ($m -ge 40) { 'D' } else { 'F' }
+    "{0,-7} {1,3}  {2}" -f $s.Name, $m, $grade
+}</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Aarav    92  A
+Priya    67  C
+Rohan    45  D
+Sneha    88  B
+Kabir    33  F
+Isha     76  B
+Vikram   58  D
+Ananya   99  A</pre></div>
+<p><code>if</code> as a value (<code>$grade = if ...</code>) works in PowerShell 7. In Windows PowerShell 5.1, set <code>$grade</code> inside each block as in Task 1.</p>
+</div>
+
+<h2 id="challenge">Challenge</h2>
+<ol class="steps">
+  <li>Add a "Distinction" message for marks of 95 or more.</li>
+  <li>Grade the <strong>average</strong> of Maths, Science and English for each student.</li>
+</ol>
+<details><summary>Hint for 2</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$avg = ([int]$s.Maths + [int]$s.Science + [int]$s.English) / 3</code></pre></div>
+</details>
+
+<h2 id="viva">Viva questions</h2>
+<details><summary>What is the difference between <code>if/elseif</code> and <code>switch</code>?</summary><p><code>if/elseif</code> stops at the first true test. <code>switch</code> tests every case unless you use <code>break</code>. <code>switch</code> is cleaner when you compare one value against many cases.</p></details>
+<details><summary>Why do we write <code>[int]</code> before <code>Read-Host</code>?</summary><p><code>Read-Host</code> always returns text. <code>[int]</code> turns it into a number so <code>-ge</code> compares numbers, not text.</p></details>
+<details><summary>What does <code>default</code> do in a <code>switch</code>?</summary><p>It runs when no other case matched, like <code>else</code>.</p></details>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

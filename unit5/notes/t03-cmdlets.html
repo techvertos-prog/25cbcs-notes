@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>03 · Cmdlets</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="t03">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Topics / 03</div>
+<h1>Cmdlets</h1>
+<p class="lead">A cmdlet ("command-let") is a built-in PowerShell command named in Verb-Noun form, like <code>Get-Process</code>.</p>
+<div class="meta-row"><span class="pill">Topic 03</span><span class="pill grey">~20 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="../basics/f3-first-commands.html">F3 First commands</a><a href="t01-introduction.html">01 Introduction</a><a href="t02-console-ise.html">02 Console &amp; ISE</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>Every cmdlet is <strong>Verb-Noun</strong>: the verb says the <strong>action</strong>, the noun says the <strong>thing</strong>. Learn a few verbs and you can guess most command names.</p></div>
+
+<h2 id="naming">Verb-Noun naming</h2>
+<div class="table-wrap"><table>
+<tr><th>Cmdlet</th><th>Verb</th><th>Noun</th><th>Does</th></tr>
+<tr><td><code>Get-Process</code></td><td>Get</td><td>Process</td><td>Lists running programs</td></tr>
+<tr><td><code>Stop-Service</code></td><td>Stop</td><td>Service</td><td>Stops a service</td></tr>
+<tr><td><code>New-Item</code></td><td>New</td><td>Item</td><td>Creates a file or folder</td></tr>
+<tr><td><code>Import-Csv</code></td><td>Import</td><td>Csv</td><td>Reads a CSV file as objects</td></tr>
+</table></div>
+<p>The noun is always <strong>singular</strong>: <code>Get-Process</code>, never <code>Get-Processes</code>.</p>
+
+<h3 id="verbs">Common verbs</h3>
+<div class="tiles">
+  <div class="tile"><b>Get</b><p>Read or list something.</p></div>
+  <div class="tile"><b>Set</b><p>Change something.</p></div>
+  <div class="tile"><b>New</b><p>Create something.</p></div>
+  <div class="tile"><b>Remove</b><p>Delete something.</p></div>
+  <div class="tile"><b>Start / Stop</b><p>Begin or end a process or service.</p></div>
+  <div class="tile"><b>Import / Export</b><p>Read from or write to a file format.</p></div>
+  <div class="tile"><b>Out / Write</b><p>Send output somewhere.</p></div>
+  <div class="tile"><b>Test</b><p>Check something, return True/False.</p></div>
+</div>
+<p><code>Get-Verb</code> lists all approved verbs.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Verb -Verb Get</code></pre></div>
+<div class="output"><div class="out-head">output · PowerShell 7</div><pre>Verb AliasPrefix Group  Description
+---- ----------- -----  -----------
+Get  g           Common Specifies an action that retrieves a resource</pre></div>
+
+<h2 id="params">Parameters</h2>
+<p>Parameters start with a dash and change what a cmdlet does.</p>
+<div class="table-wrap"><table>
+<tr><th>Kind</th><th>Looks like</th><th>Meaning</th></tr>
+<tr><td>Named</td><td><code>-Path datasets</code></td><td>Name, then value.</td></tr>
+<tr><td>Positional</td><td><code>datasets</code></td><td>Value only; its position tells which parameter it is.</td></tr>
+<tr><td>Switch</td><td><code>-Recurse</code></td><td>On/off flag. No value needed.</td></tr>
+</table></div>
+
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell"># named parameters
+Get-Content -Path datasets/servers.txt -TotalCount 2</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>web01
+web02</pre></div>
+
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell"># positional: "datasets" goes to -Path. -Name is a switch.
+Get-ChildItem datasets -Filter *.csv -Name</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>inventory.csv
+students.csv</pre></div>
+<div class="callout tip"><span class="ct">Tip</span>You can shorten a parameter name if it stays unique: <code>-TotalCount</code> → <code>-Tot</code>. Press <kbd>Tab</kbd> after <code>-</code> to cycle through parameters.</div>
+
+<h2 id="find">Finding cmdlets with Get-Command</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Command -Noun Process</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>CommandType     Name                                               Version    Source
+-----------     ----                                               -------    ------
+Cmdlet          Debug-Process                                      7.0.0.0    Microsoft.PowerShell.Management
+Cmdlet          Get-Process                                        7.0.0.0    Microsoft.PowerShell.Management
+Cmdlet          Start-Process                                      7.0.0.0    Microsoft.PowerShell.Management
+Cmdlet          Stop-Process                                       7.0.0.0    Microsoft.PowerShell.Management
+Cmdlet          Wait-Process                                       7.0.0.0    Microsoft.PowerShell.Management</pre></div>
+<div class="table-wrap"><table>
+<tr><th>Command</th><th>Finds</th></tr>
+<tr><td><code>Get-Command -Verb Export</code></td><td>Every cmdlet that exports</td></tr>
+<tr><td><code>Get-Command -Noun Item</code></td><td>Every cmdlet about items</td></tr>
+<tr><td><code>Get-Command *csv*</code></td><td>Anything with "csv" in the name</td></tr>
+</table></div>
+
+<h2 id="alias">Aliases</h2>
+<p>An alias is a short nickname for a cmdlet.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Alias dir</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>CommandType     Name                                               Version    Source
+-----------     ----                                               -------    ------
+Alias           dir -&gt; Get-ChildItem</pre></div>
+<div class="table-wrap"><table>
+<tr><th>Alias</th><th>Cmdlet</th></tr>
+<tr><td><code>dir</code>, <code>ls</code>, <code>gci</code></td><td><code>Get-ChildItem</code></td></tr>
+<tr><td><code>cd</code>, <code>sl</code></td><td><code>Set-Location</code></td></tr>
+<tr><td><code>pwd</code>, <code>gl</code></td><td><code>Get-Location</code></td></tr>
+<tr><td><code>cat</code>, <code>type</code>, <code>gc</code></td><td><code>Get-Content</code></td></tr>
+<tr><td><code>copy</code>, <code>cp</code></td><td><code>Copy-Item</code></td></tr>
+<tr><td><code>move</code>, <code>mv</code></td><td><code>Move-Item</code></td></tr>
+<tr><td><code>del</code>, <code>rm</code></td><td><code>Remove-Item</code></td></tr>
+<tr><td><code>cls</code>, <code>clear</code></td><td><code>Clear-Host</code></td></tr>
+<tr><td><code>echo</code></td><td><code>Write-Output</code></td></tr>
+<tr><td><code>?</code>, <code>where</code></td><td><code>Where-Object</code></td></tr>
+<tr><td><code>%</code>, <code>foreach</code></td><td><code>ForEach-Object</code></td></tr>
+</table></div>
+<div class="callout warn"><span class="ct">Watch out</span>On Linux and macOS, <code>ls</code>, <code>cat</code>, <code>cp</code>, <code>mv</code>, <code>rm</code> and <code>clear</code> are <strong>not</strong> aliases; they run the normal Linux tools. Use full cmdlet names in scripts so they work everywhere.</div>
+
+<h2 id="kinds">Cmdlet vs function vs program</h2>
+<ul>
+  <li><strong>Cmdlet</strong>: compiled into PowerShell (C#/.NET), e.g. <code>Get-Process</code>.</li>
+  <li><strong>Function</strong>: written in PowerShell itself, e.g. <code>help</code>.</li>
+  <li><strong>Application</strong>: an outside program (.exe), e.g. <code>ping</code>.</li>
+</ul>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Command Get-Process, help, ping</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>CommandType     Name                                               Version    Source
+-----------     ----                                               -------    ------
+Cmdlet          Get-Process                                        7.0.0.0    Microsoft.PowerShell.Management
+Function        help
+Application     PING.EXE                                           10.0.2261… C:\Windows\system32\PING.EXE</pre></div>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Find all cmdlets with the verb <code>Import</code>.</li>
+  <li>Which cmdlet does the alias <code>gc</code> run?</li>
+  <li>Show the first 3 lines of <code>datasets/app.log</code> using a named parameter.</li>
+  <li>List everything in <code>datasets</code>, including subfolders, using a switch.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Command -Verb Import
+Get-Alias gc                                   # gc -&gt; Get-Content
+Get-Content -Path datasets/app.log -TotalCount 3
+Get-ChildItem datasets -Recurse</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li>Cmdlets are <strong>Verb-Noun</strong>, noun singular.</li>
+  <li>Parameters: named (<code>-Path x</code>), positional (<code>x</code>), switch (<code>-Recurse</code>).</li>
+  <li><code>Get-Command</code> finds commands; <code>Get-Alias</code> explains nicknames.</li>
+  <li>Use full names in scripts, aliases only when typing.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>What is a cmdlet?</strong> A cmdlet is a lightweight, built-in .NET command in PowerShell named as Verb-Noun, such as <code>Get-Service</code>. It returns objects, and its behaviour is changed with parameters.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>18 · Profiles</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="t18">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Topics / 18</div>
+<h1>Profiles</h1>
+<p class="lead">A profile is a script that PowerShell runs automatically every time it starts, so your aliases and functions are always ready.</p>
+<div class="meta-row"><span class="pill">Topic 18</span><span class="pill grey">~15 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="t06-writing-scripts.html">06 Writing scripts</a><a href="t15-functions.html">15 Functions</a><a href="t16-scoping.html">16 Scoping</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p>The profile is just a <code>.ps1</code> file. Its path is stored in <code>$PROFILE</code>. It does not exist until you create it.</p></div>
+
+<h2 id="what">What happens at start-up</h2>
+<ul class="flow">
+  <li><span>Open PowerShell</span></li>
+  <li><span>Run profile.ps1 files</span></li>
+  <li><span>Aliases, functions loaded</span></li>
+  <li class="here"><span>Prompt ready</span></li>
+</ul>
+<p>Without a profile, anything you define in a session is lost when you close the window.</p>
+
+<h2 id="paths">$PROFILE and its four variants</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$PROFILE</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>C:\Users\you\Documents\PowerShell\Microsoft.PowerShell_profile.ps1</pre></div>
+
+<p>There are actually four profiles. See them all:</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$PROFILE | Select-Object *</code></pre></div>
+<div class="output"><div class="out-head">output · sample, PowerShell 7 on Windows</div><pre>AllUsersAllHosts       : C:\Program Files\PowerShell\7\profile.ps1
+AllUsersCurrentHost    : C:\Program Files\PowerShell\7\Microsoft.PowerShell_profile.ps1
+CurrentUserAllHosts    : C:\Users\you\Documents\PowerShell\profile.ps1
+CurrentUserCurrentHost : C:\Users\you\Documents\PowerShell\Microsoft.PowerShell_profile.ps1
+Length                 : 66</pre></div>
+<p><code>Length</code> is only the length of the path text. Ignore it.</p>
+
+<div class="table-wrap"><table>
+<tr><th>Profile</th><th>Who</th><th>Which program</th><th>Use it?</th></tr>
+<tr><td><code>CurrentUserCurrentHost</code></td><td>you</td><td>this console only</td><td><strong>Yes, the usual one</strong> (= <code>$PROFILE</code>)</td></tr>
+<tr><td><code>CurrentUserAllHosts</code></td><td>you</td><td>console, VS Code, ISE…</td><td>For settings shared by all hosts</td></tr>
+<tr><td><code>AllUsersCurrentHost</code></td><td>everyone</td><td>this console only</td><td>Admins only</td></tr>
+<tr><td><code>AllUsersAllHosts</code></td><td>everyone</td><td>every host</td><td>Admins only</td></tr>
+</table></div>
+<p>"Host" means the program running PowerShell. VS Code uses its own file, <code>Microsoft.VSCode_profile.ps1</code>.</p>
+
+<h2 id="create">Create and edit your profile</h2>
+<ol class="steps">
+  <li>Check if it exists: <code>Test-Path $PROFILE</code></li>
+  <li>If <code>False</code>, create it (and any missing folders): <code>New-Item -Path $PROFILE -ItemType File -Force</code></li>
+  <li>Open it: <code>notepad $PROFILE</code> (Windows) or <code>code $PROFILE</code> (VS Code, any OS)</li>
+</ol>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Test-Path $PROFILE
+New-Item -Path $PROFILE -ItemType File -Force</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>False
+
+    Directory: C:\Users\you\Documents\PowerShell
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a---          17-11-2026    10:30              0 Microsoft.PowerShell_profile.ps1</pre></div>
+<div class="callout warn"><span class="ct">Watch out</span><code>-Force</code> on an existing file empties it. Run <code>New-Item</code> only when <code>Test-Path</code> says <code>False</code>.</div>
+
+<h2 id="add">What to put in it</h2>
+<div class="code"><div class="code-head">Microsoft.PowerShell_profile.ps1</div><pre><code class="language-powershell"># Aliases: short names
+Set-Alias -Name np -Value notepad
+
+# Functions: your own shortcuts
+function Get-Unit5Files { Get-ChildItem C:\unit5\datasets }
+
+# A custom prompt: show only the current folder name
+function prompt { "PS $(Split-Path -Leaf (Get-Location))&gt; " }
+
+# Start in your work folder
+Set-Location C:\unit5
+
+Write-Host "Profile loaded" -ForegroundColor Green</code></pre></div>
+<div class="tiles">
+  <div class="tile"><b>Aliases</b><code>Set-Alias np notepad</code><p>Short names for long commands.</p></div>
+  <div class="tile"><b>Functions</b><code>function Get-X { }</code><p>Your own tools, ready every time.</p></div>
+  <div class="tile"><b>Prompt</b><code>function prompt { }</code><p>Change what the prompt shows.</p></div>
+  <div class="tile"><b>Start folder</b><code>Set-Location C:\unit5</code><p>Open where you work.</p></div>
+</div>
+
+<h2 id="reload">Reload, skip, and versions</h2>
+<p>After editing, load the changes without restarting by dot-sourcing the profile:</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">. $PROFILE</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Profile loaded</pre></div>
+<p>Start PowerShell <strong>without</strong> any profile, e.g. when a profile is broken:</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">pwsh -NoProfile              # PowerShell 7
+powershell.exe -NoProfile    # Windows PowerShell 5.1</code></pre></div>
+
+<div class="table-wrap"><table>
+<tr><th>Version</th><th>Your <code>$PROFILE</code> path</th></tr>
+<tr><td>PowerShell 7, Windows</td><td><code>Documents\PowerShell\Microsoft.PowerShell_profile.ps1</code></td></tr>
+<tr><td>Windows PowerShell 5.1</td><td><code>Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1</code></td></tr>
+<tr><td>PowerShell 7, Linux / macOS</td><td><code>~/.config/powershell/Microsoft.PowerShell_profile.ps1</code></td></tr>
+</table></div>
+<div class="callout note"><span class="ct">5.1 note</span>5.1 and 7 use <strong>different</strong> profile files, so a profile made in one does not load in the other. On Windows, a profile is a script, so the execution policy must allow scripts (see <a href="t06-writing-scripts.html">06</a>).</div>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Print <code>$PROFILE</code> and check whether it exists.</li>
+  <li>Create it if needed and add a function <code>Get-Hello</code> that prints <code>Hello from my profile</code>.</li>
+  <li>Reload the profile and run <code>Get-Hello</code>. Then open <code>pwsh -NoProfile</code> and try again.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$PROFILE
+if (-not (Test-Path $PROFILE)) { New-Item -Path $PROFILE -ItemType File -Force }
+Add-Content $PROFILE "function Get-Hello { 'Hello from my profile' }"
+. $PROFILE
+Get-Hello            # Hello from my profile
+pwsh -NoProfile      # in the new shell, Get-Hello is not recognised</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li>A profile is a <code>.ps1</code> file that runs at start-up.</li>
+  <li><code>$PROFILE</code> = current user, current host. Four variants exist.</li>
+  <li><code>Test-Path $PROFILE</code>, then <code>New-Item $PROFILE -ItemType File -Force</code>.</li>
+  <li>Reload with <code>. $PROFILE</code>; skip with <code>-NoProfile</code>.</li>
+  <li>5.1 and 7 have separate profile paths.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>Name the four PowerShell profiles.</strong> AllUsersAllHosts, AllUsersCurrentHost, CurrentUserAllHosts and CurrentUserCurrentHost. <code>$PROFILE</code> on its own points to CurrentUserCurrentHost.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 3 · First script: greet &amp; calculate</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="lab03">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Labs / Lab 3</div>
+<h1>Lab 3: First script: greet &amp; calculate</h1>
+<p class="lead">Save commands in a <code>.ps1</code> file, run it, then grow it into a small calculator that asks for input.</p>
+<div class="meta-row"><span class="pill">Lab 3</span><span class="pill grey">Beginner</span><span class="pill grey">~40 min</span></div>
+
+<div class="prereq"><span class="ct">Topics used:</span><a href="../notes/t06-writing-scripts.html">06 Writing scripts</a><a href="../notes/t07-comments.html">07 Comments</a><a href="../notes/t08-variables.html">08 Variables</a><a href="../notes/t09-user-input.html">09 User input</a><a href="../notes/t10-operators.html">10 Operators</a></div>
+
+<h2 id="aim">Aim</h2>
+<ul class="check">
+  <li>Create and run a script file.</li>
+  <li>Allow scripts to run on Windows.</li>
+  <li>Use variables and comments.</li>
+  <li>Read input with <code>Read-Host</code>.</li>
+  <li>Calculate with operators and print neat output.</li>
+</ul>
+
+<h2 id="plan">Plan</h2>
+<ul class="flow">
+  <li><span>Create .ps1</span></li>
+  <li><span>Allow scripts</span></li>
+  <li><span>Variables</span></li>
+  <li><span>Ask the user</span></li>
+  <li><span>Calculate &amp; print</span></li>
+</ul>
+
+<h2 id="tasks">Tasks</h2>
+
+<div class="task">
+<span class="task-tag">Task 1</span>
+<h3 id="t1">Create hello.ps1</h3>
+<p>Open an editor from the <code>unit5</code> folder: <code>code hello.ps1</code> (VS Code) or <code>notepad hello.ps1</code> (Windows). Type this and save.</p>
+<div class="code"><div class="code-head">powershell · hello.ps1</div><pre><code class="language-powershell">Write-Output "Hello, PowerShell!"
+Write-Output "Today is $(Get-Date -Format 'dddd')."</code></pre></div>
+<div class="code"><div class="code-head">powershell · run it</div><pre><code class="language-powershell">./hello.ps1</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>Hello, PowerShell!
+Today is Tuesday.</pre></div>
+<p>Always start with <code>./</code>. PowerShell does not run scripts from the current folder by name alone.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 2</span>
+<h3 id="t2">Set the execution policy (Windows)</h3>
+<p>If Windows says scripts are disabled, check and change the policy for your user only.</p>
+<div class="code"><div class="code-head">powershell · console</div><pre><code class="language-powershell">Get-ExecutionPolicy
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+Get-ExecutionPolicy</code></pre></div>
+<div class="output"><div class="out-head">output · sample, yours will differ</div><pre>Restricted
+RemoteSigned</pre></div>
+<p><code>RemoteSigned</code> runs your own scripts but blocks unsigned ones downloaded from the internet. On macOS and Linux the policy is always <code>Unrestricted</code>, so skip this task.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 3</span>
+<h3 id="t3">Variables and comments</h3>
+<div class="code"><div class="code-head">powershell · info.ps1</div><pre><code class="language-powershell"># info.ps1: store values in variables
+$name = "Aarav"     # text   (String)
+$age  = 19          # whole number (Int32)
+$cgpa = 8.7         # decimal (Double)
+
+&lt;#
+  Double quotes expand variables.
+  $( ) runs an expression inside a string.
+#&gt;
+"Name: $name"
+"Age next year: $($age + 1)"
+'Single quotes do not expand: $name'
+$cgpa.GetType().Name</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Name: Aarav
+Age next year: 20
+Single quotes do not expand: $name
+Double</pre></div>
+<p><code>#</code> starts a one-line comment and <code>&lt;# ... #&gt;</code> wraps a block comment. PowerShell ignores both.</p>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 4</span>
+<h3 id="t4">Ask for a name and two numbers</h3>
+<div class="code"><div class="code-head">powershell · calc.ps1</div><pre><code class="language-powershell">$name   = Read-Host "What is your name"
+[int]$a = Read-Host "First number"
+[int]$b = Read-Host "Second number"
+
+Write-Host "Hi $name! You typed $a and $b."</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>What is your name: Priya
+First number: 17
+Second number: 5
+Hi Priya! You typed 17 and 5.</pre></div>
+<p><code>Read-Host</code> adds the <code>: </code> after the prompt and always returns text; <code>[int]</code> makes it a number.</p>
+<div class="callout warn"><span class="ct">Try without [int]</span>Without <code>[int]</code>, <code>$a + $b</code> joins the text: <code>"17" + "5"</code> gives <code>175</code>, not <code>22</code>.</div>
+</div>
+
+<div class="task">
+<span class="task-tag">Task 5</span>
+<h3 id="t5">Calculator with formatted output</h3>
+<p>Add these lines to the end of <code>calc.ps1</code>.</p>
+<div class="code"><div class="code-head">powershell · calc.ps1 (continued)</div><pre><code class="language-powershell">"{0,-12}{1,8}"    -f 'Addition',    ($a + $b)
+"{0,-12}{1,8}"    -f 'Subtraction', ($a - $b)
+"{0,-12}{1,8}"    -f 'Multiply',    ($a * $b)
+"{0,-12}{1,8:N2}" -f 'Division',    ($a / $b)
+"{0,-12}{1,8}"    -f 'Remainder',   ($a % $b)</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>What is your name: Priya
+First number: 17
+Second number: 5
+Hi Priya! You typed 17 and 5.
+Addition          22
+Subtraction       12
+Multiply          85
+Division        3.40
+Remainder          2</pre></div>
+<div class="table-wrap"><table>
+<tr><th>Format item</th><th>Meaning</th></tr>
+<tr><td><code>{0,-12}</code></td><td>Value 0, left-aligned in 12 characters</td></tr>
+<tr><td><code>{1,8}</code></td><td>Value 1, right-aligned in 8 characters</td></tr>
+<tr><td><code>{1,8:N2}</code></td><td>Same, with 2 decimal places</td></tr>
+</table></div>
+</div>
+
+<h2 id="challenge">Challenge</h2>
+<ol class="steps">
+  <li>Ask for the radius of a circle and print its area to 2 decimal places.</li>
+  <li>Stop with a message if the second number is 0, so you never divide by zero.</li>
+</ol>
+<details><summary>Hint for 1</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">[double]$r = Read-Host "Radius"
+"Area: {0:N2}" -f ([math]::PI * $r * $r)    # Radius: 3  ->  Area: 28.27</code></pre></div>
+</details>
+
+<h2 id="viva">Viva questions</h2>
+<details><summary>Why do we type <code>./hello.ps1</code> and not just <code>hello.ps1</code>?</summary><p>For safety, PowerShell does not run scripts from the current folder unless you give a path. <code>./</code> means "this folder".</p></details>
+<details><summary>What does the execution policy <code>RemoteSigned</code> allow?</summary><p>Local scripts run freely. Scripts downloaded from the internet must be signed by a trusted publisher.</p></details>
+<details><summary>What is the difference between <code>"$name"</code> and <code>'$name'</code>?</summary><p>Double quotes replace <code>$name</code> with its value. Single quotes print the text exactly as typed.</p></details>
+<details><summary>What does <code>%</code> do?</summary><p>It gives the remainder of a division: <code>17 % 5</code> is <code>2</code>.</p></details>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>

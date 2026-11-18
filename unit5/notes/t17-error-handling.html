@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>17 · Basic error handling</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-root="../" data-page="t17">
+<main class="content">
+<article>
+
+<div class="breadcrumb"><a href="../index.html">Home</a> / Topics / 17</div>
+<h1>Basic error handling</h1>
+<p class="lead">Error handling lets a script notice a problem, react to it, and carry on or stop cleanly instead of crashing.</p>
+<div class="meta-row"><span class="pill">Topic 17</span><span class="pill grey">~25 min</span></div>
+
+<div class="prereq"><span class="ct">Before this:</span><a href="t03-cmdlets.html">03 Cmdlets</a><a href="t11-conditionals.html">11 if, else &amp; switch</a><a href="t15-functions.html">15 Functions</a></div>
+
+<div class="keyidea"><span class="ct">Key idea</span><p><code>try/catch</code> only catches <strong>terminating</strong> errors. Most cmdlet errors are non-terminating, so add <code>-ErrorAction Stop</code> to make <code>catch</code> run.</p></div>
+
+<h2 id="kinds">Two kinds of errors</h2>
+<div class="table-wrap"><table>
+<tr><th></th><th>Non-terminating</th><th>Terminating</th></tr>
+<tr><td>What happens</td><td>Error is shown, the script <strong>keeps going</strong></td><td>The current statement <strong>stops</strong></td></tr>
+<tr><td>Typical cause</td><td>A cmdlet fails on one item (missing file)</td><td><code>throw</code>, divide by zero, <code>-ErrorAction Stop</code></td></tr>
+<tr><td>Caught by <code>catch</code>?</td><td>No</td><td>Yes</td></tr>
+</table></div>
+
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Content datasets/missing.txt
+"Script keeps going"</code></pre></div>
+<div class="output"><div class="out-head">output · sample, your path will differ</div><pre>Get-Content: Cannot find path 'C:\unit5\datasets\missing.txt' because it does not exist.
+Script keeps going</pre></div>
+
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$zero = 0
+10 / $zero</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>RuntimeException: Attempted to divide by zero.</pre></div>
+
+<h2 id="ea">-ErrorAction and $ErrorActionPreference</h2>
+<p>Every cmdlet takes <code>-ErrorAction</code> (short: <code>-EA</code>). It decides what a non-terminating error does.</p>
+<div class="table-wrap"><table>
+<tr><th>Value</th><th>Shows error?</th><th>Keeps going?</th></tr>
+<tr><td><code>Continue</code> (default)</td><td>Yes</td><td>Yes</td></tr>
+<tr><td><code>SilentlyContinue</code></td><td>No</td><td>Yes</td></tr>
+<tr><td><code>Stop</code></td><td>Yes, as a terminating error</td><td>No: jumps to <code>catch</code></td></tr>
+</table></div>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Content datasets/missing.txt -ErrorAction SilentlyContinue
+"No error shown"</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>No error shown</pre></div>
+<p><code>$ErrorActionPreference</code> sets the default for every command after it. Many scripts start with:</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$ErrorActionPreference = 'Stop'</code></pre></div>
+
+<h2 id="try-catch">try / catch / finally</h2>
+<ul class="flow">
+  <li><span>try: run code</span></li>
+  <li><span>error? jump to catch</span></li>
+  <li class="here"><span>finally: always runs</span></li>
+</ul>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">try {
+    Get-Content datasets/missing.txt -ErrorAction Stop
+    "This line is skipped"
+}
+catch {
+    "Could not read file: $($_.Exception.Message)"
+}
+finally {
+    "Done"
+}</code></pre></div>
+<div class="output"><div class="out-head">output · sample, your path will differ</div><pre>Could not read file: Cannot find path 'C:\unit5\datasets\missing.txt' because it does not exist.
+Done</pre></div>
+<p>Inside <code>catch</code>, <code>$_</code> is the error. <code>$_.Exception.Message</code> is its text.</p>
+<div class="callout warn"><span class="ct">Watch out</span>Remove <code>-ErrorAction Stop</code> and the <code>catch</code> block never runs: the error prints, then <code>This line is skipped</code> prints too.</div>
+
+<h3 id="type">Catch a specific error type</h3>
+<p>Put the exception type in <code>[ ]</code>. The first matching <code>catch</code> wins, so put the general one last.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">try {
+    Get-Content datasets/missing.txt -ErrorAction Stop
+}
+catch [System.Management.Automation.ItemNotFoundException] {
+    "File not found"
+}
+catch {
+    "Something else went wrong: $($_.Exception.Message)"
+}</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>File not found</pre></div>
+<div class="callout tip"><span class="ct">Tip</span>To find the type name, cause the error, then run <code>$Error[0].Exception.GetType().FullName</code>.</div>
+
+<h2 id="throw">throw, $Error and $?</h2>
+<p><code>throw</code> raises your own terminating error.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$marks = -5
+if ($marks -lt 0) { throw 'Marks cannot be negative' }</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>Exception: Marks cannot be negative</pre></div>
+
+<p><code>$Error</code> lists the errors of this session, newest first. <code>$?</code> is <code>True</code> if the last command succeeded.</p>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">Get-Content datasets/missing.txt -ErrorAction SilentlyContinue
+$?
+$Error[0].Exception.Message
+Get-Content datasets/servers.txt | Out-Null
+$?</code></pre></div>
+<div class="output"><div class="out-head">output · sample, your path will differ</div><pre>False
+Cannot find path 'C:\unit5\datasets\missing.txt' because it does not exist.
+True</pre></div>
+<div class="callout note"><span class="ct">Note</span><code>SilentlyContinue</code> hides the error but still records it in <code>$Error</code>. <code>-ErrorAction Ignore</code> does not record it.</div>
+
+<h2 id="real">Real example: read a config file safely</h2>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">$path = 'datasets/config.json'
+try {
+    $config = Get-Content $path -Raw -ErrorAction Stop | ConvertFrom-Json
+    "App: $($config.AppName) on port $($config.Port)"
+}
+catch {
+    Write-Warning "Cannot read $path. Using defaults."
+    $config = [pscustomobject]@{ AppName = 'Default'; Port = 80 }
+}</code></pre></div>
+<div class="output"><div class="out-head">output</div><pre>App: StudentPortal on port 8080</pre></div>
+<p>Change <code>$path</code> to <code>'datasets/nope.json'</code> and run it again:</p>
+<div class="output"><div class="out-head">output</div><pre>WARNING: Cannot read datasets/nope.json. Using defaults.</pre></div>
+
+<h2 id="try">Try it</h2>
+<ol class="steps">
+  <li>Read <code>datasets/app.log</code> inside <code>try</code>. Print <code>Read OK</code>; on error print the message.</li>
+  <li>Change the file name to one that doesn't exist. Does <code>catch</code> run? Fix it so it does.</li>
+  <li>Write a <code>finally</code> that prints <code>Finished</code> in both cases.</li>
+</ol>
+<details><summary>Answers</summary>
+<div class="code"><div class="code-head">powershell</div><pre><code class="language-powershell">try {
+    $lines = Get-Content datasets/app.log -ErrorAction Stop   # without Stop, catch won't run
+    "Read OK"
+}
+catch {
+    "Error: $($_.Exception.Message)"
+}
+finally {
+    "Finished"
+}</code></pre></div>
+</details>
+
+<h2 id="remember">Remember</h2>
+<ul class="check">
+  <li>Non-terminating errors keep going; terminating errors stop.</li>
+  <li><code>catch</code> needs a terminating error: add <code>-ErrorAction Stop</code>.</li>
+  <li><code>$_.Exception.Message</code> is the error text inside <code>catch</code>.</li>
+  <li><code>finally</code> always runs; <code>throw</code> makes your own error.</li>
+  <li><code>$Error[0]</code> is the latest error; <code>$?</code> says if the last command worked.</li>
+</ul>
+<div class="callout exam"><span class="ct">Viva</span><strong>Why does my <code>catch</code> block not run when <code>Get-Content</code> fails?</strong> A missing file is a non-terminating error, and <code>try/catch</code> only catches terminating errors. Add <code>-ErrorAction Stop</code>, or set <code>$ErrorActionPreference = 'Stop'</code>.</div>
+
+</article>
+</main>
+<script src="../assets/app.js"></script>
+</body>
+</html>
